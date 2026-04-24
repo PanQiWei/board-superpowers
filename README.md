@@ -231,8 +231,26 @@ Context the architect added on top of the card body:
 None — card body is complete.
 ```
 
-Open a fresh terminal, paste it, walk away. The Consumer reports back
-only when the PR is up (or when it hit a real blocker).
+Open a fresh terminal in the project directory, paste it, walk away.
+The Consumer reports back only when the PR is up (or when it hit a
+real blocker).
+
+Each Consumer session isolates itself in a dedicated git worktree
+that `claim-card.sh` creates — by default at
+`~/.config/superpowers/worktrees/<project>/claim/<N>-<slug>`. That
+is why N Consumer terminals in parallel do not trample each other's
+HEAD. You open the terminal at the primary repo; the Consumer
+`cd`s into its worktree during Step 2 and never comes back.
+
+### Pulling a card yourself (without the Manager)
+
+If you don't want to bounce through the Manager for a single card
+pull, open a fresh session in the project and say:
+
+> pull a card from the board
+
+The `consuming-card` skill's Step 0 will query Ready cards, show
+you 3 candidates, and wait for you to pick one before claiming.
 
 ## Opinions this plugin has
 

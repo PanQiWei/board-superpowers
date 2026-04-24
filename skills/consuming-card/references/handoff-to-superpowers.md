@@ -32,9 +32,11 @@ What it gives you:
 What it requires from you:
 
 - A plan brief on disk (you produced one in Step 3 from the card).
-- A working git worktree / branch (the claim branch, already set up).
-- The `using-git-worktrees` superpowers skill may or may not engage;
-  trust its routing.
+- A working git worktree with the claim branch checked out. The
+  Consumer's Step 2 already put you inside one via `claim-card.sh`
+  — you do not need to invoke `superpowers:using-git-worktrees`
+  yourself. If the execution skill asks for "an isolated workspace",
+  the answer is "already have one at `$WORKTREE`".
 
 ### Fallback: `superpowers:executing-plans`
 
@@ -105,7 +107,8 @@ invoke them, give them:
 
 - **The plan brief** (your synthesis of the card into a spec the
   execution skill expects).
-- **The target branch name** (already created).
+- **The target branch name and worktree path** (both created by
+  `claim-card.sh` — `$BRANCH` and `$WORKTREE` from Step 2).
 - **The test command(s) for this project** if discoverable (read
   `CLAUDE.md`, `package.json` scripts, `Makefile`, etc.).
 

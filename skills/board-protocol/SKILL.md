@@ -35,7 +35,7 @@ Allowed transitions. Anything else is a protocol violation.
 | Ready → Backlog | Manager | Deprioritized |
 | In Progress → In Review | Consumer | PR opened |
 | In Progress → Blocked | Consumer | Unrecoverable blocker or scope problem |
-| In Progress → Ready | Consumer | Abandoned cleanly (must delete claim branch) |
+| In Progress → Ready | Consumer | Abandoned cleanly (must remove worktree AND delete claim branch) |
 | Blocked → Ready | Manager | After unblocking or re-scoping |
 | In Review → Done | Human / GH auto-close | PR merged |
 | In Review → In Progress | Consumer | Review changes require more work |
@@ -102,8 +102,16 @@ That branch is three things at once:
 - **Feature branch** for the PR.
 - **Debugging aid** — `git branch -r | grep claim/` shows in-flight work.
 
+Each claim branch is paired with a dedicated **git worktree** —
+`scripts/claim-card.sh` creates both in one atomic step. The worktree
+is what lets N Consumer sessions share one clone without clobbering
+each other's HEAD. Default location:
+`$HOME/.config/superpowers/worktrees/<project>/<branch>`. See
+`consuming-card` Step 2 for the full resolution priority.
+
 Always create claim branches via `scripts/claim-card.sh` — never by
-hand. The script performs the atomic push + collision check.
+hand. The script performs the atomic push + collision check AND the
+worktree creation; skipping it loses the isolation guarantee.
 
 ## Session slug
 
@@ -124,14 +132,21 @@ Consumer sessions owns card #42" at a glance.
    source of truth.
 2. **Failed claim exits cleanly.** A Consumer that fails to claim
    (`claim-card.sh` exit 10) reports which session beat it and stops.
-   Never retry automatically.
-3. **Crashed session leaves the branch.** If a session dies mid-flight,
-   the claim branch stays. Manager's Daily Routine detects stale
-   claims (no commit in 6 h, no open PR — 6 h is the compromise
-   between "Consumer is thinking" and "session is dead") and asks the
-   architect to resume / reassign / release.
-4. **Never delete another session's claim branch** without architect
-   consent.
+   Never retry automatically. The script cleans up any partial
+   worktree / local branch it created before the failed push.
+3. **Each Consumer has its own worktree.** Parallel sessions share
+   the clone (so fetches and refs are common) but not the working
+   tree. HEAD and uncommitted files in session A cannot be observed
+   or mutated by session B.
+4. **Crashed session leaves the branch AND the worktree.** If a
+   session dies mid-flight, both stay. Manager's Daily Routine
+   detects stale claims (no commit in 6 h, no open PR — 6 h is the
+   compromise between "Consumer is thinking" and "session is dead")
+   and asks the architect to resume / reassign / release. Stale
+   worktrees are disk overhead, not a correctness issue; clean up
+   via `git worktree remove --force` when releasing the claim.
+5. **Never delete another session's claim branch or worktree**
+   without architect consent.
 
 ## WIP limit
 
