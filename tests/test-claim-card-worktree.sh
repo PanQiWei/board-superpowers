@@ -137,6 +137,24 @@ git ls-tree -r --name-only "origin/${BRANCH1}" \
   | grep -Fxq ".board-superpowers/claims/42.claim" \
   || fail "marker not tracked on origin/${BRANCH1}"
 
+# Marker must NOT leak the claimant's absolute local filesystem path.
+# The marker rides on the claim branch, which is pushed publicly —
+# any `worktree: /Users/<name>/...` line there would expose the
+# claimant's username and directory layout to anyone who clones a
+# public repo. The Consumer already gets the path from stdout; there
+# is no legitimate reader of a `worktree:` field on the remote.
+MARKER_BODY="$(git show "origin/${BRANCH1}:.board-superpowers/claims/42.claim")"
+if printf '%s\n' "$MARKER_BODY" | grep -Eq '^worktree:'; then
+  printf "FAIL: marker on origin/%s contains a 'worktree:' line — do not commit local paths to a public branch\n" "$BRANCH1" >&2
+  printf -- '--- marker body ---\n%s\n' "$MARKER_BODY" >&2
+  exit 1
+fi
+if printf '%s\n' "$MARKER_BODY" | grep -qE '(^|[[:space:]])/(Users|home|root)/'; then
+  printf 'FAIL: marker on origin/%s contains an absolute local path\n' "$BRANCH1" >&2
+  printf -- '--- marker body ---\n%s\n' "$MARKER_BODY" >&2
+  exit 1
+fi
+
 # Primary tree's HEAD / branch untouched — this is the bug the refactor
 # fixes. Regression guard.
 PRIMARY_HEAD_AFTER="$(git rev-parse HEAD)"

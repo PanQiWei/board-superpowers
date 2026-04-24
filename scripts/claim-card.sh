@@ -229,7 +229,12 @@ mkdir -p "$(dirname "$MARKER_ABS")" || {
   printf 'claimed_at: %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
   printf 'base: %s\n' "$BASE_BRANCH"
   printf 'branch: %s\n' "$BRANCH"
-  printf 'worktree: %s\n' "$WORKTREE_PATH"
+  # Deliberately NOT writing a `worktree:` field: the marker file rides
+  # along with every commit to the claim branch, which is pushed
+  # publicly. An absolute local path here would leak the claimant's
+  # username / directory layout to anyone who clones a public repo.
+  # The Consumer session already has the path via the `worktree=` line
+  # on stdout; that ephemeral channel does not persist to the remote.
 } > "$MARKER_ABS" || {
   bsp_cleanup_partial_claim "$WORKTREE_PATH" "$BRANCH"
   bsp_die "failed to write $MARKER_REL" 20
