@@ -1,0 +1,14 @@
+{
+  "name": "board-superpowers-local",
+  "owner": {
+    "name": "board-superpowers contributors"
+  },
+  "plugins": [
+    {
+      "name": "board-superpowers",
+      "source": "./",
+      "description": "Agile scheduling layer for Claude Code: turn GitHub Projects into the central dispatcher, one session = one PR. Depends on superpowers and gstack.",
+      "version": "0.1.0"
+    }
+  ]
+}

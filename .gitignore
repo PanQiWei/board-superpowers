@@ -23,5 +23,13 @@ __pycache__/
 .venv/
 venv/
 
-# Per-project Claude Code artifacts
-.claude/
+# Per-project Claude Code artifacts (local, per-user).
+# .claude/settings.json and .claude-plugin/marketplace.json are
+# team-shared (this repo dogfoods its own plugin), so they stay tracked.
+.claude/settings.local.json
+.claude/cache/
+.claude/logs/
+.claude/tmp/
+
+# board-superpowers local state (claim markers are per-session)
+.board-superpowers/claims/
