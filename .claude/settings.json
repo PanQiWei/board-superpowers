@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "board-superpowers-local": {
+      "source": {
+        "source": "directory",
+        "path": "."
+      }
+    }
+  },
+  "enabledPlugins": {
+    "board-superpowers@board-superpowers-local": true
+  }
+}

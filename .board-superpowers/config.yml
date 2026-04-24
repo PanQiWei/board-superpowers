@@ -1,0 +1,9 @@
+# board-superpowers project config.
+# Managed by using-board-superpowers. Safe to edit by hand.
+
+project: "PanQiWei/4"
+wip_limit: 5
+
+# Future fields (not yet consumed):
+#   base_branch: main
+#   default_execution_skill: superpowers:subagent-driven-development
