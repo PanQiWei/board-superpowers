@@ -101,27 +101,22 @@ Confirm both load:
 
 ### 2. Install board-superpowers
 
-#### Option A — plugin marketplace
+Clone into your Claude Code plugins directory:
 
 ```bash
-/plugin install board-superpowers@<your-marketplace>
-```
-
-Replace `<your-marketplace>` with the marketplace you've registered
-(check `/plugin marketplace list`).
-
-#### Option B — local clone (development / self-host)
-
-```bash
-git clone https://github.com/<owner>/board-superpowers \
+git clone https://github.com/PanQiWei/board-superpowers \
   ~/.claude/plugins/board-superpowers
 ```
 
-Then in a Claude Code session:
+Then register it as a local plugin in a Claude Code session:
 
 ```
 /plugin add local ~/.claude/plugins/board-superpowers
 ```
+
+> board-superpowers is not yet published to a plugin marketplace. Once
+> it is, `/plugin install board-superpowers@<marketplace>` will become
+> the one-liner path. Until then, the clone above is canonical.
 
 ### 3. Verify
 
@@ -139,11 +134,10 @@ The banner is the plugin's loudest contract — treat it as blocking.
 ### Updating
 
 ```bash
-/plugin update board-superpowers
+cd ~/.claude/plugins/board-superpowers && git pull
 ```
 
-If you installed via Option B, `git pull` in the plugin directory and
-restart Claude Code.
+Then restart Claude Code so the plugin reloads.
 
 ## First-time project setup
 
