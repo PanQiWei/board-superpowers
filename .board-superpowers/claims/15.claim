@@ -1,0 +1,7 @@
+card: 15
+session: s-7baf
+claimed_at: 2026-04-24T10:16:03Z
+base: main
+branch: claim/15-fix-claim-card-force-add
+manual_claim: true
+manual_claim_reason: claim-card.sh broken by .gitignore conflict; this card fixes it
