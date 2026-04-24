@@ -33,3 +33,10 @@ venv/
 
 # board-superpowers local state (claim markers are per-session)
 .board-superpowers/claims/
+
+# board-superpowers Consumer session plan briefs — scratch input that
+# the Consumer hands to subagent-driven-development. Not a durable
+# artifact: the card body on GitHub is the source of truth, and the
+# plan brief is just a reformat for the execution skill. Keeping it
+# local prevents main from accumulating one file per merged card.
+docs/board-superpowers/plans/

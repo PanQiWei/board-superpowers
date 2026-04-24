@@ -61,7 +61,7 @@ diagnosis loop, not a fixed recipe.
    | External dep / decision missing | Blocker | Transition to `Blocked`, comment what's needed to unblock |
    | Violates INVEST (too big, not vertical, not testable) | Oversized | Hand off to `decomposing-into-milestones` for re-splitting; keep original as `type:epic` if useful |
    | Acceptance Criteria no longer match intent | Wrong scope | Rewrite card body in chat, then `gh issue edit <N> --body-file ...` |
-   | `claim/<N>-*` branch with no recent commits and no PR | Stale claim | Offer three choices: **resume** (new kick-off prompt), **reassign** (delete stale branch, release to `Ready`), **cancel** (close or `Backlog`) |
+   | `claim/<N>-*` branch with no recent commits and no PR | Stale claim | Offer three choices: **resume** (new kick-off prompt), **reassign** (`git worktree remove --force` the paired worktree, delete stale branch on remote, release to `Ready`), **cancel** (close or `Backlog`) |
 
 3. **Apply the fix** only after the architect confirms the diagnosis.
 
