@@ -1,0 +1,6 @@
+card: 16
+session: s-manual-bootstrap
+claimed_at: 2026-04-24T00:00:00Z
+base: main
+branch: claim/16-consumer-self-select-worktree
+note: manual bootstrap claim — claim-card.sh does not yet support worktree isolation (this card adds it)
