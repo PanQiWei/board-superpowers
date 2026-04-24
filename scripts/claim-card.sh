@@ -1,34 +1,59 @@
 #!/usr/bin/env bash
 # board-superpowers / claim-card.sh
 #
-# Atomically claim a GitHub Project card for this Consumer session.
+# Atomically claim a GitHub Project card AND create an isolated git
+# worktree for the Consumer session.
 #
-# Mechanism: distributed lock via `git push` on a namespaced claim branch.
-# Creating a remote branch is atomic in git — if two sessions race to push
-# the same new branch, exactly one wins. The winner holds the claim; the
-# loser exits cleanly.
+# Two independent guarantees, both essential:
 #
-# The claim branch is ALSO the feature branch. No separate bookkeeping.
+#  1. Distributed lock via `git push` on a namespaced claim branch.
+#     Creating a remote branch is atomic in git — if two sessions race
+#     to push the same new branch, exactly one wins. The winner holds
+#     the claim; the loser exits cleanly.
+#
+#  2. Filesystem isolation via a dedicated git worktree. Parallel
+#     Consumer sessions cannot share the repo's primary working tree
+#     without clobbering each other's HEAD / WIP. Each session gets a
+#     distinct worktree, created fresh from the base branch.
+#
+# The claim branch IS the feature branch AND the worktree's branch.
+# No separate bookkeeping.
 #
 # Usage:
 #   claim-card.sh <card-number> <short-slug> [base-branch]
 #
 # Exit codes:
-#   0   — claim successful; caller may proceed
+#   0   — claim successful; worktree ready; caller may proceed
 #   10  — card already claimed (branch exists on remote); caller must stop
-#   20  — git or network error; caller should surface the error
+#   20  — git or network error (including worktree setup); caller should
+#         surface the error and not retry automatically
 #   30  — bad arguments or missing dependency
 #
-# Side effects on success:
-#   - Creates a local branch `claim/<N>-<slug>` from base (default: remote HEAD).
-#   - Pushes it to origin with `--force-with-lease=<ref>:` — pushing only
-#     iff the remote ref does not already exist. This is the atomic step.
-#   - Writes and commits a marker file at .board-superpowers/claims/<N>.claim.
-#   - On success prints the branch name on stdout.
+# Stdout on success (two lines, in this order):
+#   branch=<claim branch name>
+#   worktree=<absolute path to worktree>
 #
-# This script is intentionally narrow: it only handles the lock. Moving the
-# GitHub Project card to "In Progress" is a separate call (transition-card.sh)
-# so that a partial failure here doesn't leave the board inconsistent.
+# Side effects on success:
+#   - New local branch `claim/<N>-<slug>` based on origin/<base>.
+#   - New worktree checked out at:
+#       * $BOARD_SP_WORKTREE_DIR/<branch>                       (if env set), OR
+#       * <primary_root>/.worktrees/<branch>                    (if .worktrees/
+#                                                                 exists AND is
+#                                                                 gitignored), OR
+#       * $HOME/.config/superpowers/worktrees/<project>/<branch>
+#         (default — global, outside repo, no gitignore concern).
+#   - `.board-superpowers/claims/<N>.claim` force-committed inside the
+#     worktree (marker file must exist on the claim branch even though
+#     the directory is gitignored for local-state isolation).
+#   - `git push --force-with-lease=<ref>:` — pushing only iff the remote
+#     ref does not already exist. This is the atomic lock step.
+#
+# This script does NOT:
+#   - Move the GitHub Project card to "In Progress". That is
+#     transition-card.sh's job so a partial failure here doesn't leave
+#     the board inconsistent.
+#   - Clean up worktrees after merge. See docs/consuming-card for the
+#     manual `git worktree remove` command. Automation is a future card.
 
 set -euo pipefail
 
@@ -59,18 +84,25 @@ SLUG_CLEAN="$(bsp_sanitize_slug "$SLUG")"
 
 BRANCH="claim/${CARD_NUMBER}-${SLUG_CLEAN}"
 
-# ---- enter repo root (M1) ------------------------------------------------
-GIT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" \
+# ---- resolve primary checkout -------------------------------------------
+# Script may be invoked from any worktree. `git rev-parse --git-common-dir`
+# gives the shared `.git` directory regardless of cwd; its parent is the
+# primary working tree.
+GIT_COMMON_DIR="$(git rev-parse --git-common-dir 2>/dev/null)" \
   || bsp_die "not inside a git work tree" 30
-cd "$GIT_ROOT"
+# --git-common-dir may return a relative path; resolve to absolute.
+GIT_COMMON_DIR="$(cd "$GIT_COMMON_DIR" && pwd)"
+PRIMARY_ROOT="$(cd "$GIT_COMMON_DIR/.." && pwd)"
+PROJECT_NAME="$(basename "$PRIMARY_ROOT")"
 
-# ---- determine base branch ----------------------------------------------
+# ---- determine base branch ---------------------------------------------
 if [ -z "$BASE_BRANCH" ]; then
-  BASE_BRANCH="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||' || true)"
+  BASE_BRANCH="$(git -C "$PRIMARY_ROOT" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null \
+                  | sed 's|^origin/||' || true)"
   if [ -z "$BASE_BRANCH" ]; then
-    if git show-ref --verify --quiet refs/remotes/origin/main; then
+    if git -C "$PRIMARY_ROOT" show-ref --verify --quiet refs/remotes/origin/main; then
       BASE_BRANCH="main"
-    elif git show-ref --verify --quiet refs/remotes/origin/master; then
+    elif git -C "$PRIMARY_ROOT" show-ref --verify --quiet refs/remotes/origin/master; then
       BASE_BRANCH="master"
     else
       bsp_die "cannot determine base branch; pass it as the 3rd argument" 20
@@ -78,15 +110,16 @@ if [ -z "$BASE_BRANCH" ]; then
   fi
 fi
 
-git check-ref-format --branch "$BASE_BRANCH" >/dev/null 2>&1 \
+git -C "$PRIMARY_ROOT" check-ref-format --branch "$BASE_BRANCH" >/dev/null 2>&1 \
   || bsp_die "invalid base branch: $BASE_BRANCH" 20
 
 # ---- fetch + early "already claimed" check ------------------------------
-git fetch origin --quiet 2>/dev/null || bsp_die "git fetch failed" 20
+git -C "$PRIMARY_ROOT" fetch origin --quiet 2>/dev/null \
+  || bsp_die "git fetch failed" 20
 
-if git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
-  LAST_AUTHOR="$(git log -1 --format='%an <%ae>' "origin/${BRANCH}" 2>/dev/null || printf 'unknown')"
-  LAST_DATE="$(git log -1 --format='%ar'        "origin/${BRANCH}" 2>/dev/null || printf 'unknown')"
+if git -C "$PRIMARY_ROOT" show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
+  LAST_AUTHOR="$(git -C "$PRIMARY_ROOT" log -1 --format='%an <%ae>' "origin/${BRANCH}" 2>/dev/null || printf 'unknown')"
+  LAST_DATE="$(git -C "$PRIMARY_ROOT" log -1 --format='%ar'        "origin/${BRANCH}" 2>/dev/null || printf 'unknown')"
   {
     printf 'card #%s already claimed\n' "$CARD_NUMBER"
     printf '  branch:      %s\n' "$BRANCH"
@@ -96,30 +129,99 @@ if git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
   exit 10
 fi
 
-# ---- create or resume local branch --------------------------------------
-if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
-  # H2 fix: refuse to reset if the branch carries unpushed commits.
-  AHEAD="$(git rev-list --count "origin/${BASE_BRANCH}..${BRANCH}" 2>/dev/null || printf '0')"
-  if [ "$AHEAD" != "0" ]; then
-    bsp_die "local branch '$BRANCH' has $AHEAD unpushed commit(s); refusing to reset. Push, delete, or rename it, then retry." 20
+# ---- pick worktree directory --------------------------------------------
+# Priority:
+#   1. $BOARD_SP_WORKTREE_DIR — explicit absolute path override.
+#   2. <primary>/.worktrees/ if it exists AND is gitignored.
+#   3. $HOME/.config/superpowers/worktrees/<project>/  (global default).
+#
+# #2's gitignore check protects against a .worktrees/ that isn't yet
+# ignored — rather than silently polluting `git status`, fall through
+# to the global default.
+bsp_pick_worktree_dir() {
+  if [ -n "${BOARD_SP_WORKTREE_DIR:-}" ]; then
+    case "$BOARD_SP_WORKTREE_DIR" in
+      /*) : ;; # absolute, ok
+      *)  bsp_die "BOARD_SP_WORKTREE_DIR must be absolute, got: $BOARD_SP_WORKTREE_DIR" 30 ;;
+    esac
+    printf '%s\n' "$BOARD_SP_WORKTREE_DIR"
+    return 0
   fi
-  if [ -n "$(git status --porcelain 2>/dev/null || true)" ]; then
-    bsp_die "local branch '$BRANCH' has uncommitted changes; refusing to reset. Commit, stash, or clean, then retry." 20
+
+  if [ -d "$PRIMARY_ROOT/.worktrees" ]; then
+    if git -C "$PRIMARY_ROOT" check-ignore -q .worktrees 2>/dev/null; then
+      printf '%s\n' "$PRIMARY_ROOT/.worktrees"
+      return 0
+    fi
+    bsp_log "warning: $PRIMARY_ROOT/.worktrees exists but is not gitignored — falling back to global worktree dir"
   fi
-  git checkout --quiet "$BRANCH" 2>/dev/null \
-    || bsp_die "git checkout '$BRANCH' failed" 20
-  git reset --hard --quiet "origin/${BASE_BRANCH}" \
-    || bsp_die "git reset --hard origin/${BASE_BRANCH} failed" 20
-else
-  git checkout --quiet -b "$BRANCH" "origin/${BASE_BRANCH}" 2>/dev/null \
-    || bsp_die "git checkout -b '$BRANCH' 'origin/${BASE_BRANCH}' failed" 20
+
+  printf '%s\n' "$HOME/.config/superpowers/worktrees/$PROJECT_NAME"
+}
+
+WORKTREE_DIR="$(bsp_pick_worktree_dir)"
+WORKTREE_PATH="$WORKTREE_DIR/$BRANCH"
+
+# ---- idempotent reuse if a matching worktree already exists -------------
+# Useful if the previous run got as far as creating the worktree but
+# failed before the push. Re-running completes the claim without manual
+# cleanup.
+if [ -e "$WORKTREE_PATH" ]; then
+  if git -C "$PRIMARY_ROOT" worktree list --porcelain 2>/dev/null \
+       | grep -Fxq "worktree $WORKTREE_PATH"; then
+    EXISTING_HEAD="$(git -C "$WORKTREE_PATH" rev-parse --abbrev-ref HEAD 2>/dev/null || printf '')"
+    if [ "$EXISTING_HEAD" = "$BRANCH" ] && [ -f "$WORKTREE_PATH/.board-superpowers/claims/${CARD_NUMBER}.claim" ]; then
+      # Looks like the marker is already there. Attempt to push (re-entrant).
+      set +e
+      git -C "$WORKTREE_PATH" push --force-with-lease="refs/heads/${BRANCH}:" \
+                                    --set-upstream origin "$BRANCH" >/dev/null 2>&1
+      RESUME_RC=$?
+      set -e
+      if [ "$RESUME_RC" -eq 0 ]; then
+        printf 'branch=%s\n' "$BRANCH"
+        printf 'worktree=%s\n' "$WORKTREE_PATH"
+        exit 0
+      fi
+      # Push failed on re-entry → treat as error path below.
+    fi
+  fi
+  bsp_die "worktree path already exists and does not match a resumable claim: $WORKTREE_PATH" 20
 fi
 
-# ---- write claim marker and commit --------------------------------------
+mkdir -p "$WORKTREE_DIR" \
+  || bsp_die "failed to create worktree parent dir: $WORKTREE_DIR" 20
+
+# ---- cleanup helper (used on push failure) ------------------------------
+# Removes a newly-created worktree and its local branch so the caller can
+# retry without manual housekeeping. Swallows all errors — cleanup must
+# never mask the original failure.
+bsp_cleanup_partial_claim() {
+  local path="$1"
+  local branch="$2"
+  git -C "$PRIMARY_ROOT" worktree remove --force "$path" >/dev/null 2>&1 || true
+  # Belt-and-suspenders: remove prunable entries.
+  git -C "$PRIMARY_ROOT" worktree prune >/dev/null 2>&1 || true
+  git -C "$PRIMARY_ROOT" branch -D "$branch" >/dev/null 2>&1 || true
+}
+
+# ---- create worktree with new branch ------------------------------------
+# Base on origin/<base-branch> so local uncommitted state cannot leak into
+# the new worktree. `-b` creates the branch in the same step.
+if ! git -C "$PRIMARY_ROOT" worktree add "$WORKTREE_PATH" \
+       -b "$BRANCH" "origin/${BASE_BRANCH}" >/dev/null 2>&1; then
+  bsp_cleanup_partial_claim "$WORKTREE_PATH" "$BRANCH"
+  bsp_die "git worktree add '$WORKTREE_PATH' -b '$BRANCH' 'origin/${BASE_BRANCH}' failed" 20
+fi
+
+# ---- write claim marker in the new worktree -----------------------------
 SESSION_SLUG="${BOARD_SP_SESSION_SLUG:-s-$(date +%s)-$$}"
-MARKER_FILE=".board-superpowers/claims/${CARD_NUMBER}.claim"
-mkdir -p ".board-superpowers/claims" \
-  || bsp_die "failed to create .board-superpowers/claims" 20
+MARKER_REL=".board-superpowers/claims/${CARD_NUMBER}.claim"
+MARKER_ABS="$WORKTREE_PATH/$MARKER_REL"
+
+mkdir -p "$(dirname "$MARKER_ABS")" || {
+  bsp_cleanup_partial_claim "$WORKTREE_PATH" "$BRANCH"
+  bsp_die "failed to create $(dirname "$MARKER_REL") inside worktree" 20
+}
 
 {
   printf 'card: %s\n' "$CARD_NUMBER"
@@ -127,13 +229,19 @@ mkdir -p ".board-superpowers/claims" \
   printf 'claimed_at: %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
   printf 'base: %s\n' "$BASE_BRANCH"
   printf 'branch: %s\n' "$BRANCH"
-} > "$MARKER_FILE" || bsp_die "failed to write $MARKER_FILE" 20
+  printf 'worktree: %s\n' "$WORKTREE_PATH"
+} > "$MARKER_ABS" || {
+  bsp_cleanup_partial_claim "$WORKTREE_PATH" "$BRANCH"
+  bsp_die "failed to write $MARKER_REL" 20
+}
 
 # -f is required: bootstrap-project.sh places `.board-superpowers/claims/`
 # into .gitignore (per-session state), but the claim branch MUST carry
 # the marker commit — that commit + push IS the atomic lock.
-git add -f "$MARKER_FILE" >/dev/null 2>&1 \
-  || bsp_die "git add -f $MARKER_FILE failed" 20
+if ! git -C "$WORKTREE_PATH" add -f "$MARKER_REL" >/dev/null 2>&1; then
+  bsp_cleanup_partial_claim "$WORKTREE_PATH" "$BRANCH"
+  bsp_die "git add -f $MARKER_REL failed" 20
+fi
 
 COMMIT_MSG="claim: card #${CARD_NUMBER} [${SESSION_SLUG}]
 
@@ -141,35 +249,32 @@ Automated claim commit from board-superpowers. The presence of this
 branch on the remote means a Board Consumer session owns card
 #${CARD_NUMBER}. To release the claim, delete the branch on the remote."
 
-git commit --quiet -m "$COMMIT_MSG" >/dev/null 2>&1 \
-  || bsp_die "git commit failed" 20
+if ! git -C "$WORKTREE_PATH" commit --quiet -m "$COMMIT_MSG" >/dev/null 2>&1; then
+  bsp_cleanup_partial_claim "$WORKTREE_PATH" "$BRANCH"
+  bsp_die "git commit failed" 20
+fi
 
 # ---- atomic push (the actual lock) --------------------------------------
 # --force-with-lease=<ref>:  (empty expected value) → push only iff remote
 # ref does not exist. Atomic against concurrent creators.
 PUSH_OUT=""
 set +e
-PUSH_OUT="$(git push --force-with-lease="refs/heads/${BRANCH}:" \
-                     --set-upstream origin "$BRANCH" 2>&1)"
+PUSH_OUT="$(git -C "$WORKTREE_PATH" push --force-with-lease="refs/heads/${BRANCH}:" \
+                                          --set-upstream origin "$BRANCH" 2>&1)"
 PUSH_RC=$?
 set -e
 
 if [ "$PUSH_RC" -eq 0 ]; then
-  printf '%s\n' "$BRANCH"
+  printf 'branch=%s\n' "$BRANCH"
+  printf 'worktree=%s\n' "$WORKTREE_PATH"
   exit 0
 fi
 
-# ---- push failed: attempt cleanup, then disambiguate ---------------------
-CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || printf '')"
-if [ "$CURRENT_BRANCH" = "$BRANCH" ]; then
-  git checkout --quiet "$BASE_BRANCH" 2>/dev/null \
-    || git checkout --quiet "origin/${BASE_BRANCH}" 2>/dev/null \
-    || true
-fi
-git branch -D "$BRANCH" >/dev/null 2>&1 || true
-git fetch origin --quiet 2>/dev/null || true
+# ---- push failed: cleanup, then disambiguate ----------------------------
+bsp_cleanup_partial_claim "$WORKTREE_PATH" "$BRANCH"
+git -C "$PRIMARY_ROOT" fetch origin --quiet 2>/dev/null || true
 
-if git show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
+if git -C "$PRIMARY_ROOT" show-ref --verify --quiet "refs/remotes/origin/${BRANCH}"; then
   printf 'card #%s was just claimed by another session (race)\n' "$CARD_NUMBER" >&2
   exit 10
 fi
