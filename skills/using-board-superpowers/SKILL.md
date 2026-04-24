@@ -97,8 +97,14 @@ chore: bootstrap board-superpowers
 chore: add board-superpowers routing to CLAUDE.md
 ```
 
-Tell the architect: "Routing added. Future sessions in this project
-will route to Manager or Consumer without this dance."
+Then deliver the first-time user guide. Step 3 running is by
+definition a first-time bootstrap (only fires when the preflight
+reported `ROUTING_INJECTED=no`), so the architect does not yet know
+the shape of the plugin. Follow
+`references/first-time-user-guide.md` for the delivery structure
+(six short sections, paused between each) and the two "after
+delivery" options. Do not skip it; do not abbreviate past the six
+sections.
 
 ## Step 4 — Hand off
 
