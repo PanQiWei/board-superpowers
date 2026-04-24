@@ -102,10 +102,15 @@ if [ "$RC" -ne 0 ]; then
   exit 1
 fi
 
-# Contract: on success, claim-card.sh prints the claim branch name on stdout
-# and nothing else. Guard the public interface — callers parse this.
-if [ "$OUT" != "$BRANCH" ]; then
-  printf 'FAIL: expected stdout %q, got %q\n' "$BRANCH" "$OUT" >&2
+# Contract: on success, claim-card.sh prints two key=value lines —
+# `branch=<name>` and `worktree=<absolute path>`. Guard the public
+# interface; callers parse this (see skills/consuming-card/SKILL.md
+# Step 2). This test only asserts the branch line matches; worktree
+# isolation has its own harness (tests/test-claim-card-worktree.sh).
+OUT_BRANCH="$(printf '%s\n' "$OUT" | sed -n '1s/^branch=//p')"
+if [ "$OUT_BRANCH" != "$BRANCH" ]; then
+  printf 'FAIL: expected first line "branch=%s", full stdout was %q\n' \
+    "$BRANCH" "$OUT" >&2
   exit 1
 fi
 
