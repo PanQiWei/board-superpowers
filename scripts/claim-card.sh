@@ -129,8 +129,11 @@ mkdir -p ".board-superpowers/claims" \
   printf 'branch: %s\n' "$BRANCH"
 } > "$MARKER_FILE" || bsp_die "failed to write $MARKER_FILE" 20
 
-git add "$MARKER_FILE" >/dev/null 2>&1 \
-  || bsp_die "git add $MARKER_FILE failed" 20
+# -f is required: bootstrap-project.sh places `.board-superpowers/claims/`
+# into .gitignore (per-session state), but the claim branch MUST carry
+# the marker commit — that commit + push IS the atomic lock.
+git add -f "$MARKER_FILE" >/dev/null 2>&1 \
+  || bsp_die "git add -f $MARKER_FILE failed" 20
 
 COMMIT_MSG="claim: card #${CARD_NUMBER} [${SESSION_SLUG}]
 
