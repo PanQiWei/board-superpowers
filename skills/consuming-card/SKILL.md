@@ -259,9 +259,12 @@ the card may need re-splitting.
 <paste Execution Hints, or "none">
 ```
 
-Save to `docs/board-superpowers/plans/card-<N>.md` and commit it as a
-separate commit (before any implementation commits) so the plan is
-part of the PR's history.
+Save to `docs/board-superpowers/plans/card-<N>.md` **without committing**.
+The path is gitignored so `subagent-driven-development` can read it on
+disk while main stays clean — the card body on GitHub is the source of
+truth, and the plan brief is Consumer-session scratch. If the
+architect wants a trace of your reasoning, paste a short version into
+the PR's Summary section rather than shipping the full brief.
 
 ### Handle the execution skill's status signals
 
