@@ -74,7 +74,7 @@ where `$HOME` is ephemeral.
 #### Cited rationale
 
 - ADR-0003 — "Path resolution priority" (priority-1 entry).
-- `scripts/claim-card.sh` lines 132–160 — implementation.
+- `scripts/lib/common.sh` `bsp_pick_worktree_dir` — implementation.
 - [`07-path-conventions.md`](./07-path-conventions.md) "Worktree
   path resolution" — canonical contract pin.
 - `AGENTS.md` "Override via `$BOARD_SP_WORKTREE_DIR`" — protocol

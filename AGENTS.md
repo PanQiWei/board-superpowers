@@ -532,7 +532,8 @@ The v1-minimum plugin is loadable. The operational checklist:
 ### Release flow
 
 - Bump `.claude-plugin/plugin.json` + `.codex-plugin/plugin.json`
-  `version` field per semver (this PR: `v0.1.0-minimum`).
+  `version` field per semver (e.g., `v0.1.0-minimum` → `v0.1.1`
+  is a patch; `v0.1.x` → `v0.2.0` is a minor).
 - For deferred-atomic landings, also bump per-skill
   `.skill-meta.yaml` `version` (per
   [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md) § "
