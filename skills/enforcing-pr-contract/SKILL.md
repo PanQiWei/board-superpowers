@@ -97,6 +97,10 @@ TBD | tbd | TODO: write tests | (none) | n/a | N/A | nothing to verify
 
 A semantic-grade catalog (catching "I checked it manually" without saying what was checked) is in scope for a future iteration but not implemented today.
 
+## Beyond filler — the taste reference
+
+`submit-pr.sh` only catches whole-section filler. PRs can pass the validator and still be low-quality (vague checks, generic "tested locally" claims, retro notes that don't change anyone's behavior). The Producer-side review catches these — `references/taste.md` documents the **good vs bad shapes** for each section as a coaching reference. Use it during the review-queue routine when commenting on a PR that passed validation but should have been better.
+
 ## How the Producer enforces
 
 When the Producer's `managing-board` skill runs its review-queue routine, for each open PR linked to a card it:

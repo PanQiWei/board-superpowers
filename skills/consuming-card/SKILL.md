@@ -94,6 +94,8 @@ Otherwise leave the card in `In Progress` for the duration of the implementation
 
 ## Step 7 — verify before completion
 
+**Iron law**: NEVER open a PR without running all three steps below. The whole point of the board contract is that the Consumer's "I'm done" claim is backed by a verification chain the architect doesn't have to redo. Skipping verification turns the architect back into the QA bottleneck this skill exists to remove.
+
 Required chain (each step is a required sub-skill — none is optional):
 
 1. `superpowers:verification-before-completion` — evidence first; do not claim "done" without running the actual checks named in the card's Acceptance criteria.
@@ -101,6 +103,14 @@ Required chain (each step is a required sub-skill — none is optional):
 3. `superpowers:requesting-code-review` — independent second-pair-of-eyes on the diff.
 
 The card is NOT ready for PR submit until all three pass.
+
+### Common rationalizations to reject
+
+| Rationalization | Reality |
+|-----------------|---------|
+| "It's a small change, the verification chain is overkill" | Small changes are exactly where verification gaps hide — large changes get more eyes by default. The chain is calibrated for the smallest meaningful card; if it's overkill for yours, the card was probably mis-sized. |
+| "I'll skip step 3 (code-review) and let the human reviewer be the second-pair-of-eyes" | Then the Consumer hasn't reduced the architect's load — has just passed it through. Step 3 is what makes spawn-Consumer mode (overnight batches) worthwhile. |
+| "The acceptance criteria are 'tests pass' — `bun test` passing IS verification" | Acceptance criteria written that vaguely are themselves a smell — but if you're stuck with them, verify what the criteria *would have said* if written tightly: which behaviors got tested, which edge cases, which integration points. |
 
 ## Step 8 — cross-platform review (non-trivial cards)
 

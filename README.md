@@ -144,19 +144,29 @@ The script is idempotent — re-running replaces the existing entry rather than 
 
 ### One-time per-repo bootstrap
 
-For each repo where you want board-superpowers active:
+For each repo where you want board-superpowers active. Currently manual — an auto-bootstrap skill is planned for a future version.
 
-1. **In GitHub UI**, create a Project v2 with a `Status` single-select field whose options are exactly, in this order: `Backlog → Ready → In Progress → In Review → Done → Blocked`.
-2. **Open Claude Code in your repo and say**: `set up board-superpowers`.
-3. The plugin will:
-   - Verify both upstream plugins are installed.
-   - Ask for your project coordinate (`OWNER/NUMBER`).
-   - Create the standard `type:*` and `size:*` labels.
-   - Validate the Status field has all 6 required options.
-   - Write per-repo team-shared config (committed to git) and per-`(host, repo)` host-local state (kept out of git).
-   - Inject a routing block into your `CLAUDE.md` and `AGENTS.md` so future sessions auto-route to Manager or Consumer.
+1. **In GitHub UI**, create a Project v2 with a `Status` single-select field whose options are exactly, in this order: `Backlog → Ready → In Progress → Blocked → In Review → Done`.
+2. **Add the standard labels** by running:
+   ```bash
+   bash ~/.claude/plugins/board-superpowers/scripts/setup-labels.sh
+   ```
+   This creates `wip-override`, `suspended`, `security`, `pr-contract-override` (idempotent — skips already-existing labels).
+3. **Create `.board-superpowers/config.yml`** in the repo root and commit it:
+   ```yaml
+   project: <owner>/<number>      # e.g., PanQiWei/4
+   wip_cap_per_consumer: 1
+   ```
+4. **Verify** by running:
+   ```bash
+   bash ~/.claude/plugins/board-superpowers/scripts/check-deps.sh
+   bash ~/.claude/plugins/board-superpowers/scripts/read-board.sh \
+     --owner <owner> --project <number> --status Ready
+   ```
+   Both should exit 0; the second prints the JSON list of Ready cards (empty `[]` is fine).
+5. **Optional — add a routing block** to your `CLAUDE.md` and `AGENTS.md` so the agent knows to invoke this plugin's skills explicitly. The entry skill (`using-board-superpowers`) will trigger on common phrases without it, but the explicit routing improves reliability. See `~/.claude/plugins/board-superpowers/AGENTS.md` § "board-superpowers session routing" for a copy-pasteable block.
 
-That is it. Future sessions in this repo route themselves.
+That is it. After step 5 (or step 4 if you skip the routing block), open a fresh CC session in your repo and type "what should I work on" to confirm the entry skill triggers.
 
 ## A typical day
 

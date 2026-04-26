@@ -1,9 +1,15 @@
-# board-superpowers project config.
-# Managed by using-board-superpowers. Safe to edit by hand.
+# board-superpowers per-repo config — committed to git, shared by team.
+# Edited by hand (no auto-bootstrap skill in this version).
+# Schema: skills/using-board-superpowers/references/first-time-user-guide.md.
 
-project: "PanQiWei/4"
-wip_limit: 5
+# Project coordinates. Format: <owner>/<number>. The agent splits on '/'
+# when calling scripts/{read-board,claim-card,submit-pr}.sh.
+project: PanQiWei/4
 
-# Future fields (not yet consumed):
+# Per-Consumer WIP cap (hard rejection from claim-card.sh when exceeded).
+wip_cap_per_consumer: 1
+
+# Future fields (not yet consumed by any v1-minimum script):
 #   base_branch: main
 #   default_execution_skill: superpowers:subagent-driven-development
+#   autonomy_overrides: {}   # mutating-action override map

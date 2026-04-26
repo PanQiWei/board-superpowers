@@ -37,13 +37,22 @@ gh label create "pr-contract-override"  --description "Bypass PR three-section v
 ### 4. Create `.board-superpowers/config.yml` in the repo
 
 ```yaml
-# .board-superpowers/config.yml — committed to git
-project:
-  owner: <github-login-or-org>
-  number: <project-number>
+# .board-superpowers/config.yml — committed to git, shared by team.
+
+# Project coordinates. Format: <owner>/<number>. The agent splits
+# on '/' when calling the plugin's scripts.
+project: <owner>/<number>
+
+# Per-Consumer WIP cap (hard rejection from claim-card.sh when exceeded).
 wip_cap_per_consumer: 1
-# autonomy_overrides: {}  # mutating-action override map (empty = ask-architect on every mutation)
+
+# Future fields (not yet consumed):
+#   autonomy_overrides: {}  # mutating-action override map (empty = ask-architect on every mutation)
 ```
+
+When the agent calls `bash scripts/read-board.sh --owner <X> --project <N>`,
+it reads this file, splits `project` on `/` to get `<X>` and `<N>`, and
+passes them as args. Same for `claim-card.sh`.
 
 ### 5. Verify
 
