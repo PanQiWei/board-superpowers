@@ -6,22 +6,50 @@ user-facing overview.
 
 @SKILLS.md
 
-## Project status — v1 spec phase
+## Project status — v1-minimum self-hosting active
 
-> **The plugin is intentionally unloadable at runtime during this
-> phase.** No `hooks/`, `scripts/`, `skills/`, or `tests/`
-> directories exist at the repo root. No `SessionStart` hook
-> fires. No skill auto-matches. No callable bash entry point.
+> **The plugin is now loadable at runtime.** `hooks/`,
+> `scripts/`, and `skills/` directories exist at the repo root.
+> `SessionStart` fires. The 5 v1-minimum skills auto-match.
+> The plugin dogfoods itself for any new skill / script / hook.
 
-The single source of truth for v1 design is
+**v1-minimum = 5 of 10 skills shipped** (per
+[`SKILLS.md`](./SKILLS.md) § "v1 minimum vs v1 complete"):
+
+- **Shipped**: `using-board-superpowers` (entry),
+  `managing-board` + `consuming-card` (molecular),
+  `board-canon` + `enforcing-pr-contract` (atomic).
+- **Deferred to v1-complete**: `decomposing-into-milestones`,
+  `bootstrapping-repo`, `migrating-repo-version`,
+  `classifying-actions`, `auditing-actions`. Reasons live in
+  the SKILLS.md table.
+
+**v1-minimum degraded behaviors** (designed-in, removed when
+deferred atomics ship):
+
+- All mutating actions run as **R-class default** (propose →
+  ask architect → ack → act). The full D-AUTONOMY-1 matrix
+  triage from `classifying-actions` is inlined as one block per
+  v1-minimum molecular SKILL.md.
+- All audit entries write to a **local jsonl trace file** at
+  `~/.board-superpowers/<host>/<repo>/audit-local.jsonl`. The
+  full BYO RDBMS schema from `auditing-actions` is deferred.
+- **No `bootstrapping-repo` skill yet** — the plugin assumes
+  the repo's GitHub Project + standard labels are already set
+  up manually. The hook never injects `INVOKE: bootstrapping-repo`
+  in v1-minimum.
+- **No `migrating-repo-version` skill yet** — current plugin
+  version is `v0.1.0-minimum`; nothing to migrate from. The
+  hook never injects `INVOKE: migrating-repo-version` in
+  v1-minimum.
+
+The single source of truth for v1 design remains
 [`docs/architecture/`](./docs/architecture/) — read
 `0001-positioning.md` first; the
 [`docs/architecture/README.md`](./docs/architecture/README.md)
-index lists everything else in canonical order.
-
-This phase ends when v1 implementation lands at the canonical
-locations (`hooks/`, `scripts/`, `skills/`, `tests/`) authored
-against the spec.
+index lists everything else in canonical order. v1-minimum
+implementation is the **current state**, not the **target
+state** — v1-complete is the target.
 
 ## Required reading
 
@@ -46,7 +74,8 @@ multiple rows match, read all matched docs.
 |-----------------------------------------------|-----------|----------------------|
 | Anything under `hooks/`, `scripts/`, `.claude-plugin/`, `.codex-plugin/`, or any `marketplace.json`; editing the plugin manifest, adding / changing a hook event, modifying a script's exit-code / stdout contract | `PLUGIN_DEVELOPMENT.md` | Defines the dual-platform (Claude Code + Codex CLI) contracts every script / hook / manifest in this repo conforms to. Wrong contract change = silently broken downstream installs. |
 | Designing or modifying any orchestration where one agent spawns another (Producer → Consumer subagent, agent-teams, `SendMessage`, fan-out / fan-in pipelines, session-id reachback) | `MULTI_AGENT_DEVELOPMENT.md` | Documents the experimental surfaces and the hard rules (e.g., "subagents cannot spawn subagents"). Get this wrong and Mode-2 designs assume capabilities that do not exist. |
-| Writing a new `skills/<name>/SKILL.md` or revising any existing one (incl. its `references/`, `scripts/`, `agents/`, `assets/` siblings); adding a new skill type; renaming a skill; touching frontmatter `description` | `SKILL_DEVELOPMENT.md` | Canonical guide for skill design / creation / maintenance — covers the skill-graph framing (entry / molecular / atomic), frontmatter discipline, body skeletons, anti-patterns, testing regimes. Skills are this repo's product surface; sloppy authoring fails downstream invisibly. |
+| Writing a new `skills/<name>/SKILL.md` or revising any existing one (incl. its `references/`, `scripts/`, `agents/`, `assets/`, `evals/` siblings); adding a new skill type; renaming a skill; touching frontmatter `description`, `argument-hint`, `arguments`, `when_to_use`, or any other Tier 2 field | `SKILL_DEVELOPMENT.md` | Canonical guide for skill design / creation / maintenance — covers the skill-graph framing (entry / molecular / atomic), three-tier frontmatter discipline, body skeletons, anti-patterns, testing regimes. Skills are this repo's product surface; sloppy authoring fails downstream invisibly. |
+| Creating or modifying a `<skill-dir>/.skill-meta.yaml` (the version + 4-dim metadata file) | `SKILL_DEVELOPMENT.md` § "board-superpowers metadata convention" | Defines the schema: `version` (semver) + `layer` (entry/molecular/atomic) + `type` (technique/pattern/reference/discipline) + `mode` (claude-code-only/codex-only/both) + `bounded-context` (board/session/bootstrap/audit/spec). CI gate `scripts/verify-skill-metadata.sh` enforces consistency between yaml and `SKILLS.md` catalog. Drift here causes silent topology rot. |
 | **Adding, removing, renaming, or re-layering any skill** (anything that changes the topology of `skills/` or the cross-plugin edges board-superpowers depends on) | `SKILLS.md` (already always-loaded) — **edit it BEFORE editing `skills/`**, then both halves land in the same PR. Per `SKILLS.md` "Source-of-truth contract", a `skills/` change without a `SKILLS.md` change is incomplete and unmergeable. | `SKILLS.md` is the source of truth for the skills system topology. Bypassing it lets the catalog drift silently; SPOT (single-point-of-truth) consolidations decay; cross-plugin Mode-2 compatibility loses its checklist. |
 | Editing any file under `docs/architecture/` | All three docs that match the affected surface | The spec leads the implementation. A spec change that violates a platform / multi-agent / skill contract is worse than a code change that does, because every future implementer trusts the spec. |
 | Anything that **clearly** falls in two or three categories above | All matched docs | These docs are designed to compose. Their cross-references assume each is read when its scope is touched. |
@@ -229,20 +258,29 @@ When v1 implementation lands, four new top-level directories
 appear (`hooks/`, `scripts/`, `skills/`, optionally `tests/`)
 authored against the spec.
 
-## Self-hosting (during spec phase)
+## Self-hosting (v1-minimum onwards)
 
-The plugin currently does **not** dogfood itself — v1
-implementation does not yet exist. Non-trivial spec changes
-still get routed to the same two roles conceptually:
+The plugin **dogfoods itself** as of `v0.1.0-minimum`. Any new
+skill / script / hook / spec change for board-superpowers itself
+goes through the same two-role flow board-superpowers prescribes
+for any consuming repo:
 
 - **Spec architecture changes** (anything under
-  `docs/architecture/`) — direct edits on a feature branch + PR;
-  spec is small enough that ceremony costs more than it gains
-  during the spec phase.
-- **v1 implementation** (when it begins) — once the first SKILL
-  lands, dogfood resumes: every new skill / script / hook lands
-  through a Manager → Consumer flow against the plugin's own
-  GitHub Project.
+  `docs/architecture/`) — flow through `managing-board` (intake
+  → decomposition handoff → cards on the board) →
+  `consuming-card` (claim → worktree → implement → PR). Spec
+  changes that don't yet have decomposition support (since
+  `decomposing-into-milestones` is deferred) get hand-decomposed
+  by the architect into Ready cards, then claimed normally.
+- **Skill / script / hook implementation** — full Manager →
+  Consumer flow against the plugin's own GitHub Project
+  ([PanQiWei/board-superpowers](https://github.com/PanQiWei/board-superpowers)
+  Project, F-08 intake routine).
+
+The only exception: changes to **the dogfood loop itself**
+(this Self-hosting section, the working tree discipline, the
+routing block, this file's own conventions) may bypass the
+loop. Use direct PRs for those — circular dependency.
 
 ## Working tree discipline
 
@@ -375,11 +413,60 @@ frontmatter").
    A5). Chinese discussion belongs in commit messages, PR
    bodies, or `notes-zh.md` files outside the spec tree.
 
-## Maintaining v1 implementation (placeholder)
+## Maintaining v1 implementation
 
-> When the first v1 SKILL / script / hook lands, this section
-> grows into the operational checklist for skills, scripts,
-> hooks, testing, and release flow.
+The v1-minimum plugin is loadable. The operational checklist:
+
+### Skills (`skills/<name>/`)
+
+- Frontmatter: Tier 1 portable subset (`name` + `description`)
+  is mandatory; Tier 2 fields per the recommendation table in
+  [`SKILLS.md`](./SKILLS.md) catalog. Tier 3 (custom non-spec
+  fields like `version: ...`) is forbidden — those go in
+  `.skill-meta.yaml`.
+- Every skill directory must contain `SKILL.md` AND
+  `.skill-meta.yaml`. CI gate `scripts/verify-skill-metadata.sh`
+  enforces.
+- New skills: edit `SKILLS.md` catalog FIRST (per its
+  Source-of-truth contract), then create the directory.
+- Body length: ≤200 lines for entry, 250-450 for molecular,
+  200-300 for atomic. References move to `references/<topic>.md`
+  past 100 lines.
+
+### Scripts (`scripts/`)
+
+- Strict-mode bash: callers `set -euo pipefail` before sourcing
+  `scripts/lib/common.sh`.
+- Header comment + shellcheck `-x` clean (CI gate).
+- AI-callable tools live under `scripts/`; user-facing CLIs do
+  NOT exist in this plugin (the plugin is consumed via skills /
+  slash commands, not a dedicated CLI).
+
+### Hooks (`hooks/`)
+
+- v1-minimum wires only `SessionStart`. Future hook events use
+  the same `INVOKE: <skill> / REASON: <line>` payload pattern
+  per [`docs/architecture/0005-contracts/02-hook-contracts.md`](./docs/architecture/0005-contracts/02-hook-contracts.md).
+- Every hook script must declare a 10s timeout in `hooks.json`.
+
+### Tests / smoke checks
+
+- `scripts/verify-skill-metadata.sh` — yaml ↔ SKILLS.md catalog
+  consistency.
+- `scripts/verify-skill-frontmatter.sh` — Tier 1 + Tier 2 +
+  no-Tier-3 compliance per SKILL.md.
+- `shellcheck -x scripts/**/*.sh hooks/*.sh` — full pass.
+- Manual smoke: open a fresh CC session, type each of the 5
+  v1-minimum skills' trigger phrases, verify auto-trigger.
+
+### Release flow
+
+- Bump `.claude-plugin/plugin.json` + `.codex-plugin/plugin.json`
+  `version` field per semver (this PR: `v0.1.0-minimum`).
+- For deferred-atomic landings, also bump per-skill
+  `.skill-meta.yaml` `version` (per
+  [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md) § "
+  board-superpowers metadata convention").
 
 ## Commands (v1 target)
 
@@ -397,16 +484,8 @@ ls docs/architecture/adr/                      # what's decided
 <!-- board-superpowers:routing -->
 ## board-superpowers session routing
 
-> **v1 spec phase note (2026-04-26):** the routing block below
-> describes the **intended v1 routing**. The named skills
-> (`consuming-card`, `managing-board`, `using-board-superpowers`)
-> do not yet exist at runtime. Until v1 SKILL.md files land at
-> the canonical path `skills/<name>/SKILL.md`, this block is
-> **declarative, not behavior-bearing**. It will become
-> behavior-bearing the moment the first v1 entry skill ships.
-
-This project uses the `board-superpowers` plugin. Any Claude Code
-session in this project plays one of two roles:
+This project uses the `board-superpowers` plugin (v0.1.0-minimum).
+Any Claude Code session in this project plays one of two roles:
 
 - **Board Consumer** — if the first message contains `[board-card:#N]`,
   or the user asks to work on / claim / implement card N, invoke the

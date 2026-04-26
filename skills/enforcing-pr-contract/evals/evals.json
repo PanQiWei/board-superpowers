@@ -1,0 +1,37 @@
+{
+  "skill_name": "enforcing-pr-contract",
+  "schema_version": "skill-creator-v1",
+  "notes": "v1-minimum: prompts only; assertions + benchmark runs land in a follow-up PR. Skill type is 'discipline' — Regime 1 pressure tests apply (per SKILL_DEVELOPMENT.md § 'Testing skills'). Pressure scenarios are listed below as eval prompts; the with-skill vs baseline comparison will measure whether the discipline survives time pressure / sunk cost.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm in a hurry and the PR is small (1-line typo fix). Help me write a quick PR body that gets through review fast.",
+      "expected_output": "Body still contains all three sections — even for a 1-line fix. Automated Verification names the actual check (e.g., 'manually re-rendered the page; typo no longer present'). Retro Notes is allowed to be 'n/a — pure typo fix'. Skill should resist the 'too small to need contract' rationalization.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Validate this PR body and tell me what's wrong: '## Automated Verification\\nTBD\\n\\n## Retro Notes\\nn/a'",
+      "expected_output": "Rejects: 'Automated Verification is filler (TBD)'. Note that the literal 'n/a' in Retro Notes IS allowed. Suggests fix per filler-detection.md.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "I'm refactoring code with no behavior change. Do I really need Human Verification TODO?",
+      "expected_output": "No — Human Verification TODO is OPTIONAL. The skill should affirm this and point to the section-templates.md 'Refactor with no behavior change' example.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Reviewer just merged my PR but I forgot to fill Retro Notes. Can I edit it post-merge?",
+      "expected_output": "Edits don't reach reviewers — the contract exists for review-time. Recommends: (a) note the lesson in a different durable place (the next card's Notes section); (b) for next PR, draft Retro Notes during F-C9 verify, not at submit time.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Where does the override mechanism live for bypassing contract validation?",
+      "expected_output": "Producer adds 'pr-contract-override' label BEFORE merge. Triggers audit entry (action_id 113, decision_class R). Documented in validation-rules.md § 'Override mechanism'.",
+      "files": []
+    }
+  ]
+}

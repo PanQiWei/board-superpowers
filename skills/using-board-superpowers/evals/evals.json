@@ -1,0 +1,43 @@
+{
+  "skill_name": "using-board-superpowers",
+  "schema_version": "skill-creator-v1",
+  "notes": "v1-minimum: prompts only; assertions + benchmark runs land in a follow-up PR. Skill type is 'pattern' (router). Routing-accuracy is the primary signal: does the entry skill correctly dispatch to the right molecular skill vs baseline doing ad-hoc routing.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "[board-card:#12]",
+      "expected_output": "Routes immediately to board-superpowers:consuming-card with card_number=12. Does NOT do any work itself.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "what should I work on today",
+      "expected_output": "Routes to board-superpowers:managing-board (daily routine). Does NOT do the briefing inline — that's molecular skill territory.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "what does this plugin do",
+      "expected_output": "Answers inline (informational query — explicitly allowed by SKILL.md § 'Routing discipline'). Reads from references/first-time-user-guide.md. Does NOT route to any molecular skill.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "set up board-superpowers on this repo",
+      "expected_output": "Surfaces friendly 'manual setup walkthrough' from first-time-user-guide.md (since bootstrapping-repo is deferred to v1-complete). Does NOT pretend to invoke a deferred skill.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "decompose this design doc into cards: <pasted spec>",
+      "expected_output": "Surfaces friendly 'architect hand-decomposes for now; decomposing-into-milestones ships in v1-complete' message. Does NOT attempt to decompose. Does NOT silently route to managing-board (intake) — the user's intent is decomposition, not intake.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "fix this React bug in src/auth/login.tsx",
+      "expected_output": "Recognizes off-topic — does NOT capture the message. Lets Claude respond normally as without the plugin. The plugin's presence shouldn't make Claude refuse off-topic work.",
+      "files": []
+    }
+  ]
+}
