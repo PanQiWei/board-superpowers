@@ -167,9 +167,28 @@ check_gh_scope() {
     fi
 }
 
+# Absolutize a path. Existing dir → physical absolute (resolves
+# symlinks via `pwd -P`). Non-existent or non-dir → cwd-joined when
+# relative, kept as-is when already absolute. Output ALWAYS starts
+# with `/` so the spec's `PROJECT=<absolute path>` invariant
+# (01-script-contracts.md line 93) holds in every branch.
+absolutize() {
+    local p="$1"
+    if [ -d "${p}" ]; then
+        (cd "${p}" 2>/dev/null && pwd -P) && return 0
+    fi
+    case "${p}" in
+        /*) printf '%s\n' "${p}" ;;
+        *)  printf '%s/%s\n' "$(pwd -P)" "${p}" ;;
+    esac
+}
+
 # Resolve PROJECT_PATH from $CLAUDE_PROJECT_DIR (or $PWD). Used by both
 # the routing check and machine-mode emission. If the dir is inside a
-# git repo, prefer the toplevel; otherwise use the dir as-is.
+# git repo, prefer the toplevel (already absolute — git rev-parse
+# returns a physical path); otherwise absolutize via `absolutize()` so
+# a relative CLAUDE_PROJECT_DIR like `../foo` never leaks into
+# machine-mode `PROJECT=` output.
 resolve_project_path() {
     local project_dir="${CLAUDE_PROJECT_DIR:-${PWD}}"
     if [ -d "${project_dir}" ]; then
@@ -179,7 +198,7 @@ resolve_project_path() {
             return
         fi
     fi
-    PROJECT_PATH="${project_dir}"
+    PROJECT_PATH="$(absolutize "${project_dir}")"
 }
 
 check_routing_block() {

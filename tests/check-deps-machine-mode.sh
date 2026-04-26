@@ -316,6 +316,81 @@ scenario_non_git_project_dir() {
     assert_match "stdout has MISSING=gh" "^MISSING=gh\$" "${STDOUT_CAPTURE}"
     assert_match "stdout has ROUTING_INJECTED=yes" "^ROUTING_INJECTED=yes\$" "${STDOUT_CAPTURE}"
     assert_match "stdout PROJECT is the non-git path" "^PROJECT=.*/not-a-repo\$" "${STDOUT_CAPTURE}"
+    # Spec 01-script-contracts.md line 93: PROJECT=<absolute path>.
+    # Non-git CLAUDE_PROJECT_DIR must still emit an absolute path.
+    local project_value
+    project_value="$(printf '%s\n' "${STDOUT_CAPTURE}" | grep '^PROJECT=' | sed 's/^PROJECT=//')"
+    case "${project_value}" in
+        /*) assert_eq "PROJECT value is absolute (starts with /)" "absolute" "absolute" ;;
+        *)  assert_eq "PROJECT value is absolute (starts with /)" "absolute" "relative: ${project_value}" ;;
+    esac
+}
+
+# --- Scenario 8: relative CLAUDE_PROJECT_DIR (existing non-git dir) ------
+# Caller passes a relative CLAUDE_PROJECT_DIR resolving to an existing
+# non-git directory. Spec 01-script-contracts.md line 93 mandates
+# PROJECT=<absolute path> regardless of how the caller spelled the input.
+# Without the absolutize() fix the script leaks the literal `../foo`
+# value into machine-mode stdout.
+
+scenario_relative_existing_non_git() {
+    printf 'Scenario: relative CLAUDE_PROJECT_DIR (existing non-git) → PROJECT absolute\n'
+    local tmp non_git_dir cwd_dir
+    tmp="$(mktemp -d)"
+    # shellcheck disable=SC2064
+    trap "rm -rf '${tmp}'" RETURN
+    non_git_dir="${tmp}/sibling-non-git"
+    cwd_dir="${tmp}/cwd"
+    mkdir -p "${non_git_dir}" "${cwd_dir}"
+    # cwd is ${cwd_dir}; relative path ../sibling-non-git points at
+    # the existing non-git dir. Bare PATH so MISSING=gh trips and forces
+    # machine-mode emission.
+    local rc=0
+    STDOUT_CAPTURE="$(
+        cd "${cwd_dir}"
+        env -i \
+            HOME="${HOME}" \
+            PATH="/usr/bin:/bin" \
+            CLAUDE_PROJECT_DIR="../sibling-non-git" \
+            bash "${CHECK_DEPS}" --machine 2>/dev/null
+    )" || rc=$?
+    RC_CAPTURE="${rc}"
+    assert_eq "relative non-git → exit 0" "0" "${RC_CAPTURE}"
+    assert_match "stdout has MISSING=gh" "^MISSING=gh\$" "${STDOUT_CAPTURE}"
+    assert_match "stdout has ROUTING_INJECTED=yes" "^ROUTING_INJECTED=yes\$" "${STDOUT_CAPTURE}"
+    assert_match "stdout PROJECT starts with /" "^PROJECT=/" "${STDOUT_CAPTURE}"
+    assert_match "stdout PROJECT resolves to sibling-non-git" "^PROJECT=.*/sibling-non-git\$" "${STDOUT_CAPTURE}"
+}
+
+# --- Scenario 9: nonexistent CLAUDE_PROJECT_DIR --------------------------
+# Caller passes a path that doesn't exist. Per spec, PROJECT= must still
+# be absolute. Routing check is skipped (dir doesn't exist) →
+# ROUTING_INJECTED=yes. We use a bare PATH so MISSING=gh trips and forces
+# the three-line emission.
+
+scenario_nonexistent_project_dir() {
+    printf 'Scenario: nonexistent CLAUDE_PROJECT_DIR → PROJECT absolute, ROUTING_INJECTED=yes\n'
+    local tmp cwd_dir bogus
+    tmp="$(mktemp -d)"
+    # shellcheck disable=SC2064
+    trap "rm -rf '${tmp}'" RETURN
+    cwd_dir="${tmp}/cwd"
+    mkdir -p "${cwd_dir}"
+    bogus="/nonexistent/path-that-does-not-exist-$$"
+    local rc=0
+    STDOUT_CAPTURE="$(
+        cd "${cwd_dir}"
+        env -i \
+            HOME="${HOME}" \
+            PATH="/usr/bin:/bin" \
+            CLAUDE_PROJECT_DIR="${bogus}" \
+            bash "${CHECK_DEPS}" --machine 2>/dev/null
+    )" || rc=$?
+    RC_CAPTURE="${rc}"
+    assert_eq "nonexistent → exit 0" "0" "${RC_CAPTURE}"
+    assert_match "stdout has MISSING=gh" "^MISSING=gh\$" "${STDOUT_CAPTURE}"
+    assert_match "stdout has ROUTING_INJECTED=yes" "^ROUTING_INJECTED=yes\$" "${STDOUT_CAPTURE}"
+    assert_match "stdout PROJECT starts with /" "^PROJECT=/" "${STDOUT_CAPTURE}"
 }
 
 # --- Run ----------------------------------------------------------------
@@ -327,6 +402,8 @@ scenario_combined
 scenario_runtime_failure
 scenario_claude_project_dir_override
 scenario_non_git_project_dir
+scenario_relative_existing_non_git
+scenario_nonexistent_project_dir
 
 printf '\n%d passed, %d failed\n' "${PASS}" "${FAIL}"
 [ "${FAIL}" -eq 0 ]
