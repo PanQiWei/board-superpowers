@@ -117,11 +117,30 @@ cd ~/.claude/skills && git clone https://github.com/garrytan/gstack && cd gstack
 git clone https://github.com/PanQiWei/board-superpowers ~/.claude/plugins/board-superpowers
 ```
 
-然后注册为本地 plugin：
+#### Claude Code
 
 ```
 /plugin add local ~/.claude/plugins/board-superpowers
 ```
+
+CC 在 plugin 加载时自动发现 `hooks/hooks.json`，无需额外步骤。
+
+#### Codex CLI
+
+Codex CLI 不会自动发现 plugin 自带的 hook（plugin manifest 规范没有 `hooks` 字段）。安装完后运行一次 SessionStart hook 注册：
+
+```bash
+# 推荐先打印 snippet 看一下：
+bash ~/.claude/plugins/board-superpowers/scripts/register-codex-hooks.sh
+
+# 然后自动 merge 到用户级 ~/.codex/hooks.json：
+bash ~/.claude/plugins/board-superpowers/scripts/register-codex-hooks.sh --install-user
+
+# 或者写到当前 repo 的 ./.codex/hooks.json（需要 repo trust）：
+bash ~/.claude/plugins/board-superpowers/scripts/register-codex-hooks.sh --install-repo
+```
+
+脚本是幂等的——重复运行会替换已存在的 entry 而不是重复添加；覆盖前会先备份 `hooks.json`。卸载用 `--uninstall-user`。
 
 ### 每个 repo 的一次性引导
 

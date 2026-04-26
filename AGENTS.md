@@ -448,6 +448,15 @@ The v1-minimum plugin is loadable. The operational checklist:
   the same `INVOKE: <skill> / REASON: <line>` payload pattern
   per [`docs/architecture/0005-contracts/02-hook-contracts.md`](./docs/architecture/0005-contracts/02-hook-contracts.md).
 - Every hook script must declare a 10s timeout in `hooks.json`.
+- **Dual-platform registration**: CC auto-discovers
+  `hooks/hooks.json` at plugin load. Codex CLI does NOT — users
+  run `scripts/register-codex-hooks.sh --install-user` (or
+  `--install-repo`) once per Codex install to wire the same
+  `SessionStart` script into `~/.codex/hooks.json` (or
+  `<repo>/.codex/hooks.json`). The script is idempotent and
+  backs up the target file before merging. When adding a new
+  hook event, update BOTH `hooks/hooks.json` AND the snippet
+  generator inside `register-codex-hooks.sh`.
 
 ### Tests / smoke checks
 

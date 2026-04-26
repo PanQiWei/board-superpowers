@@ -381,10 +381,21 @@ implications for our codebase:
 2. **Marketplaces** — ship a `marketplace.json` per platform. Both
    can reference the same plugin source (this repo).
 3. **Hooks** — `hooks/session-start.sh` can be wired into both
-   platforms because `SessionStart` exists on both. Register it
-   twice: `hooks/hooks.json` for Claude Code, equivalent
-   `~/.codex/hooks.json` entry (or per-repo
-   `<repo>/.codex/hooks.json`) for Codex.
+   platforms because `SessionStart` exists on both. Registration
+   model differs:
+   - **Claude Code**: auto-discovers `<plugin-root>/hooks/hooks.json`
+     when the plugin loads. No user action.
+   - **Codex CLI**: NO plugin-level auto-discovery —
+     `.codex-plugin/plugin.json` has no `hooks` field. The user
+     (or an installer script) must add the entry to
+     `~/.codex/hooks.json` (user scope) or
+     `<repo>/.codex/hooks.json` (per-repo, requires trust).
+     board-superpowers ships
+     `scripts/register-codex-hooks.sh` for one-shot registration
+     (print / `--install-user` / `--install-repo` /
+     `--uninstall-user`). The script resolves the absolute path
+     to `hooks/session-start.sh` via `bsp_plugin_root()` so it
+     survives different install locations.
 4. **Skills** — `SKILL.md` body is portable. Frontmatter is
    tiered (the **three-tier discipline** documented in
    `SKILL_DEVELOPMENT.md` § "Three-tier frontmatter discipline"):

@@ -104,6 +104,16 @@ molecular SKILL.md as a temporary block clearly labeled "v1
 minimum — replace with classifying-actions + auditing-actions
 when both atomics ship."
 
+**Cross-platform hook delivery**: `hooks/session-start.sh` is
+identical on both platforms (uses `bsp_plugin_root()` from
+`scripts/lib/common.sh` to resolve paths cross-platform).
+Registration differs: Claude Code auto-discovers
+`hooks/hooks.json`; Codex CLI requires running
+`scripts/register-codex-hooks.sh --install-user` (or
+`--install-repo`) once after plugin install. See
+[`PLUGIN_DEVELOPMENT.md`](./PLUGIN_DEVELOPMENT.md) § "What this
+means for board-superpowers" #3 for the full rationale.
+
 ## Skill catalog
 
 > Per-skill `layer`, `type`, `mode`, `bounded-context` live in

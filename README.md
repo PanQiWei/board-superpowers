@@ -117,11 +117,30 @@ You will also need: `gh` CLI (logged in, with `project` scope), `git`, `python3`
 git clone https://github.com/PanQiWei/board-superpowers ~/.claude/plugins/board-superpowers
 ```
 
-Then register it as a local plugin:
+#### Claude Code
 
 ```
 /plugin add local ~/.claude/plugins/board-superpowers
 ```
+
+CC auto-discovers the plugin's `hooks/hooks.json` at install time — no extra step needed.
+
+#### Codex CLI
+
+Codex CLI doesn't auto-discover plugin-bundled hooks (the plugin manifest spec has no `hooks` field). Register the SessionStart hook once after install:
+
+```bash
+# Inspect the registration snippet first (recommended):
+bash ~/.claude/plugins/board-superpowers/scripts/register-codex-hooks.sh
+
+# Then auto-merge into your user-scope ~/.codex/hooks.json:
+bash ~/.claude/plugins/board-superpowers/scripts/register-codex-hooks.sh --install-user
+
+# OR per-repo (writes ./.codex/hooks.json; requires repo trust):
+bash ~/.claude/plugins/board-superpowers/scripts/register-codex-hooks.sh --install-repo
+```
+
+The script is idempotent — re-running replaces the existing entry rather than duplicating. It backs up your `hooks.json` before overwriting. Uninstall via `--uninstall-user`.
 
 ### One-time per-repo bootstrap
 
