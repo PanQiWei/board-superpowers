@@ -14,8 +14,13 @@
 #     last_seen_version updated; host_bootstrapped_at preserved.
 #   - --force flag: overwrite even when manifest is already correct.
 #   - Bad --plugin-root: exit 1, helpful error.
-#   - Atomic write: half-written temp file never lingers; mv-failure
-#     leaves no .tmp file behind.
+#   - Defensive guard: target manifest path is unexpectedly a
+#     directory → exit 1, no .tmp file lingers.
+#   - Concurrent runs: two parallel invocations both succeed, exactly
+#     one manifest.yml exists, no .tmp leaks (proves per-process
+#     mktemp scratch files plus rename(2) atomicity).
+#   - YAML whitespace tolerance: `key : "value"` (extra space before
+#     colon) parses correctly during version-refresh detection.
 #
 # Hermeticity: every scenario uses a fresh tmp HOME plus a fresh tmp
 # plugin-root containing a stub .claude-plugin/plugin.json. Nothing
@@ -288,12 +293,19 @@ check_not 'no manifest written under bad plugin root' \
 rm -rf "${TMP}"
 
 # ---------------------------------------------------------------------------
-# Scenario 6: atomic write — mv failure leaves no half-written file
+# Scenario 6: manifest path is unexpectedly a directory
 # ---------------------------------------------------------------------------
-# Simulate by pre-creating the manifest path as a directory so mv fails.
-# (After --force the script tries to overwrite; mv into a directory will
-# error.) We assert: no .tmp file lingers; exit non-zero.
-printf 'Scenario 6: atomic write — mv failure leaves no .tmp\n'
+# A bare `mv source dir/` succeeds on POSIX (moves source INTO dir),
+# which would silently land manifest.yml.tmp inside a directory named
+# manifest.yml and corrupt the layout. The script's defensive guard
+# (refuse-if-target-is-a-directory) must short-circuit before the mv
+# is attempted. We assert: exit 1, no scratch .tmp file leaks behind.
+#
+# (Honest naming: this scenario is NOT a generic mv-failure simulation
+# — true mv failures, e.g. read-only filesystem, are hard to fake
+# hermetically. This scenario locks in the dir-target gotcha guard,
+# which is the realistic failure mode.)
+printf 'Scenario 6: manifest path is unexpectedly a directory\n'
 
 TMP="$(mktemp -d)"
 HOME_DIR="${TMP}/home"
@@ -302,7 +314,7 @@ mkdir -p "${HOME_DIR}/.board-superpowers"
 make_stub_plugin_root "0.2.0" "${PLUGIN_ROOT}"
 
 # Make the manifest path a DIRECTORY (not a file) so the atomic mv
-# encounters a non-overwritable target.
+# would corrupt the layout if not guarded.
 mkdir -p "${HOME_DIR}/.board-superpowers/manifest.yml"
 
 set +e
@@ -310,9 +322,113 @@ run_bootstrap "${HOME_DIR}" "${PLUGIN_ROOT}" --force >/dev/null 2>&1
 RC=$?
 set -e
 
-assert_eq 'mv-failure exit 1' '1' "${RC}"
-check_not 'no leftover manifest.yml.tmp after mv failure' \
+assert_eq 'dir-target exit 1' '1' "${RC}"
+# Per-process mktemp scratch files use the pattern manifest.yml.tmp.<6>
+# (trailing-Xs constraint of BSD mktemp). Assert NONE exist, and ALSO
+# assert the legacy fixed-path manifest.yml.tmp does not leak.
+LEFTOVER_COUNT="$(find "${HOME_DIR}/.board-superpowers" \
+    -maxdepth 1 -name 'manifest.yml.tmp.*' 2>/dev/null | wc -l | tr -d ' ')"
+assert_eq 'no leftover .tmp.* scratch files after dir-target guard' \
+    '0' "${LEFTOVER_COUNT}"
+check_not 'no legacy fixed-path manifest.yml.tmp leak' \
     test -f "${HOME_DIR}/.board-superpowers/manifest.yml.tmp"
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
+# Scenario 7: concurrent F-B1 invocations — both succeed, no .tmp leak
+# ---------------------------------------------------------------------------
+# Two CC sessions can hit first-run F-B1 on the same host at the same
+# time. Per-process mktemp scratch files mean neither writer races on
+# a shared scratch path; the final mv is rename(2)-atomic; both end up
+# with a valid manifest.yml (one overwrites the other; payload is
+# semantically equivalent). We assert: both exit 0, exactly one
+# manifest.yml exists at the end, no .tmp scratch files leak.
+printf 'Scenario 7: concurrent invocations (race-loser still clean)\n'
+
+TMP="$(mktemp -d)"
+HOME_DIR="${TMP}/home"
+PLUGIN_ROOT="${TMP}/plugin"
+mkdir -p "${HOME_DIR}"
+make_stub_plugin_root "0.2.0" "${PLUGIN_ROOT}"
+
+MANIFEST="${HOME_DIR}/.board-superpowers/manifest.yml"
+
+# Spawn two parallel invocations and wait. Each writes its own .tmp
+# via mktemp, then races on the rename(2). POSIX guarantees the
+# rename is atomic on a same-filesystem move, so one wins and the
+# other harmlessly overwrites with the same payload.
+set +e
+HOME="${HOME_DIR}" bash "${SCRIPT_UNDER_TEST}" \
+    --plugin-root "${PLUGIN_ROOT}" >/dev/null 2>&1 &
+PID_A=$!
+HOME="${HOME_DIR}" bash "${SCRIPT_UNDER_TEST}" \
+    --plugin-root "${PLUGIN_ROOT}" >/dev/null 2>&1 &
+PID_B=$!
+wait "${PID_A}"; RC_A=$?
+wait "${PID_B}"; RC_B=$?
+set -e
+
+assert_eq 'concurrent invocation A exit 0' '0' "${RC_A}"
+assert_eq 'concurrent invocation B exit 0' '0' "${RC_B}"
+
+MANIFEST_COUNT="$(find "${HOME_DIR}/.board-superpowers" \
+    -maxdepth 1 -name 'manifest.yml' -type f 2>/dev/null | wc -l | tr -d ' ')"
+assert_eq 'exactly one manifest.yml after concurrent runs' \
+    '1' "${MANIFEST_COUNT}"
+
+TMP_LEAK_COUNT="$(find "${HOME_DIR}/.board-superpowers" \
+    -maxdepth 1 -name 'manifest.yml.tmp.*' 2>/dev/null | wc -l | tr -d ' ')"
+assert_eq 'no .tmp scratch leaks after concurrent runs' \
+    '0' "${TMP_LEAK_COUNT}"
+
+# Sanity: the surviving manifest is well-formed.
+check 'concurrent-survivor manifest has correct version' \
+    grep -Fxq 'last_seen_version: "0.2.0"' "${MANIFEST}"
+check 'concurrent-survivor manifest has ISO-8601 host_bootstrapped_at' \
+    grep -Eq '^host_bootstrapped_at: "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z"$' "${MANIFEST}"
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
+# Scenario 8: YAML whitespace tolerance — `key : "value"` parses
+# ---------------------------------------------------------------------------
+# A user hand-edits manifest.yml and adds an extra space before the
+# colon (`last_seen_version : "0.1.0"`). YAML allows this (whitespace
+# around the colon is non-significant for top-level scalars). The
+# version-refresh path must still detect the older version and bump
+# to the plugin's current version.
+printf 'Scenario 8: YAML whitespace tolerance (key<ws>:<ws>value)\n'
+
+TMP="$(mktemp -d)"
+HOME_DIR="${TMP}/home"
+PLUGIN_ROOT="${TMP}/plugin"
+mkdir -p "${HOME_DIR}/.board-superpowers"
+make_stub_plugin_root "0.2.0" "${PLUGIN_ROOT}"
+
+MANIFEST="${HOME_DIR}/.board-superpowers/manifest.yml"
+ORIGINAL_TS='2026-02-01T08:00:00Z'
+# Note the EXTRA SPACES around colons — both before and after.
+cat > "${MANIFEST}" <<EOF
+schema_version : 1
+host_bootstrapped_at  :  "${ORIGINAL_TS}"
+last_seen_version : "0.1.0"
+EOF
+chmod 0644 "${MANIFEST}"
+chmod 0700 "${HOME_DIR}/.board-superpowers"
+
+set +e
+run_bootstrap "${HOME_DIR}" "${PLUGIN_ROOT}" >/dev/null 2>&1
+RC=$?
+set -e
+
+assert_eq 'whitespace-tolerant refresh exit 0' '0' "${RC}"
+check 'last_seen_version bumped to "0.2.0" despite spaced colons' \
+    grep -Fxq 'last_seen_version: "0.2.0"' "${MANIFEST}"
+check_not 'old last_seen_version: "0.1.0" gone after whitespace-tolerant refresh' \
+    grep -Eq '^last_seen_version[[:space:]]*:[[:space:]]*"0\.1\.0"$' "${MANIFEST}"
+check 'host_bootstrapped_at preserved across whitespace-tolerant refresh' \
+    grep -Fxq "host_bootstrapped_at: \"${ORIGINAL_TS}\"" "${MANIFEST}"
 
 rm -rf "${TMP}"
 

@@ -23,9 +23,16 @@
 #
 # Path: ${HOME}/.board-superpowers/manifest.yml. Mode: dir 0700, file 0644.
 #
-# Atomicity: write to manifest.yml.tmp first, then atomic mv to the final
-# path. If the mv fails the .tmp file is removed so a Ctrl-C / crash
-# never leaves a half-written manifest behind.
+# Atomicity: render to a per-process scratch file (mktemp) in the same
+# directory, chmod, then atomic mv to the final path. If the mv fails
+# the scratch file is removed so a Ctrl-C / crash never leaves a
+# half-written manifest behind. Per-process tmp filenames mean two
+# concurrent invocations on the same host never race on a shared
+# scratch file — both render their own .tmp and then race on the final
+# rename(2), which POSIX guarantees atomic for same-filesystem moves.
+# Loser's manifest content overwrites winner's, but both writers
+# produce semantically equivalent payloads (same plugin version,
+# timestamps differ by at most µs), so the result is consistent.
 #
 # Argument vector:
 #   bash scripts/bootstrap-host.sh                  # interactive default
@@ -124,21 +131,29 @@ print(v)
 
 STATE_DIR="${HOME}/.board-superpowers"
 MANIFEST="${STATE_DIR}/manifest.yml"
-MANIFEST_TMP="${MANIFEST}.tmp"
+# MANIFEST_TMP is set per-call inside write_manifest() via mktemp so
+# concurrent invocations never collide on a shared scratch file.
+MANIFEST_TMP=""
 
 # --- Helpers ------------------------------------------------------------
 
 # Read a top-level scalar field from a flat YAML file using grep + sed.
 # The shape is fully predictable (3 lines, no nesting); a real YAML
 # parser is overkill. Returns empty string when absent.
+#
+# YAML tolerates whitespace on either side of the `:` separator
+# (`key: value`, `key : value`, `key  :value` are all valid). The
+# regex below admits any amount of whitespace before the colon so a
+# hand-edited manifest with `last_seen_version : "0.2.0"` still
+# parses; this matches what real YAML libraries do.
 yaml_get() {
     local file="$1"
     local key="$2"
     [ -f "${file}" ] || return 0
-    # Match `key: <value>` at line start; strip optional surrounding quotes.
-    grep -E "^${key}:[[:space:]]" "${file}" 2>/dev/null \
+    # Match `key<ws>*:<ws>*<value>` at line start; strip surrounding quotes.
+    grep -E "^${key}[[:space:]]*:" "${file}" 2>/dev/null \
         | head -n1 \
-        | sed -E "s/^${key}:[[:space:]]*//; s/^\"//; s/\"$//"
+        | sed -E "s/^${key}[[:space:]]*:[[:space:]]*//; s/^\"//; s/\"$//"
 }
 
 iso_utc_now() {
@@ -147,7 +162,10 @@ iso_utc_now() {
 }
 
 # write_manifest <bootstrapped_at> <version>
-# Atomic: render to .tmp, chmod, then mv. On mv failure, scrub the .tmp.
+# Atomic: render to a unique per-process .tmp (mktemp), chmod, then mv.
+# On mv failure, scrub the unique .tmp. Two concurrent F-B1 runs each
+# get their own scratch file and never race on a shared path; the
+# final rename(2) is POSIX-atomic.
 write_manifest() {
     local ts="$1"
     local version="$2"
@@ -161,7 +179,20 @@ write_manifest() {
         bsp_die "refuses to write: ${MANIFEST} exists as a directory, not a file"
     fi
 
-    # Trap so any unexpected exit (Ctrl-C, write failure) cleans .tmp.
+    # Per-process unique scratch file in the same directory as the
+    # final manifest, so the subsequent mv is a same-filesystem move
+    # (rename(2) atomic). The Xs MUST be trailing — BSD mktemp on
+    # macOS only randomizes trailing Xs, not middle-of-template Xs,
+    # so a `.tmp` suffix after the Xs would defeat uniqueness and
+    # cause concurrent invocations to collide on a literal filename.
+    # We use a `.tmp.` PREFIX before the random tail to keep the
+    # scratch files identifiable in directory listings and easy to
+    # clean up.
+    MANIFEST_TMP="$(mktemp "${MANIFEST}.tmp.XXXXXX")" \
+        || bsp_die "could not create temp manifest in ${STATE_DIR}"
+
+    # Trap so any unexpected exit (Ctrl-C, write failure) cleans the
+    # unique .tmp file. The trap reads MANIFEST_TMP at fire time.
     trap 'rm -f "${MANIFEST_TMP}"' EXIT
 
     cat > "${MANIFEST_TMP}" <<EOF
@@ -200,6 +231,10 @@ if [ -f "${MANIFEST}" ] && [ "${FORCE}" -eq 0 ]; then
     EXISTING_TS="$(yaml_get "${MANIFEST}" host_bootstrapped_at)"
 
     if [ "${EXISTING_VERSION}" = "${PLUGIN_VERSION}" ]; then
+        # Defensive: even on the no-write fast path, converge file
+        # mode to 0644 in case a hand-edit (or umask drift) left the
+        # file at 0600 / 0400 / etc. Cheap, idempotent.
+        chmod 0644 "${MANIFEST}"
         bsp_log "manifest current at ${MANIFEST} (last_seen_version=${PLUGIN_VERSION}); no write"
         printf '%s\n' "${MANIFEST}"
         exit 0
