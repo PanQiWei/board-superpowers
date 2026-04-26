@@ -21,7 +21,7 @@ This skill is the schema authority for the board-superpowers plugin. It answers 
 
 ## State machine
 
-A card lives in **exactly one** of six Status field values at any moment. Every transition writes one entry to the plugin's audit log (a local JSON-lines file at `~/.board-superpowers/<host>/<repo>/audit-local.jsonl`).
+A card lives in **exactly one** of six Status field values at any moment. Every transition writes one entry to the plugin's audit log (a local JSON-lines file at `~/.board-superpowers/repos/<normalized>/audit-local.jsonl`).
 
 ```
 Backlog ─────► Ready ─────► In Progress ─────► In Review ─────► Done
@@ -83,7 +83,7 @@ Every Card body MUST have this structure. Sections appear in this order. The Pro
 <free-form context the Consumer will need; design rationale; gotchas>
 
 <!-- bsp-bottom-marker:do-not-edit -->
-**Audit trail**: query ~/.board-superpowers/<host>/<repo>/audit-local.jsonl by `card_number = N`.
+**Audit trail**: query ~/.board-superpowers/repos/<normalized>/audit-local.jsonl by `card_number = N`.
 <!-- /bsp-bottom-marker -->
 ```
 

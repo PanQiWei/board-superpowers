@@ -32,7 +32,7 @@ deferred atomics ship):
   triage from `classifying-actions` is inlined as one block per
   v1-minimum molecular SKILL.md.
 - All audit entries write to a **local jsonl trace file** at
-  `~/.board-superpowers/<host>/<repo>/audit-local.jsonl`. The
+  `~/.board-superpowers/repos/<normalized>/audit-local.jsonl`. The
   full BYO RDBMS schema from `auditing-actions` is deferred.
 - **No `bootstrapping-repo` skill yet** — the plugin assumes
   the repo's GitHub Project + standard labels are already set

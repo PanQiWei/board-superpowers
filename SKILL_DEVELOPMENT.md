@@ -1435,7 +1435,7 @@ NOT in SKILL.md.
 | Phase narrative (anti-pattern) | Current-behavior framing (correct) |
 |--------------------------------|-------------------------------------|
 | "v1-minimum: all mutating actions = R-class default" | "Every mutating action this skill performs follows propose → wait for ack → act → audit" |
-| "Audit log writes go to local jsonl in v1-minimum; BYO RDBMS in v1-complete" | "Audit log writes append a JSON line to `~/.board-superpowers/<host>/<repo>/audit-local.jsonl`" |
+| "Audit log writes go to local jsonl in v1-minimum; BYO RDBMS in v1-complete" | "Audit log writes append a JSON line to `~/.board-superpowers/repos/<normalized>/audit-local.jsonl`" |
 | "Mode-2 Producer-spawned Consumer is CC-only at v1-minimum" | "When this skill runs as a Producer-spawned subagent (Claude Code only), ..." |
 | "F-09 (decomposition) deferred to v1-complete; Producer hand-decomposes for now" | (just describe the manual hand-decomposition flow as the actual procedure) |
 
