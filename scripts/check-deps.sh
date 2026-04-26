@@ -6,13 +6,27 @@
 #   - hooks/session-start.sh (every session, fast-path verification)
 #   - using-board-superpowers SKILL.md (fallback when hook output is missing)
 #
+# SELF-CONTAINED: this script MUST NOT source scripts/lib/common.sh, per
+# docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md
+# § "Self-contained scripts at the dep-check layer". A broken lib must
+# never break dependency detection. The same self-containment rule applies
+# to hooks/session-start.sh.
+#
+# Inputs (per spec § 1.5.0):
+#   $CLAUDE_PROJECT_DIR — project root for the routing-block check;
+#                         defaults to $PWD if unset.
+#   $HOME               — used implicitly by called tools.
+#
 # Exit codes (per docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md
 # § "Layer 1 dep check (§1.5.0)" and 0005-contracts/02-hook-contracts.md):
 #   0 — all dependencies present + routing block present
 #       (or no AGENTS.md / CLAUDE.md exists, in which case the routing
 #       check is skipped — the asymmetric "no file is fine, file without
 #       marker is not" rule keeps the dep check silent in repos that
-#       don't use these files at all)
+#       don't use these files at all). Also reached when
+#       $CLAUDE_PROJECT_DIR resolves to a non-git directory: outside-git
+#       means there is no project to validate, so the routing check is
+#       skipped.
 #   2 — required binary is NOT installed, OR AGENTS.md / CLAUDE.md
 #       exists but lacks the "## board-superpowers session routing"
 #       heading
@@ -30,12 +44,6 @@
 # between two different INVOKE markers; Card 1 establishes the contract.
 
 set -euo pipefail
-
-# Resolve our own location and source common helpers.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source-path=SCRIPTDIR
-# shellcheck source=lib/common.sh
-. "${SCRIPT_DIR}/lib/common.sh"
 
 # --- Failure tracking ---------------------------------------------------
 # Three independent counters — order of priority for exit-code resolution:
@@ -72,10 +80,20 @@ check_gh_scope() {
 }
 
 check_routing_block() {
-    # Resolve the git toplevel for the cwd. If we're not inside a git
-    # repo, the routing-block check is meaningless — skip silently.
+    # Per spec § 1.5.0 Inputs: $CLAUDE_PROJECT_DIR (defaults to $PWD)
+    # is the project root for the routing-block check. Resolve it first;
+    # then ask git for that directory's toplevel. If git cannot resolve
+    # a toplevel (CLAUDE_PROJECT_DIR is not inside a git repo), treat as
+    # outside-git and skip silently — exit 0 path stays valid.
+    local project_dir="${CLAUDE_PROJECT_DIR:-${PWD}}"
+
+    if [ ! -d "${project_dir}" ]; then
+        # Defensive: caller pointed at a non-existent path — skip.
+        return
+    fi
+
     local toplevel
-    if ! toplevel="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+    if ! toplevel="$(git -C "${project_dir}" rev-parse --show-toplevel 2>/dev/null)"; then
         return
     fi
 
