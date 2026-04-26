@@ -40,3 +40,12 @@ venv/
 # plan brief is just a reformat for the execution skill. Keeping it
 # local prevents main from accumulating one file per merged card.
 docs/board-superpowers/plans/
+
+# Implementation-facing plans — Producer-side intermediate artifacts
+# (brainstorming output, plan-eng-review notes, per-card body drafts
+# before `gh issue create`). One subdirectory per feature, e.g.
+# docs/plans/bootstrap/. Lifecycle: tied to a single Manager → Consumer
+# cycle for one feature; pruned after the feature lands. Spec lives
+# under docs/architecture/ — these are scaffolding, not source of truth.
+# See AGENTS.md § "Implementation-facing plans (`docs/plans/`)".
+docs/plans/

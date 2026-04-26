@@ -368,6 +368,67 @@ repo root returns to `main`.
   release) — this is a read operation, not work-in-progress.
   Switch back to `main` when done.
 
+## Implementation-facing plans (`docs/plans/`)
+
+This project separates three kinds of "documents" with
+different lifecycles, scope, and storage. Knowing which goes
+where is a prerequisite to all Producer-side intake / Consumer-
+side claim work — putting the wrong artifact in the wrong place
+either pollutes `main` with churn, or hides durable decisions in
+gitignored scratch.
+
+| Path | Purpose | Scope | Lifetime | Tracked in git? | Language |
+|------|---------|-------|----------|-----------------|----------|
+| `docs/architecture/` | Authoritative spec — design docs, ADRs, contracts, invariants. | Permanent project knowledge. | Durable; outlives any single PR. | committed | English (per [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md) anti-pattern A5). |
+| `docs/plans/<feature>/` | **Producer-side** implementation-facing scaffolding — brainstorming output, plan-eng-review notes, decomposition working drafts, per-card body drafts before `gh issue create`. | One feature, spans one Manager → Consumer cycle (a "Manager session that intakes a feature → multiple Consumer sessions delivering its cards → final card lands"). | Pruned after the feature's last card merges. | gitignored | Either; Chinese is encouraged for brainstorming notes. |
+| `docs/board-superpowers/plans/` | **Consumer-side** per-card plan brief — a reformat of one card's GitHub body, handed by `consuming-card` to `subagent-driven-development` as that skill's input. | One card, one Consumer session. | Deleted after the card's PR lands. | gitignored | Either. |
+
+### Why three, not two
+
+`docs/plans/` (new) and `docs/board-superpowers/plans/` (existing
+since v0.1.0-minimum) both look like "plan files" — but they
+serve different consumers and have different lifetimes:
+
+- `docs/plans/<feature>/` is **Producer-side**, **multi-card**,
+  and **multi-session**. Example artifacts: a brainstorming
+  transcript covering the full bootstrap mechanism, the resulting
+  6–8 card body drafts, plan-eng-review notes, dependency-graph
+  diagrams. These survive across multiple Consumer sessions
+  delivering the feature's cards.
+- `docs/board-superpowers/plans/` is **Consumer-side**,
+  **single-card**, **single-session**. Example artifact: the
+  reformatted plan brief that `consuming-card` hands to
+  `subagent-driven-development` for one specific card. Lives
+  about as long as one PR.
+
+Co-existing keeps each clean. Merging them would force one
+consumer to read past the other's noise.
+
+### Discipline
+
+- **One subdirectory per feature.** A new feature gets its own
+  `docs/plans/<feature>/` (e.g., `docs/plans/bootstrap/`,
+  `docs/plans/audit-log-byo-rdbms/`). One flat dump invites
+  stale crossover and makes pruning hard.
+- **Spec is the source of truth, plans are scaffolding.** If a
+  decision in `docs/plans/<feature>/` is durable architecture,
+  promote it to `docs/architecture/` in the same PR that lands
+  the card making the decision. Don't let `docs/plans/`
+  accumulate shadow specs.
+- **Prune on completion.** When the feature's last card lands,
+  the architect deletes `docs/plans/<feature>/`. Stale plans
+  decay silently and mislead future readers. The feature's
+  PRs preserve the durable record; plans were scaffolding.
+- **Chinese is allowed in `docs/plans/`, NOT in spec.**
+  `docs/plans/` is the right place for Chinese discussion,
+  brainstorming notes, decomposition rationale. The spec body
+  stays English per the existing anti-pattern A5 in
+  [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md).
+- **No CI / hook reads from `docs/plans/`.** Anything CI or a
+  hook needs as input is part of the spec or the script
+  contract — promote it. `docs/plans/` is human-readable
+  scaffolding only.
+
 ## Spec change-impact matrix
 
 The v1 spec is a graph of cross-references. Touching one node
