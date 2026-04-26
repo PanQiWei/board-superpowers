@@ -346,12 +346,17 @@ needs its config.
         no longer needed: `state.yml` does not live in the repo at
         all.
      5. **BYO RDBMS audit-log credential setup** (per ADR-0006
-        §5) — checks for `BOARD_SP_AUDIT_DB_URL` env var OR
-        `~/.board-superpowers/credentials.yml` (chmod 600) with
-        an `audit_db_url:` field. **Postgres or MySQL only**;
-        SQLite, local file paths, and any public destination
-        (card comments, audit issue) are explicitly forbidden.
-        If no DB is configured, surface the trade-off: every
+        §5 + ADR-0009) — checks for `BOARD_SP_AUDIT_DB_URL` env
+        var OR `~/.board-superpowers/credentials.yml` (chmod
+        600) with an `audit_db_url:` field. **6-scheme
+        allowlist**: `postgresql://`, `postgres://`, `mysql://`,
+        `mysql+pymysql://`, `sqlite://`, `sqlite3://` (per
+        ADR-0009). SQLite is acceptable when host-local under
+        `~/.board-superpowers/repos/<normalized>/audit.db`;
+        SQLite inside the project tree, bare file paths, and any
+        public destination (card comments, audit issue) remain
+        forbidden. If no DB is configured, surface the trade-off:
+        every
         D-AUTONOMY-1 A-class action degrades to R-class
         (architect prompt required for everything Producer
         would otherwise auto-do) until the architect provisions

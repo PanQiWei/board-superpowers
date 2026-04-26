@@ -341,8 +341,19 @@ allowlist with `sqlite://` / `sqlite3://`):
 | `postgres://` | Postgres (alias; same as above) | `postgres://user:pwd@host:5432/db` |
 | `mysql://` | MySQL (canonical) | `mysql://user:pwd@host:3306/db` |
 | `mysql+pymysql://` | MySQL via PyMySQL driver hint (SQLAlchemy-compatible) | `mysql+pymysql://user:pwd@host/db` |
-| `sqlite://` | SQLite (canonical) | `sqlite:///Users/alice/.board-superpowers/repos/Users-alice-projects-foo/audit.db` |
-| `sqlite3://` | SQLite (alias; same as above) | `sqlite3:///Users/alice/.board-superpowers/repos/Users-alice-projects-foo/audit.db` |
+| `sqlite://` | SQLite (canonical) | `sqlite:////Users/alice/.board-superpowers/repos/Users-alice-projects-foo/audit.db` |
+| `sqlite3://` | SQLite (alias; same as above) | `sqlite3:////Users/alice/.board-superpowers/repos/Users-alice-projects-foo/audit.db` |
+
+**SQLite uses 4 slashes for absolute paths** (`sqlite:////` then
+`/Users/...`). The 3-slash form (`sqlite:///relative/path`) is
+interpreted relative to `cwd` per SQLAlchemy convention and would
+silently write the file to the wrong location. Because the
+default path under
+`~/.board-superpowers/repos/<normalized>/audit.db` is always
+absolute, every `sqlite://` / `sqlite3://` DSN this plugin emits
+or accepts MUST use the 4-slash form. Verifiable via
+`from sqlalchemy.engine import make_url;
+make_url('sqlite:////abs/path').database == '/abs/path'`.
 
 A second-driver author who lands a new RDBMS adapter MUST add its
 scheme prefix to this table in the same PR; no implicit driver

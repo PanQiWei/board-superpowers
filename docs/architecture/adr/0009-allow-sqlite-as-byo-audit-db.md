@@ -69,9 +69,22 @@ step 2e is:
 ~/.board-superpowers/repos/<normalized>/audit.db
 ```
 
-Co-locating `audit.db` with `state.yml` keeps every per-`(host,
-repo)` artifact under the same `0700` parent, with one
-normalized-name sub-directory per pair (per `07-path-conventions.md`).
+Rendered as a SQLAlchemy DSN this becomes (note **4 slashes**
+between scheme and absolute path):
+
+```
+sqlite:////Users/<user>/.board-superpowers/repos/<normalized>/audit.db
+```
+
+**SQLite uses 4 slashes for absolute paths** (`sqlite:////` then
+`/Users/...`); the 3-slash form is interpreted relative to
+`cwd` per SQLAlchemy convention and would silently write to the
+wrong location. Because the suggested path is always absolute,
+every DSN this plugin emits or accepts MUST use the 4-slash
+form. Co-locating `audit.db` with `state.yml` keeps every
+per-`(host, repo)` artifact under the same `0700` parent, with
+one normalized-name sub-directory per pair (per
+`07-path-conventions.md`).
 
 ### Forces preserved (not relaxed by this ADR)
 

@@ -322,9 +322,12 @@ Mode topology, `MULTI_AGENT_DEVELOPMENT.md`.
 
 **Negative invariant.** A fact about what must NEVER hold.
 Examples: "ClaimMarker MUST NOT carry an absolute local
-path" (regression-tested), "audit-log MUST NOT persist to
-SQLite or local file" (ADR-0006). Source: invariant list +
-ADR consequences sections.
+path" (regression-tested), "audit-log MUST NOT persist to a
+project-tree SQLite file or to bare local files outside the
+6-scheme `audit_db_url` allowlist" (ADR-0006 §5 + ADR-0009 —
+SQLite under `~/.board-superpowers/repos/<normalized>/audit.db`
+IS acceptable; project-tree SQLite is the negative invariant).
+Source: invariant list + ADR consequences sections.
 
 ### O
 

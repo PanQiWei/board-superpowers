@@ -293,10 +293,14 @@ sub-step. Common failure modes worth narrating in detail:
        (per ADR-0006 §5's "trade-off explicitly registered"
        note). Audit-log writes buffer in memory until the DB
        is back; on persistent failure, Producer surfaces and
-       suspends. There is no on-disk audit-log fallback —
-       SQLite / local files are explicitly forbidden per
-       ADR-0006 §5 because the BYO-RDBMS contract is the
-       enforcement mechanism.
+       suspends. SQLite (host-local under
+       `~/.board-superpowers/repos/<normalized>/audit.db`) is
+       acceptable as a primary backend per ADR-0009, but it is
+       still chosen at bootstrap, not silently fallen back to —
+       there is no automatic on-disk fallback when the configured
+       DB is unreachable. Project-tree SQLite and bare file
+       paths remain forbidden per ADR-0006 §5; the BYO contract
+       is the enforcement mechanism either way.
 
 **4. Initial `state.yml` write** (per §1.5.2 F-B2 step 3). Skill
 writes to
