@@ -1,0 +1,1 @@
+{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "board-superpowers v0.1.0-minimum loaded."}}
