@@ -163,7 +163,7 @@ attention).
 **I-10. Routing-block mirror rule.** The routing block
 injected into downstream `CLAUDE.md` and `AGENTS.md` is
 byte-identical to the fenced block in
-`skills/using-board-superpowers/references/claudemd-routing.md`
+`skills/using-board-superpowers/references/agentsmd-routing.md`
 between the marker pair. Edits to one MUST land in the other
 in the same commit. Cited by: F-B2, F-B4, `CLAUDE.md`
 change-impact matrix, the `<!-- board-superpowers:routing -->`

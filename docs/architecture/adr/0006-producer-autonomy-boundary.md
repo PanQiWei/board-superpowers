@@ -1,6 +1,6 @@
 # ADR 0006: Producer autonomy boundary — autonomous-with-transparency, with explicit permission matrix
 
-**Status:** proposed
+**Status:** accepted (§5 partially superseded by ADR-0009)
 **Date:** 2026-04-26
 **Deciders:** PanQiWei (maintainer)
 
@@ -137,6 +137,18 @@ database (the **infrastructure**).
 **Backend constraint:** Postgres or MySQL. SQLite is **not
 acceptable** because it's file-based and would re-introduce the
 "local persistence" anti-pattern under a different name.
+
+> **Partially superseded by ADR-0009.** ADR-0009 (2026-04-27)
+> reverses this paragraph's no-SQLite stance and adds
+> `sqlite://` + `sqlite3://` to the allowlist (6 schemes total),
+> with a default path suggestion under
+> `~/.board-superpowers/repos/<normalized>/audit.db`. The rest
+> of §5 — BYO opt-in, no auto-default, R-class degradation when
+> the DB is unavailable, the no-public-destinations rule, the
+> propose-and-resolve two-entry rule for R-class actions — is
+> preserved and not affected by ADR-0009. See
+> [`0005-contracts/03-config-schemas.md`](../0005-contracts/03-config-schemas.md)
+> for the live 6-scheme allowlist.
 
 **Credentials.** Connection details live in user-level config.
 Two candidate mechanisms (final choice deferred to
@@ -288,6 +300,8 @@ explicitly.
 
 ## Related
 
+- ADR-0009 — partially supersedes §5 by allowing SQLite as a 6th
+  scheme; the rest of §5 stands.
 - ADR-0005 — v1 BoardAdapter contract surface (the audit-log DB
   config integration point lands in `0005-contracts.md`, alongside
   the BoardAdapter contract)

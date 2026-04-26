@@ -299,7 +299,7 @@ unknown label → `schema_mismatch` error (ADR-0005). Source:
 routing block). Each is a machine-readable identifier that
 distinguishes board-superpowers artifacts from generic
 content. Source: `card-schema.md`, `pr-template.md`,
-`claudemd-routing.md`, I-10. Expanded across multiple
+`agentsmd-routing.md`, I-10. Expanded across multiple
 aggregates in `03-aggregates-and-entities.md`.
 
 **Milestone.** Outcome bucket on the **outcome axis** of work
@@ -440,7 +440,7 @@ Producer's F-12 retro routine. Source: §1.8.3.
 `AGENTS.md`. Plugin-owned within the marker pair
 (I-11); user-owned outside. Source-of-truth content lives
 at
-`skills/using-board-superpowers/references/claudemd-routing.md`
+`skills/using-board-superpowers/references/agentsmd-routing.md`
 (I-10 mirror rule). Source: §1.5.2 (F-B2), §1.5.4 (F-B4),
 I-10, I-11. Expanded in:
 `03-aggregates-and-entities.md` § RepoBootstrap.

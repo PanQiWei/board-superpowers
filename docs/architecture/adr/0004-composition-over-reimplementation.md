@@ -80,7 +80,7 @@ reimplemented.
   using-board-superpowers SKILL Step 1 + just-in-time re-checks).
 - Routing decisions become first-class architecture. The
   CLAUDE.md routing block injected during bootstrap (see
-  `skills/using-board-superpowers/references/claudemd-routing.md`)
+  `skills/using-board-superpowers/references/agentsmd-routing.md`)
   has to encode phase-by-phase composition (gstack bookends +
   superpowers middle).
 - We are exposed to upstream breakage. If `superpowers` ships a
@@ -134,7 +134,7 @@ a discipline-plugin ecosystem.
   commitment; both define what board-superpowers refuses to own)
 - `0001-positioning.md` P4b — composition is permanent (premise this
   ADR anchors)
-- `skills/using-board-superpowers/references/claudemd-routing.md`
+- `skills/using-board-superpowers/references/agentsmd-routing.md`
   — the runtime encoding of this composition (gets injected into
   every downstream CLAUDE.md at bootstrap)
 - `0006-failure-modes.md` (stub) — F-06 mid-session dep removal is the

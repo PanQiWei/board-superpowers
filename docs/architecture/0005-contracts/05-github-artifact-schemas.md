@@ -5,7 +5,7 @@
 > fields, PR mandatory-section header strings, routing-block marker
 > pair + `block_hash` format, Project v2 Status enum, and the
 > standard label set. Where canonical bodies live elsewhere
-> (`card-schema.md`, `pr-template.md`, `claudemd-routing.md`), 0005
+> (`card-schema.md`, `pr-template.md`, `agentsmd-routing.md`), 0005
 > surfaces only the parsing contract and links.
 
 ---
@@ -242,7 +242,7 @@ routing markers".
 ### Block content
 
 The bytes between the marker pair are the **plugin-owned region**
-(per I-11). Source of truth: `skills/using-board-superpowers/references/claudemd-routing.md`.
+(per I-11). Source of truth: `skills/using-board-superpowers/references/agentsmd-routing.md`.
 Per I-10, the block injected into downstream `CLAUDE.md` /
 `AGENTS.md` is byte-identical to the SoT block.
 
@@ -264,7 +264,7 @@ blank line above and below the block content within the markers)
 so the hash is stable across reads.
 
 **Source-of-truth file shape.** The SoT body at
-`skills/using-board-superpowers/references/claudemd-routing.md` is
+`skills/using-board-superpowers/references/agentsmd-routing.md` is
 the **injectable region only — the SoT file itself contains no
 markers**. Injection wraps the SoT body as:
 
@@ -299,7 +299,7 @@ compares its `block_hash`:
 - I-10 (mirror rule), I-11 (plugin-owned vs user-owned).
 - §1.5.2 F-B2 (initial injection + initial hash).
 - §1.5.4 F-B4 (re-check + 3-way prompt).
-- `claudemd-routing.md` (canonical block body).
+- `agentsmd-routing.md` (canonical block body).
 - `AGENTS.md` Protocol invariants → routing-marker entry.
 
 ---

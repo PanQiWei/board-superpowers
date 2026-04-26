@@ -72,6 +72,7 @@ Omit if no such notes apply.
 | [0003](./0003-worktree-per-consumer.md) | One worktree per Consumer session | accepted |
 | [0004](./0004-composition-over-reimplementation.md) | Composition over reimplementation of TDD/QA | accepted |
 | [0005](./0005-board-adapter-contract.md) | v1 BoardAdapter contract surface | accepted |
-| [0006](./0006-producer-autonomy-boundary.md) | Producer autonomy boundary — autonomous-with-transparency, with explicit permission matrix | proposed |
+| [0006](./0006-producer-autonomy-boundary.md) | Producer autonomy boundary — autonomous-with-transparency, with explicit permission matrix | accepted (§5 partially superseded by ADR-0009) |
 | [0007](./0007-plugin-runtime-derived-constraints.md) | Plugin-runtime-derived constraints — three constraints arising from CC / Codex plugin physics | proposed |
 | [0008](./0008-plugin-to-plugin-skill-invocation.md) | Plugin-to-plugin composition via SKILL invocation (vs subagent spawn / MCP / direct import) | accepted |
+| [0009](./0009-allow-sqlite-as-byo-audit-db.md) | Allow SQLite as a BYO audit DB scheme (supersedes ADR-0006 §5 partial) | accepted |

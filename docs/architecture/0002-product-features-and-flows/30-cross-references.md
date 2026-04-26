@@ -54,7 +54,7 @@ feature, all are listed.
 |---------|---------------------|
 | 1.5.0 Dependency check (shared primitive) | `scripts/check-deps.sh`; `hooks/session-start.sh` (Layer 1); `skills/using-board-superpowers/SKILL.md` Step 1 (Layer 2); just-in-time calls in `skills/managing-board/SKILL.md` + `skills/consuming-card/SKILL.md` (Layer 3) |
 | F-B1 Host bootstrap | `skills/using-board-superpowers/SKILL.md` (manifest write + intro routing); `skills/using-board-superpowers/references/intro.md` (intro narrative — planned) |
-| F-B2 Per-repo bootstrap | `scripts/bootstrap-project.sh`; `skills/using-board-superpowers/SKILL.md` Step 3 + `references/claudemd-routing.md` (routing source-of-truth) + `references/first-time-user-guide.md` (post-bootstrap pointer) |
+| F-B2 Per-repo bootstrap | `scripts/bootstrap-project.sh`; `skills/using-board-superpowers/SKILL.md` Step 3 + `references/agentsmd-routing.md` (routing source-of-truth) + `references/first-time-user-guide.md` (post-bootstrap pointer) |
 | F-B3 Host version transition | `skills/using-board-superpowers/SKILL.md` (manifest version compare + changelog routing); `skills/using-board-superpowers/references/changelog/v<X>.md` (per-version highlights file — planned) |
 | F-B4 Per-repo version transition | `skills/using-board-superpowers/SKILL.md` (state.yml compare + new-features list + routing-block hash + 3-way prompt); `${CLAUDE_PLUGIN_ROOT}/scripts/migrations/state-v<N>-to-v<N+1>.sh` (per-version state migrations — planned) |
 | 1.6.1 INVEST criteria | `skills/decomposing-into-milestones/SKILL.md` ("The INVEST gate") |
@@ -185,7 +185,7 @@ delta as of this writing.
 | 1.7 I-7 | Implemented | `claim-card.sh` enforces |
 | 1.7 I-8 | Planned | Audit-log uniformity is contract; persistence target (BYO RDBMS) per ADR-0006 not yet implemented |
 | 1.7 I-9 | Partial | Card schema supports thin-pointer convention; in-repo `docs/` resolution implemented; third-party storage adapter planned |
-| 1.7 I-10 | Implemented | Routing block exists in both `references/claudemd-routing.md` source-of-truth and the appendix block at the bottom of `AGENTS.md` |
+| 1.7 I-10 | Implemented | Routing block exists in both `references/agentsmd-routing.md` source-of-truth and the appendix block at the bottom of `AGENTS.md` |
 | 1.7 I-11 | Planned | Plugin-owned vs user-owned region split is contract; `block_hash` enforcement (F-B2 + F-B4) not yet implemented |
 | 1.7 I-12 | Planned | `schema_version` field convention defined; migration runner at `${CLAUDE_PLUGIN_ROOT}/scripts/migrations/` not yet implemented; lazy-on-read invariant is spec |
 | 1.7 I-13 | Partial | `claims/` gitignore entry implemented; `state.yml` does not exist yet (planned with F-B2); `config.yml` tracked correctly today |

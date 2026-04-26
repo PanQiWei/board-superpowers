@@ -457,7 +457,7 @@ Path normalization rule pinned at
 - **I-10 routing-block mirror rule** — the block content
   injected into `CLAUDE.md` / `AGENTS.md` is byte-identical
   to the source-of-truth block at
-  `skills/using-board-superpowers/references/claudemd-routing.md`.
+  `skills/using-board-superpowers/references/agentsmd-routing.md`.
 - **I-11 plugin-owned vs user-owned region split** — the
   routing block within marker pair is plugin-owned;
   everything outside is user-owned. `BlockHash` is the

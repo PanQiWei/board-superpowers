@@ -155,7 +155,7 @@ The hash is computed over **bytes between** the marker pair,
 `<!-- /board-superpowers:routing -->` themselves. Trailing newline
 inclusion: include the final `\n` before the closing marker (so
 "block content" matches what the SoT file at
-`skills/using-board-superpowers/references/claudemd-routing.md`
+`skills/using-board-superpowers/references/agentsmd-routing.md`
 emits). Whitespace between the markers and the block content is
 also part of the hashed region — re-injection writes a deterministic
 form (one blank line above and below the block within the markers).
@@ -329,9 +329,11 @@ audit_db_url: "postgresql://user:password@host:5432/dbname"
 
 | Field | Type | Required? | Notes |
 |-------|------|-----------|-------|
-| `audit_db_url` | string DSN with one of the accepted URL schemes below | yes if file is present | Connection string. SQLite, file paths, GitHub URLs, and any public destination are forbidden per ADR-0006 §5 |
+| `audit_db_url` | string DSN with one of the accepted URL schemes below | yes if file is present | Connection string. Bare file paths, GitHub URLs, and any public destination are forbidden per ADR-0006 §5. SQLite IS allowed per ADR-0009 (6-scheme allowlist below) but only via the explicit `sqlite://` / `sqlite3://` schemes, and only outside the project tree. |
 
-**Accepted URL schemes** (the prefix is the driver discriminator):
+**Accepted URL schemes** (the prefix is the driver discriminator).
+Per ADR-0006 §5 + ADR-0009 (which extended the original 4-scheme
+allowlist with `sqlite://` / `sqlite3://`):
 
 | Scheme | Driver | Example |
 |--------|--------|---------|
@@ -339,10 +341,29 @@ audit_db_url: "postgresql://user:password@host:5432/dbname"
 | `postgres://` | Postgres (alias; same as above) | `postgres://user:pwd@host:5432/db` |
 | `mysql://` | MySQL (canonical) | `mysql://user:pwd@host:3306/db` |
 | `mysql+pymysql://` | MySQL via PyMySQL driver hint (SQLAlchemy-compatible) | `mysql+pymysql://user:pwd@host/db` |
+| `sqlite://` | SQLite (canonical) | `sqlite:///Users/alice/.board-superpowers/repos/Users-alice-projects-foo/audit.db` |
+| `sqlite3://` | SQLite (alias; same as above) | `sqlite3:///Users/alice/.board-superpowers/repos/Users-alice-projects-foo/audit.db` |
 
 A second-driver author who lands a new RDBMS adapter MUST add its
 scheme prefix to this table in the same PR; no implicit driver
 discovery.
+
+**SQLite default path suggestion.** When the architect picks
+SQLite during F-B2 step 2e interactive UX,
+`bootstrap-project.sh` suggests:
+
+```
+~/.board-superpowers/repos/<normalized>/audit.db
+```
+
+Co-locating with `state.yml` keeps every per-`(host, repo)`
+artifact under the same `0700` parent. Other locations under
+`~/.board-superpowers/` are accepted; SQLite paths INSIDE the
+project tree (e.g., `<repo>/.board-superpowers/audit.db`)
+remain forbidden — the default suggestion deliberately steers
+the architect away from project-tree files. Per ADR-0009 +
+[`07-path-conventions.md`](./07-path-conventions.md) "Per-repo
+layout — `~/.board-superpowers/repos/<normalized-repo-path>/`".
 
 ### Resolution priority (env var vs file)
 
@@ -357,10 +378,14 @@ can override per-process without editing files.
 
 ### Forbidden destinations
 
-Per ADR-0006 §5 — repeated here because it is a security contract:
+Per ADR-0006 §5 + ADR-0009 — repeated here because it is a
+security contract:
 
-- **No SQLite** (file-based; re-introduces local-persistence anti-
-  pattern).
+- **No SQLite under the project tree.** `<repo>/.board-superpowers/audit.db`
+  and any other path inside the repo working tree is forbidden.
+  SQLite under `~/.board-superpowers/` IS allowed per ADR-0009
+  (typically the default-suggested
+  `~/.board-superpowers/repos/<normalized>/audit.db`).
 - **No local `.log` file** under the project tree or
   `~/.board-superpowers/`.
 - **No card comment / dedicated audit issue / GitHub Discussion**
@@ -377,6 +402,9 @@ hints). Not landed at v1.
 - ADR-0006 §5 (BYO RDBMS, persistence rules, backend constraint,
   credential mechanism) — finalization deferred to 0005, landing
   here.
+- ADR-0009 (allow SQLite as a 6th scheme; default path under
+  `~/.board-superpowers/repos/<normalized>/audit.db`) —
+  partially supersedes ADR-0006 §5's backend constraint.
 - I-13 (state files in git, machine-state files not).
 - 0003 § 3.3.8 AuditTrail aggregate (credentials value object,
   invariant block).

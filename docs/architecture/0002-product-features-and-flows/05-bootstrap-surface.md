@@ -370,7 +370,7 @@ needs its config.
   4. **Dual-file routing injection** — append the canonical
      routing block to **both** `CLAUDE.md` AND `AGENTS.md`. The
      block content is mirrored verbatim from
-     `skills/using-board-superpowers/references/claudemd-routing.md`
+     `skills/using-board-superpowers/references/agentsmd-routing.md`
      between the marker pair `<!-- board-superpowers:routing -->`
      / `<!-- /board-superpowers:routing -->`. If either file
      exists already with content, the block is appended (with one
@@ -512,7 +512,7 @@ needs its config.
        `state.yml:routing_blocks` and compare to its `block_hash`.
      - **If hashes match** (block is plugin-pristine): re-inject
        the new source-of-truth block content from
-       `references/claudemd-routing.md`, update `block_hash` in
+       `references/agentsmd-routing.md`, update `block_hash` in
        `state.yml`, log an audit entry. Auto-update; no architect
        prompt.
      - **If hashes differ** (architect modified the block since
@@ -535,7 +535,7 @@ needs its config.
      every subsequent session for this version.
 - **Composes**: §1.5.0 dep check + `state.yml` parse + SHA256
   + diff (line-based diff for the user-modified surface
-  prompt) + `references/claudemd-routing.md` source-of-truth
+  prompt) + `references/agentsmd-routing.md` source-of-truth
   read + migration-script execution.
 - **Maps to (canonical)**: chezmoi `apply` 3-way prompt for
   modified targets; Debian `dpkg --force-confdef` /
