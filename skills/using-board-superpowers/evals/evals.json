@@ -1,0 +1,43 @@
+{
+  "skill_name": "using-board-superpowers",
+  "schema_version": "skill-creator-v1",
+  "notes": "Test prompts only; assertions + benchmark runs land in a follow-up PR. Skill type is pattern (router). Routing-accuracy is the primary signal: does the entry skill correctly dispatch to the right downstream skill vs baseline doing ad-hoc routing.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "[board-card:#12]",
+      "expected_output": "Routes immediately to board-superpowers:consuming-card with card_number=12. Does NOT do any work itself.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "what should I work on today",
+      "expected_output": "Routes to board-superpowers:managing-board (daily routine). Does NOT do the briefing inline — that's downstream-skill territory.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "what does this plugin do",
+      "expected_output": "Answers inline (informational query — explicitly allowed by SKILL.md § 'Routing discipline'). Reads from the first-time-user-guide reference. Does NOT route to any downstream skill.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "set up board-superpowers on this repo",
+      "expected_output": "Surfaces the manual setup walkthrough from the first-time-user-guide reference. Walks the user through Project creation + Status field + standard labels + .board-superpowers/config.yml.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "decompose this design doc into cards: <pasted spec>",
+      "expected_output": "Routes to board-superpowers:managing-board → intake routine (which then chooses whether to pass through superpowers:brainstorming for sharpening before the architect hand-decomposes into cards). Does NOT attempt to decompose itself.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "fix this React bug in src/auth/login.tsx",
+      "expected_output": "Recognizes off-topic — does NOT capture the message. Lets the agent respond normally as without the plugin. The plugin's presence shouldn't make the agent refuse off-topic work.",
+      "files": []
+    }
+  ]
+}

@@ -117,27 +117,56 @@ cd ~/.claude/skills && git clone https://github.com/garrytan/gstack && cd gstack
 git clone https://github.com/PanQiWei/board-superpowers ~/.claude/plugins/board-superpowers
 ```
 
-然后注册为本地 plugin：
+#### Claude Code
 
 ```
 /plugin add local ~/.claude/plugins/board-superpowers
 ```
 
+CC 在 plugin 加载时自动发现 `hooks/hooks.json`，无需额外步骤。
+
+#### Codex CLI
+
+Codex CLI 不会自动发现 plugin 自带的 hook（plugin manifest 规范没有 `hooks` 字段）。安装完后运行一次 SessionStart hook 注册：
+
+```bash
+# 推荐先打印 snippet 看一下：
+bash ~/.claude/plugins/board-superpowers/scripts/register-codex-hooks.sh
+
+# 然后自动 merge 到用户级 ~/.codex/hooks.json：
+bash ~/.claude/plugins/board-superpowers/scripts/register-codex-hooks.sh --install-user
+
+# 或者写到当前 repo 的 ./.codex/hooks.json（需要 repo trust）：
+bash ~/.claude/plugins/board-superpowers/scripts/register-codex-hooks.sh --install-repo
+```
+
+脚本是幂等的——重复运行会替换已存在的 entry 而不是重复添加；覆盖前会先备份 `hooks.json`。卸载用 `--uninstall-user`。
+
 ### 每个 repo 的一次性引导
 
-每一个你想启用 board-superpowers 的 repo：
+每一个你想启用 board-superpowers 的 repo——目前是手动流程，自动化 bootstrap skill 会在未来版本提供。
 
-1. **在 GitHub UI** 创建一个 Project v2，在它里面建一个 `Status` 单选字段，选项必须严格按这个顺序：`Backlog → Ready → In Progress → In Review → Done → Blocked`。
-2. **在 repo 里打开 Claude Code，说**：`set up board-superpowers`。
-3. plugin 会：
-   - 校验上游两个 plugin 是否安装。
-   - 询问你的 project 坐标（`OWNER/NUMBER`）。
-   - 创建标准 `type:*` 和 `size:*` 标签。
-   - 校验 Status 字段包含全部 6 个必需选项。
-   - 写入"团队共享、入 git"的 per-repo 配置 + "host 本地、不入 git"的 per-`(host, repo)` 状态。
-   - 把路由块注入你的 `CLAUDE.md` 和 `AGENTS.md`，未来会话就会自动路由到 Manager 或 Consumer。
+1. **在 GitHub UI** 创建一个 Project v2，在它里面建一个 `Status` 单选字段，选项必须严格按这个顺序：`Backlog → Ready → In Progress → Blocked → In Review → Done`。
+2. **添加标准标签**：
+   ```bash
+   bash ~/.claude/plugins/board-superpowers/scripts/setup-labels.sh
+   ```
+   会创建 `wip-override` / `suspended` / `security` / `pr-contract-override`（幂等——已存在的会跳过）。
+3. **在 repo 根目录创建 `.board-superpowers/config.yml` 并提交**：
+   ```yaml
+   project: <owner>/<number>      # 例如 PanQiWei/4
+   wip_cap_per_consumer: 1
+   ```
+4. **验证**：
+   ```bash
+   bash ~/.claude/plugins/board-superpowers/scripts/check-deps.sh
+   bash ~/.claude/plugins/board-superpowers/scripts/read-board.sh \
+     --owner <owner> --project <number> --status Ready
+   ```
+   两个命令都应该 exit 0；第二个会打印 Ready 卡的 JSON 列表（空 `[]` 也正常）。
+5. **可选——在 `CLAUDE.md` 和 `AGENTS.md` 加路由块**，让 agent 明确知道要 invoke 本 plugin 的 skills。entry skill (`using-board-superpowers`) 不加路由块也能在常见短语上触发，但显式路由提高可靠性。可参考 `~/.claude/plugins/board-superpowers/AGENTS.md` § "board-superpowers session routing" 复制粘贴。
 
-到此结束。这个 repo 里以后开的所有会话都会自我路由。
+到此结束。完成 step 5（或跳过 step 5 直接结束 step 4）后，在你的 repo 里开一个全新的 CC session，输入 "what should I work on" 验证 entry skill 触发即可。
 
 ## 典型一天
 

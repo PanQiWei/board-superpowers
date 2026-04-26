@@ -17,7 +17,7 @@ This document references the official documentation for both products
 and notes where their plugin contracts converge, diverge, and where
 documentation gaps exist that you must work around.
 
-**URL freshness:** all URLs verified 2026-04-26. Re-verify when
+**URL freshness:** all URLs verified 2026-04-27. Re-verify when
 modifying related code; a moved or broken canonical URL is a
 load-bearing fact and must be patched in the PR that catches it.
 
@@ -139,27 +139,59 @@ load-bearing fact and must be patched in the PR that catches it.
 - **Official docs**: <https://code.claude.com/docs/en/skills.md>
 - **Layout**: `skills/<name>/SKILL.md` (required) +
   `references/<topic>.md` (optional; lazy-loaded via Markdown links).
-- **Frontmatter**:
-  - Required: `name`, `description`
-  - Optional: `disable-model-invocation`, `user-invocable`,
-    `allowed-tools`, `context: fork`, `agent`, `arguments`, `paths`
+- **Frontmatter — full field reference (13 fields, all optional;
+  only `description` is recommended):**
+
+  | Field | Required | What it controls |
+  |-------|----------|------------------|
+  | `name` | No (defaults to dir name) | Display name + `/<plugin-name>:<name>` slash form. Lowercase + hyphen + numbers, ≤64 chars. |
+  | `description` | Recommended | Triggering matcher. Combined with `when_to_use`, capped at **1,536 chars** in the skill listing. |
+  | `when_to_use` | No | Additional trigger phrases / example requests. Appended to `description` in the listing; counts against the same 1,536-char cap. |
+  | `argument-hint` | No | Autocomplete placeholder shown after `/<skill> ` in the slash menu. Examples: `[card-number]`, `"[optional context]"`. **Defensive quoting**: wrap values containing `:`, `,`, `*`, or other YAML special chars in double quotes (root cause of the now-fixed [#22161](https://github.com/anthropics/claude-code/issues/22161) crash). |
+  | `arguments` | No | Named positional arguments. Space-separated string or YAML list. Names map to position; body uses `$<name>` substitution. |
+  | `disable-model-invocation` | No | `true` = only the user can invoke; Claude won't auto-trigger. Also blocks subagent preload. |
+  | `user-invocable` | No | `false` = hide from `/` menu; Claude can still auto-invoke. Use for atomic reflex-skills users don't drive directly. |
+  | `allowed-tools` | No | Tools auto-approved while this skill is active. Space-separated string or YAML list. |
+  | `model` | No | Model override for the active turn (`inherit` or any `/model` value). |
+  | `effort` | No | Effort level override (`low` / `medium` / `high` / `xhigh` / `max`). |
+  | `context` | No | `fork` = run in a forked subagent context. Pairs with `agent`. |
+  | `agent` | No | Subagent type when `context: fork` (`Explore`, `Plan`, `general-purpose`, or any `.claude/agents/<name>`). |
+  | `hooks` | No | Hooks scoped to this skill's lifecycle. See `<https://code.claude.com/docs/en/hooks#hooks-in-skills-and-agents>`. |
+  | `paths` | No | Glob patterns limiting auto-trigger to matching files. |
+  | `shell` | No | `bash` (default) or `powershell` for `` !`cmd` `` blocks. PowerShell requires `CLAUDE_CODE_USE_POWERSHELL_TOOL=1`. |
+
 - **Description matching**: Claude auto-invokes a skill based on
-  `description` matching user prompts. **Description is behavior,
-  not documentation.**
+  `description` (and `when_to_use`) matching user prompts.
+  **Description is behavior, not documentation.** Empirically, any
+  workflow detail in `description` makes Claude skip the body —
+  keep `description` to triggering conditions only.
+
+- **String substitutions in body** (extends the slash-command set):
+  - `$ARGUMENTS` — full argument string as typed
+  - `$ARGUMENTS[N]` / `$N` — 0-indexed positional access (shell-style quoting)
+  - `$<name>` — named arguments declared in `arguments:` frontmatter
+  - `${CLAUDE_SESSION_ID}` — current session ID
+  - `${CLAUDE_SKILL_DIR}` — directory containing this `SKILL.md`
+
 - Invoked via the `Skill` tool; once invoked, content persists in the
-  conversation.
+  conversation message stream for the rest of the session.
 
 ```yaml
 ---
 name: my-skill
 description: What this skill does and when Claude should use it
+when_to_use: Additional trigger phrases users actually type
+argument-hint: "[primary-arg] [optional-arg]"
+arguments: [primary, optional]
 disable-model-invocation: false
 user-invocable: true
 allowed-tools: Bash(npm *) Edit Read
+model: inherit
+effort: medium
 context: fork
 agent: general-purpose
-arguments: [arg1, arg2]
 paths: ["src/**", "tests/**"]
+shell: bash
 ---
 ```
 
@@ -171,8 +203,9 @@ paths: ["src/**", "tests/**"]
   `skills/<name>/SKILL.md` (skill directory) register a slash
   command.
 - Plugin commands are namespaced: `/<plugin-name>:<skill-name>`.
-- Substitutions: `$ARGUMENTS`, `$0`–`$9`, `${CLAUDE_SESSION_ID}`,
-  `${CLAUDE_SKILL_DIR}`.
+- Substitutions: `$ARGUMENTS`, `$ARGUMENTS[N]`, `$0`–`$9`,
+  `$<name>` (when `arguments:` frontmatter declares named positional
+  parameters), `${CLAUDE_SESSION_ID}`, `${CLAUDE_SKILL_DIR}`.
 
 ### MCP server registration
 
@@ -348,18 +381,43 @@ implications for our codebase:
 2. **Marketplaces** — ship a `marketplace.json` per platform. Both
    can reference the same plugin source (this repo).
 3. **Hooks** — `hooks/session-start.sh` can be wired into both
-   platforms because `SessionStart` exists on both. Register it
-   twice: `hooks/hooks.json` for Claude Code, equivalent
-   `~/.codex/hooks.json` entry (or per-repo
-   `<repo>/.codex/hooks.json`) for Codex.
-4. **Skills** — `SKILL.md` body is portable. Frontmatter is the
-   constraint:
-   - **Portable subset**: `name`, `description` (works on both)
-   - **Claude-only fields**: `disable-model-invocation`,
-     `user-invocable`, `allowed-tools`, `context: fork`, `agent`,
-     `arguments`, `paths` — using any of these makes the skill
-     Claude-Code-only; document that explicitly in the skill body
-     if so.
+   platforms because `SessionStart` exists on both. Registration
+   model differs:
+   - **Claude Code**: auto-discovers `<plugin-root>/hooks/hooks.json`
+     when the plugin loads. No user action.
+   - **Codex CLI**: NO plugin-level auto-discovery —
+     `.codex-plugin/plugin.json` has no `hooks` field. The user
+     (or an installer script) must add the entry to
+     `~/.codex/hooks.json` (user scope) or
+     `<repo>/.codex/hooks.json` (per-repo, requires trust).
+     board-superpowers ships
+     `scripts/register-codex-hooks.sh` for one-shot registration
+     (print / `--install-user` / `--install-repo` /
+     `--uninstall-user`). The script resolves the absolute path
+     to `hooks/session-start.sh` via `bsp_plugin_root()` so it
+     survives different install locations.
+4. **Skills** — `SKILL.md` body is portable. Frontmatter is
+   tiered (the **three-tier discipline** documented in
+   `SKILL_DEVELOPMENT.md` § "Three-tier frontmatter discipline"):
+   - **Tier 1 — Portable subset, behavior-defining**: `name`,
+     `description`. Works on both platforms identically.
+   - **Tier 2 — CC-only spec fields, additive UX only**:
+     `when_to_use`, `argument-hint`, `arguments`,
+     `disable-model-invocation`, `user-invocable`,
+     `allowed-tools`, `model`, `effort`, `context: fork`,
+     `agent`, `hooks`, `paths`, `shell`. **All 11 are in CC's
+     official spec** — Codex parser silently ignores them, which
+     is fine *as long as the body's behavior does not depend on
+     them*. (Body must still work when `$<named-arg>` is a literal
+     string on Codex.)
+   - **Tier 3 — Anti-pattern A4** (reject in review): any field
+     not in CC's spec **and** not in Codex's spec — gets dropped
+     by both runtimes. Examples seen in the wild: `triggers:`,
+     `voice-triggers:`, `preamble-tier:`, `version:`, `layer:`,
+     `type:`, `mode:`. board-superpowers' own metadata dimensions
+     (version + layer + type + mode + bounded-context) live in a
+     sibling `.skill-meta.yaml` file, not in frontmatter, exactly
+     to avoid this trap.
    - **Codex display metadata**: ship `agents/openai.yaml` alongside
      `SKILL.md` if richer Codex-side display is wanted.
 5. **Project instructions** — `bootstrap-project.sh` must inject the
@@ -391,10 +449,14 @@ accordingly when designing plugin code:
 - **Codex model-facing tool names/schemas have no published stable
   contract.** Test with both `codex exec --json` event streams and
   Claude Code transcripts when behavior depends on tool calls.
-- **No official `description` character cap on Codex `SKILL.md`.**
-  Aggregate budget (~8000 chars / 2% context) is the only documented
-  constraint. The 1024-char cap seen in third-party tooling is
-  prudence, not enforcement.
+- **`description` character caps differ by platform.** Claude Code
+  caps the **combined** `description` + `when_to_use` text per
+  skill at **1,536 chars** in the skill listing (skills doc, 2026).
+  Codex publishes no per-skill cap; the only documented constraint
+  is an aggregate budget of ~8,000 chars / 2% context. The 1024-char
+  cap seen in agentskills.io / third-party tooling is prudence, not
+  platform enforcement; treat 1,024 as the defensive cross-platform
+  ceiling, 1,536 as the CC absolute ceiling.
 - **Codex `notify` config vs new hooks** — both are live; not
   documented as a deprecation pair. New code should use the `Stop`
   hook; keep `notify` only for OS-notification scripts.
@@ -408,7 +470,7 @@ accordingly when designing plugin code:
 
 ## Maintenance discipline for this doc
 
-- All URLs verified **2026-04-26**. **Re-verify when modifying
+- All URLs verified **2026-04-27**. **Re-verify when modifying
   related code.** A broken or moved canonical URL is a load-bearing
   fact and must be patched in this PR, not deferred.
 - When a new plugin surface lands in either product, add a section

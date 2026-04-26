@@ -1,4 +1,4 @@
-# Skills system — board-superpowers v1 catalog (10 skills, 3 layers)
+# Skills system — board-superpowers v1 catalog (10 skills total: 5 v1-minimum + 5 deferred to v1-complete, 3 layers)
 
 > **Always loaded.** This document is referenced from
 > [`AGENTS.md`](./AGENTS.md) via `@SKILLS.md` and rides into
@@ -10,6 +10,15 @@
 > **Pair with [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md)**
 > — that file is the generic "how to write a skill" manual; this
 > file is the specific "what skills we have" catalog.
+>
+> **Per-skill `layer`, `type`, `mode`, `bounded-context` are
+> authoritative in `<skill-dir>/.skill-meta.yaml`** (see
+> [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md) § "
+> board-superpowers metadata convention"). This catalog focuses
+> on prose-level role / triggers / dependencies and does NOT
+> duplicate the yaml fields. CI gate
+> `scripts/verify-skill-metadata.sh` enforces consistency
+> between the two.
 
 ## Source-of-truth contract
 
@@ -65,92 +74,140 @@ single most common authoring mistake (per
 [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md) Anti-pattern
 A9).
 
+## v1 minimum vs v1 complete
+
+The full v1 catalog defines **10 skills**. The first PR that
+ships skill content lands a deliberate subset — **5 v1-minimum
+skills** — whose purpose is to make the plugin **self-hostable
+on this very repo**. The other 5 are **deferred to v1-complete**
+and ship in a follow-up PR once the dogfood loop is validated.
+
+| Skill | Layer | v1 status | Why this scoping |
+|-------|-------|-----------|-------------------|
+| `using-board-superpowers` | Entry | **v1-minimum** | Required for routing every session into the right role. |
+| `managing-board` | Molecular | **v1-minimum** | Producer surface — required for "what should I work on" / Review Queue / intake on this repo. |
+| `consuming-card` | Molecular | **v1-minimum** | Consumer surface — required for the F-C0..F-C14 lifecycle that delivers each card's PR. |
+| `decomposing-into-milestones` | Molecular | deferred to v1-complete | Initial cards on this repo's board are hand-crafted by the architect; automatic decomposition is a v1-complete enhancement. |
+| `bootstrapping-repo` | Molecular | deferred to v1-complete | This repo is already manually bootstrapped (GitHub Project + standard labels exist). The skill is required for **other** repos' first-time setup, not for our own dogfood. |
+| `migrating-repo-version` | Molecular | deferred to v1-complete | No prior version exists; migration only becomes meaningful starting from v0.2.x → v0.3.x transitions. |
+| `board-canon` | Atomic | **v1-minimum** | True SPOT — every other v1-minimum skill consumes its state machine + schema + WIP rules. |
+| `enforcing-pr-contract` | Atomic | **v1-minimum** | True SPOT — Consumer's F-C12 PR submit + Manager's F-02 Review Queue both depend on it. |
+| `classifying-actions` | Atomic | deferred to v1-complete | D-AUTONOMY-1 matrix lives inline in v1-minimum skills as "ask-architect-on-every-mutation" (degraded R-class default). Atomic SPOT extraction lands in v1-complete with `auditing-actions`. |
+| `auditing-actions` | Atomic | deferred to v1-complete | BYO RDBMS audit log requires user-side Postgres/MySQL setup. v1-minimum degrades all A-class actions to R-class; full audit log lands when the BYO setup contract is implemented. |
+
+**Degraded behavior in v1-minimum**: every mutating action that
+would normally route through `classifying-actions` /
+`auditing-actions` instead runs the **R-class default inline**
+("propose action, ask architect, await ack, then act, then log a
+local jsonl entry"). This is documented in each v1-minimum
+molecular SKILL.md as a temporary block clearly labeled "v1
+minimum — replace with classifying-actions + auditing-actions
+when both atomics ship."
+
+**Cross-platform hook delivery**: `hooks/session-start.sh` is
+identical on both platforms (uses `bsp_plugin_root()` from
+`scripts/lib/common.sh` to resolve paths cross-platform).
+Registration differs: Claude Code auto-discovers
+`hooks/hooks.json`; Codex CLI requires running
+`scripts/register-codex-hooks.sh --install-user` (or
+`--install-repo`) once after plugin install. See
+[`PLUGIN_DEVELOPMENT.md`](./PLUGIN_DEVELOPMENT.md) § "What this
+means for board-superpowers" #3 for the full rationale.
+
 ## Skill catalog
+
+> Per-skill `layer`, `type`, `mode`, `bounded-context` live in
+> `<skill-dir>/.skill-meta.yaml`. The catalog below uses a
+> `(v1-minimum)` / `(deferred to v1-complete)` tag on each
+> skill name to mark v1 status. Tier 2 frontmatter
+> recommendations are listed only for v1-minimum skills (the
+> deferred ones get their Tier 2 fields decided in the
+> follow-up PR alongside their bodies).
 
 ### Entry layer (1 skill)
 
-#### `using-board-superpowers`
+#### `using-board-superpowers` (v1-minimum)
 
 - **Role**: First touch. Runs the reliable dep gate, consumes
   any hook-injected `INVOKE: <skill>` marker, routes to the
   right molecular skill. Never does real work itself.
-- **Bounded context**: spans all five (Board / Session /
-  Bootstrap / Audit / Spec) but only as a router.
-- **Type**: pattern.
 - **Body target**: ≤ 200 lines.
-- **Triggers (`description` WHEN)**: `[board-card:#N]`,
-  "set up board-superpowers", "what should I work on",
-  "claim card N", "morning briefing", "new requirement",
-  "weekly retro", `INVOKE:` marker injected by `SessionStart`.
+- **Triggers (`description` / `when_to_use` WHEN)**:
+  `[board-card:#N]`, "set up board-superpowers",
+  "what should I work on", "claim card N", "morning briefing",
+  "new requirement", "weekly retro", `INVOKE:` marker injected
+  by `SessionStart`.
 - **Composes (downstream)**: every molecular skill below
-  (routing target).
-- **Mode**: both (CC + Codex).
+  (routing target). When the routing target is deferred to
+  v1-complete, the entry skill responds with a friendly
+  "not implemented in v1-minimum" pointer instead.
+- **Tier 2 frontmatter**: `when_to_use` (extended trigger
+  vocabulary outside the primary `description`).
 
-### Molecular layer (5 skills)
+### Molecular layer (5 skills: 2 v1-minimum + 3 deferred)
 
-#### `managing-board`
+#### `managing-board` (v1-minimum)
 
-- **Role**: Producer session main skill. Carries F-01..F-08 +
-  F-10..F-15 from
+- **Role**: Producer session main skill. Carries F-01 (daily) +
+  F-02 (review queue) + F-08 (intake) in v1-minimum;
+  F-03..F-07 + F-10..F-15 land in v1-complete. Per
   [`docs/architecture/0002-product-features-and-flows/03-producer-surface.md`](./docs/architecture/0002-product-features-and-flows/03-producer-surface.md).
-- **Bounded context**: Board (read), Session (read), Audit
-  (read for retro / weekly report).
-- **Type**: pattern.
 - **Body target**: 300-400 lines.
 - **References folder**:
-  `references/{daily,intake,review-queue,triage,retro,weekly-report,harness,hygiene}.md`.
-- **Composes (atomic)**: `board-canon`, `enforcing-pr-contract`
-  (Review Queue contract-violation check), `classifying-actions`,
-  `auditing-actions`.
+  `references/{daily,intake,review-queue,triage}.md`
+  (retro / weekly-report / harness / hygiene deferred to
+  v1-complete).
+- **Composes (atomic)**: `board-canon`,
+  `enforcing-pr-contract` (Review Queue contract-violation
+  check). `classifying-actions` + `auditing-actions` are
+  inlined as degraded R-class behavior in v1-minimum.
 - **Composes (cross-plugin)**: see § "Cross-plugin edges" below.
-- **Mode**: both.
+- **Tier 2 frontmatter**: `when_to_use` (intake / daily /
+  review-queue / triage trigger phrases) +
+  `argument-hint: "[routine]"` (autocomplete shows which
+  routine the user wants to run).
 
-#### `consuming-card`
+#### `consuming-card` (v1-minimum)
 
 - **Role**: Consumer session main skill. Full F-C0..F-C14
   lifecycle from
   [`docs/architecture/0002-product-features-and-flows/04-consumer-surface.md`](./docs/architecture/0002-product-features-and-flows/04-consumer-surface.md).
-- **Bounded context**: Board (read + write own card), Session
-  (own worktree + claim), Spec (fetch via thin pointer).
-- **Type**: pattern.
 - **Body target**: 350-450 lines.
 - **References folder**:
   `references/{handoff-to-superpowers,pr-template,surface-protocol,permission-boundary}.md`.
 - **Composes (atomic)**: `board-canon`,
-  `enforcing-pr-contract` (F-C12 PR submit), `classifying-actions`
-  (every mutating action), `auditing-actions`.
+  `enforcing-pr-contract` (F-C12 PR submit).
+  `classifying-actions` + `auditing-actions` are inlined as
+  degraded R-class behavior in v1-minimum.
 - **Composes (cross-plugin)**: see § "Cross-plugin edges" below.
-- **Mode**: both. Mode-2 (Producer-spawned) is CC-only at v1;
-  Mode-1 (architect-spawned) on both platforms.
 - **Constraint**: under Mode-2 it runs as a CC subagent —
   `max_depth=1` means it CANNOT spawn further subagents; every
   cross-plugin invocation MUST be procedural (per ADR-0008).
+  Mode-2 is CC-only at v1; Mode-1 (architect-spawned) is both.
+- **Tier 2 frontmatter**: `when_to_use` (claim card / work on
+  card N / `[board-card:#N]`) +
+  `argument-hint: "[card-number]"` +
+  `arguments: [card_number]` (body uses `$card_number` with
+  `$ARGUMENTS` fallback for Codex).
 
-#### `decomposing-into-milestones`
+#### `decomposing-into-milestones` (deferred to v1-complete)
 
 - **Role**: F-09 + §1.6 (INVEST + vertical slicing + card
   schema + sizing) engine. Turns design artifact into Ready
   cards on the board.
-- **Bounded context**: Board (write).
-- **Type**: pattern + reference.
 - **Body target**: 300-400 lines.
 - **References folder**:
   `references/{card-schema,decomposition-patterns,invest-checklist,size-calibration}.md`.
 - **Composes (atomic)**: `board-canon` (schema authority),
-  `classifying-actions` (decomposition is row 1 = A; re-split
-  is row 3 = R), `auditing-actions`.
+  `classifying-actions`, `auditing-actions`.
 - **Composes (cross-plugin)**: see § "Cross-plugin edges" below.
-- **Mode**: both.
 
-#### `bootstrapping-repo`
+#### `bootstrapping-repo` (deferred to v1-complete)
 
 - **Role**: §1.5.0 dep check + F-B1 (host bootstrap) + F-B2
   (per-repo bootstrap, with 5 sub-capabilities: standard
   labels, Status validation, `config.yml` write, `.gitignore`
   entry, BYO-RDBMS credential setup).
-- **Bounded context**: Bootstrap (write HostBootstrap +
-  RepoBootstrap), Board (read-only — Status field validation).
-- **Type**: pattern (state-machine-shaped flow).
 - **Body target**: 300-400 lines.
 - **References folder**:
   `references/{intro,first-time-user-guide,byo-rdbms-setup,project-creation-walkthrough}.md`.
@@ -165,17 +222,13 @@ A9).
   intent injection pattern in
   [`docs/architecture/0004-component-architecture.md`](./docs/architecture/0004-component-architecture.md)
   § "Hook intent injection pattern".
-- **Mode**: both.
 
-#### `migrating-repo-version`
+#### `migrating-repo-version` (deferred to v1-complete)
 
 - **Role**: F-B3 (host version transition) + F-B4 (per-repo
   version transition with schema migration, new-feature
   opt-out, routing-block re-injection with three-way prompt on
   user modification).
-- **Bounded context**: Bootstrap (read + write HostBootstrap +
-  RepoBootstrap).
-- **Type**: pattern (lifecycle migration flow).
 - **Body target**: 250-350 lines.
 - **References folder**:
   `references/{changelog/v<X>.md,tamper-prompt,migration-runner}.md`.
@@ -187,26 +240,26 @@ A9).
   `state.yml:last_seen_version_in_repo` ≠
   `plugin.json:version` (fast path), OR architect says
   "what's new in this version" (fallback path).
-- **Mode**: both.
 
-### Atomic layer (4 skills)
+### Atomic layer (4 skills: 2 v1-minimum + 2 deferred)
 
-#### `board-canon`
+#### `board-canon` (v1-minimum)
 
 - **Role**: Pure read-only contract — 6-state machine + Card
   body schema (thin-pointer + 5 sections + bottom marker) +
   branch naming (`claim/<N>-<slug>`) + WIP counting formula
   (`In Progress + suspended + In Review`; `Blocked` excluded).
-- **Bounded context**: Board (schema authority).
-- **Type**: reference (Skeleton B per
-  [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md)).
 - **Body target**: 200-300 lines.
 - **References folder**:
   `references/{state-machine,card-body-schema,claim-protocol,wip-counting,branch-naming}.md`.
-- **Called by**: every molecular skill (5 of them).
+- **Called by**: every molecular skill (5 of them in
+  v1-complete; 2 of them in v1-minimum: `managing-board` +
+  `consuming-card`).
 - **Calls**: nothing. Atomic = reflexive.
+- **Tier 2 frontmatter**: `user-invocable: false` (atomic
+  reflex, never user-driven directly).
 
-#### `enforcing-pr-contract`
+#### `enforcing-pr-contract` (v1-minimum)
 
 - **Role**: PR three-section contract enforcement —
   `## Automated Verification` (required), `## Human
@@ -214,8 +267,6 @@ A9).
   `## Retro Notes` (required when reusable lessons exist).
   Provides both injection templates (Consumer side, F-C12) and
   validation rules (Producer side, F-02 Review Queue).
-- **Bounded context**: Board (PR aggregate).
-- **Type**: reference + discipline.
 - **Body target**: 200-250 lines.
 - **References folder**:
   `references/{section-templates,validation-rules,filler-detection}.md`.
@@ -225,17 +276,16 @@ A9).
 - **Calls**: nothing.
 - **SPOT consolidates**: PR three-section schema would
   otherwise be inlined in both Consumer and Producer skills.
+- **Tier 2 frontmatter**: `user-invocable: false` (atomic
+  reflex, never user-driven directly).
 
-#### `classifying-actions`
+#### `classifying-actions` (deferred to v1-complete)
 
 - **Role**: D-AUTONOMY-1 14-row matrix + Consumer subaction
   catalog (`action_id` 100-111) + 4-step triage rule +
   `autonomy_overrides:` parsing (project + user layers). The
   caller hands in an action; this skill returns the A / R / N
   decision.
-- **Bounded context**: cuts across Board + Session + Bootstrap
-  (anywhere a mutating action fires).
-- **Type**: discipline (pressure-tested).
 - **Body target**: 200-250 lines.
 - **References folder**:
   `references/{matrix,triage-rule,override-parsing,action-id-catalog}.md`.
@@ -244,15 +294,17 @@ A9).
 - **SPOT consolidates**: ADR-0006 matrix would otherwise be
   inlined 5 times — 14 rows × 5 = 70 lines of duplicated rule
   encoding drifting independently.
+- **v1-minimum degradation**: until this skill ships, every
+  v1-minimum molecular SKILL.md inlines the R-class default
+  ("propose, ask architect, await ack, then act"). Replace
+  those inline blocks when this skill lands.
 
-#### `auditing-actions`
+#### `auditing-actions` (deferred to v1-complete)
 
 - **Role**: Audit log schema (8 columns + 4 enum sets) + R-class
   two-entry rule (propose + resolve) + BYO RDBMS write
   conventions + degradation mode (when DB unavailable, A-class
   degrades to R-class).
-- **Bounded context**: Audit (AuditTrail aggregate).
-- **Type**: reference.
 - **Body target**: 200-300 lines.
 - **References folder**:
   `references/{schema,two-entry-rule,db-write-conventions,degradation-mode}.md`.
@@ -263,6 +315,11 @@ A9).
   (script TBD per ADR-0006).
 - **SPOT consolidates**: ADR-0006 §5 schema would otherwise be
   inlined 5 times.
+- **v1-minimum degradation**: until this skill ships, every
+  v1-minimum molecular SKILL.md appends a one-line jsonl entry
+  to a local `~/.board-superpowers/<host>/<repo>/audit-local.jsonl`
+  file as an interim trace. Replace with full schema + BYO
+  RDBMS write when this skill lands.
 
 ## Call graph
 

@@ -1,0 +1,37 @@
+{
+  "skill_name": "board-canon",
+  "schema_version": "skill-creator-v1",
+  "notes": "Test prompts only; assertions + benchmark runs land in a follow-up PR. Skill type is reference, so the testing regime is retrieval + correct-application scenarios — does the with-skill version surface the canonical contract correctly when asked.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "What states does a card pass through in board-superpowers?",
+      "expected_output": "Lists Backlog → Ready → In Progress → In Review → Done with the Blocked side-state, and explains the legal transitions (esp. that Backlog → In Progress directly is illegal).",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "If I claim card #47 titled 'Fix WIP counter (race)', what's the branch name?",
+      "expected_output": "claim/47-fix-wip-counter-race — applies the slugify rules from the branch-naming reference (parens replaced with hyphens, runs collapsed, lowercased).",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "How many cards count toward my WIP count if I have 1 in In Progress, 2 in Blocked, and 1 in In Review with an open PR?",
+      "expected_output": "2 (1 In Progress + 1 In Review with open PR; Blocked cards are excluded from the formula).",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Two consumers race-claimed card #12 at the same time. What happens?",
+      "expected_output": "First push wins; second push gets non-fast-forward rejection. The losing Consumer's claim-card.sh exits non-zero; the SKILL body in consuming-card routes to ask the architect. The loser cleans up local worktree + branch; Status field stays at In Progress (set by the winner).",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "What's the mandatory bottom marker block in a Card body for?",
+      "expected_output": "Auto-generated audit-trail pointer block — bsp-bottom-marker:do-not-edit. Hand edits are rejected by enforcing-pr-contract. Producer's tooling owns this block; it points at the audit log file at ~/.board-superpowers/<host>/<repo>/audit-local.jsonl.",
+      "files": []
+    }
+  ]
+}

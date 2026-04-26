@@ -1,0 +1,37 @@
+{
+  "skill_name": "consuming-card",
+  "schema_version": "skill-creator-v1",
+  "notes": "Test prompts only; assertions + benchmark runs land in a follow-up PR. Skill type is pattern (state-machine-shaped lifecycle). Lifecycle-step accuracy is the primary signal — does the with-skill version follow the resolve→read→claim→implement→verify→submit→release sequence vs baseline doing ad-hoc work.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "[board-card:#12]",
+      "expected_output": "Triggers consuming-card with $card_number=12. Resolves card; reads card body via gh issue view; calls scripts/claim-card.sh after WIP-cap check; cd into the worktree the script created; invokes superpowers:writing-plans + superpowers:test-driven-development for the implementation step.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "claim card 47 'Fix WIP counter race'",
+      "expected_output": "Same lifecycle as eval 1, with $card_number=47. Branch name resolves to claim/47-fix-wip-counter-race per board-canon's slugify rules. Should NOT proceed with implementation before architect acknowledgement of the claim transaction (mutating action).",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "I claimed #12 but I'm stuck on the GitHub Project field-id lookup — gh project field-list returns empty. Should I switch to claim #15 instead?",
+      "expected_output": "Skill applies in-flight transition logic. Recommends EITHER (a) surface as Blocked with the gh issue named, OR (b) suspend the card (label 'suspended') if it's an environmental issue likely to clear. NOT switching to #15 without releasing #12 first — that would violate the WIP cap from board-canon.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "I'm done implementing card #12. Open the PR.",
+      "expected_output": "The verification chain runs FIRST: superpowers:verification-before-completion, gstack:/review, superpowers:requesting-code-review. Only after all three pass does the skill call scripts/submit-pr.sh with body file containing the three required sections. Skill should NOT skip verification even when user pushes for speed.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "the reviewer requested changes on PR #34 for card #12. what now?",
+      "expected_output": "Rework loop. Pull changes back into the same worktree (NOT new branch — uses existing claim/12-...). Re-runs implement → verify → submit. Card stays in In Review. Reuses the SAME claim branch per board-canon § 'Branch naming' (single-claim-branch-per-card rule).",
+      "files": []
+    }
+  ]
+}

@@ -42,7 +42,7 @@ treat as authoritative for skill authoring:
      `ljg-card`, `ljg-paper`, `ljg-paper-flow`,
      `ljg-roundtable`, `ljg-word`, `ljg-skill-map`)
 
-**URL freshness:** all URLs verified **2026-04-26**. Re-verify
+**URL freshness:** all URLs verified **2026-04-27**. Re-verify
 when modifying related code. A broken or moved canonical URL is a
 load-bearing fact and must be patched in the PR that catches it.
 
@@ -504,8 +504,17 @@ description: Use when [specific triggering conditions and symptoms]
 - **`description`**: third person, ideally starts with "Use
   when ...". This is what the model sees in the available-skills
   list and matches against the user prompt.
-- **Total frontmatter ≤ 1024 characters** (the documented cap).
-  Everything past 1024 chars is silently truncated.
+- **Description char cap is platform-dependent**:
+  - **Claude Code** caps the **combined** `description` +
+    `when_to_use` at **1,536 chars** in the skill listing (per
+    <https://code.claude.com/docs/en/skills.md>, 2026).
+  - **Codex** publishes no per-skill cap; the only documented
+    constraint is an aggregate budget of ~8,000 chars / 2% context.
+  - **agentskills.io** community spec recommends 1,024 chars.
+  - **Defensive rule for this repo**: keep `description` alone
+    under 1,024 chars (cross-platform safe); use `when_to_use` to
+    spend the additional 512-char CC headroom on extended trigger
+    phrases that don't ride into the matcher description on Codex.
 
 ### `description = WHEN, not WHAT`
 
@@ -559,36 +568,207 @@ I work on", "decompose this", "today's work", a literal
 GitHub Project state machine." The matcher fires on the user's
 vocabulary, not the architect's.
 
-### Cross-platform compatibility budget
+### Description optimization — the four discipline points
 
-Stick to the **portable subset** unless a Claude-only feature is
-load-bearing for the skill:
+Beyond "WHEN, not WHAT", every description in this repo MUST
+satisfy four optimization criteria. Descriptions are the
+plugin's primary trigger surface — getting them wrong means the
+agent misses the skill when needed (undertriggering) or fires
+it spuriously (overtriggering). Both fail the user.
+
+1. **Lead with "Use when ..."** — Anthropic's empirical pattern.
+   The matcher reads the description prefix first; opening with
+   "Use when" anchors the model in trigger-condition framing.
+
+2. **Include user vocabulary, not domain abstractions.** List
+   the literal phrases a user would type. Quote them. The model
+   matches on string overlap with the user's prompt; a
+   description full of architect-speak ("orchestrate the kanban
+   state machine") matches no realistic prompt. Pull from real
+   user logs if you have them; brainstorm 10 phrasings if you
+   don't.
+
+3. **Discriminate near-miss queries.** Add an explicit
+   "Do NOT use when ..." clause naming the adjacent skill. This
+   prevents the model from picking your skill when a sibling
+   skill is the right one. Example: a `consuming-card` skill's
+   description should say "Do NOT use when the user wants to
+   plan / triage / review the board generally — that's the
+   managing-board skill."
+
+4. **Push back against undertriggering.** Add a
+   "Use even when the user doesn't say X" clause. Anthropic's
+   `skill-creator` documents: "currently Claude has a tendency
+   to undertrigger skills." Counter with explicit override:
+   "Apply even when the user phrases it casually" / "Use even
+   when the user doesn't explicitly say 'schema'".
+
+**Example — the four points applied**:
 
 ```yaml
-# ✅ portable subset — works on Claude Code AND Codex CLI
----
-name: my-skill
-description: Use when ...
----
+description: |
+  Use when the user wants to claim, work on, or implement a
+  specific card from the board-superpowers GitHub Project.
+  Triggers immediately on any message containing the literal
+  token [board-card:#N] OR phrases like "claim card 12", "work
+  on card N", "implement #N from the board", "let me take #N",
+  "let's pick up 12". Apply the moment the message names a card
+  number AND signals intent to do the work — do NOT pre-discuss;
+  claim first. Use even when the user phrases it casually
+  ("ok 12") — the claim signal is what matters, not formality.
+  Do NOT use when the user wants to plan / triage / review the
+  board generally — that's the managing-board skill.
 ```
 
-Reach for Claude-only fields only with a written reason:
+This description has all four:
+- Leads with "Use when ..."
+- Lists 6 realistic user phrasings, in quotes
+- Discriminates "Do NOT use when ... that's the managing-board skill"
+- Pushes against undertriggering "Use even when the user phrases it casually"
 
-| Field | Use when | Cost |
-|-------|----------|------|
-| `disable-model-invocation: true` | Skill is invoked exclusively by another skill or by `/<name>` slash form | Skill no longer auto-triggers on description. |
-| `user-invocable: true` | Skill is for direct human use via `/<name>`, not for the model | Hyphenated form. **Watch out: `user_invocable` (underscore) is an ljg-skills typo that gets silently ignored.** |
-| `allowed-tools: ...` | Skill must lock down to a specific tool set for safety | Adds a permission filter. Anthropic, superpowers, and ljg-skills all use this 0% of the time. gstack uses it 100%. Don't cargo-cult it. |
-| `context: fork` | Skill must run in a forked subagent that inherits parent context | Experimental, requires `CLAUDE_CODE_FORK_SUBAGENT=1`. See `MULTI_AGENT_DEVELOPMENT.md` §Forked subagents. |
+### Description optimization — the advanced workflow
 
-### Custom non-spec frontmatter fields are silently ignored
+For high-leverage skills (entry routers, frequently-invoked
+disciplines), iterate the description with Anthropic's
+`skill-creator` description-optimization workflow
+(documented in
+<https://github.com/anthropics/skills/tree/main/skills/.system/skill-creator>):
 
-gstack uses `triggers:`, `voice-triggers:`, `preamble-tier:`,
-`benefits-from:` — none of these are in the spec. Both Claude
-Code and Codex parse them and discard them. They look like
-behavior but they're just decoration. **Do not invent new
-frontmatter fields in this repo.** If a behavior needs to ride
-on a skill, encode it in the body or in a hook.
+1. Generate 20 trigger-eval queries — 8-10 should-trigger,
+   8-10 should-not-trigger near-misses.
+2. Run each query 3 times against a candidate description; record
+   trigger rate.
+3. Iterate the description; re-evaluate; pick the version with
+   the best held-out trigger accuracy.
+
+Worth doing for skills where wrong-routing has real cost
+(claim transactions, PR submits, security audits). Skip for
+small reference skills where over/undertriggering is
+inconsequential.
+
+### Three-tier frontmatter discipline
+
+Frontmatter fields fall into three tiers. The tier determines
+whether they are safe to use, what they cost, and whether they
+break cross-platform parity. Every SKILL.md authored in this repo
+MUST classify its frontmatter against this discipline.
+
+#### Tier 1 — Portable subset (behavior-defining, both platforms)
+
+Only **two fields** qualify:
+
+| Field | Use |
+|-------|-----|
+| `name` | Skill identifier; defaults to dir name on CC, but always set explicitly. |
+| `description` | The matcher Claude / Codex use to decide when to invoke. Empirically the single most load-bearing field. |
+
+**Skill behavior MUST be expressible using only Tier 1.** If your
+skill's correctness depends on a Tier 2 field, the skill is
+Claude-Code-only — declare that explicitly in the body's overview.
+
+#### Tier 2 — CC-only spec fields (additive UX, both-platforms-safe)
+
+The Claude Code skills spec
+(<https://code.claude.com/docs/en/skills.md>) defines **11
+additional fields** beyond `name` / `description`. They are part
+of an **official spec**, not anti-pattern A4 inventions — Codex's
+parser silently ignores them, but they are NOT swallowed by CC.
+Use them as **additive UX enhancements** that improve the
+human-driven invocation experience without affecting body
+behavior.
+
+| Field | What it controls | Use it for |
+|-------|------------------|-----------|
+| `when_to_use` | Additional trigger phrases appended to `description` | Listing trigger vocabulary (`[board-card:#N]`, "claim card", "what should I work on") without bloating the primary description. |
+| `argument-hint` | Autocomplete placeholder shown after `/<skill> ` | Sub-command type-hint UX. Examples: `[card-number]`, `"[optional context]"`. **Defensive quoting**: wrap values containing `:` `,` `*` in double quotes — root cause of the now-fixed [#22161](https://github.com/anthropics/claude-code/issues/22161) crash. |
+| `arguments` | Named positional arguments | Body uses `$<name>` substitution (`$card_number` reads cleaner than `$0`). On Codex, `$card_number` is a literal string — **body must work in both modes**, e.g., reference `$ARGUMENTS` as fallback. |
+| `disable-model-invocation` | `true` = only user can invoke | Skills with side effects you don't want Claude triggering autonomously: `/deploy`, `/migrate`. |
+| `user-invocable` | `false` = hide from `/` menu | Atomic reflex-skills users don't drive directly (`board-canon`, `enforcing-pr-contract`). Hyphenated form. **`user_invocable` (underscore) is an ljg-skills typo that gets silently ignored.** |
+| `allowed-tools` | Tools auto-approved while skill active | Lock down to a specific tool set for safety. Anthropic / superpowers / ljg-skills use this 0% of the time. gstack uses it 100%. Don't cargo-cult it. |
+| `model` | Model override for this turn | Force a specific model (`claude-opus-4-7`, `inherit`, etc). Reset to session default after the turn. |
+| `effort` | Effort level override | Force `low` / `medium` / `high` / `xhigh` / `max` for this skill's turn. |
+| `context: fork` | Fork into subagent context | When the skill is a self-contained task that doesn't need conversation history. Pairs with `agent`. |
+| `agent` | Subagent type when forking | `Explore`, `Plan`, `general-purpose`, or any `.claude/agents/<name>`. |
+| `hooks` | Skill-lifecycle-scoped hooks | Per-skill PreToolUse / PostToolUse / Stop. See <https://code.claude.com/docs/en/hooks#hooks-in-skills-and-agents>. |
+| `paths` | Glob limiting auto-trigger | Skill triggers only when working with matching files. |
+| `shell` | `bash` (default) / `powershell` | PowerShell requires `CLAUDE_CODE_USE_POWERSHELL_TOOL=1`. |
+
+**Tier 2 cross-platform contract**: a skill using Tier 2 fields
+MUST behave correctly on Codex despite those fields being ignored.
+Concretely, never have body logic that depends on `arguments:`
+named substitution alone — always provide an `$ARGUMENTS` fallback
+path. Never depend on `paths:` constraining when the skill fires —
+write trigger discipline into `description` / `when_to_use`.
+
+#### Tier 3 — Anti-pattern A4 (forbidden)
+
+Any field NOT in CC's spec AND NOT in Codex's spec gets dropped by
+**both** runtimes. Examples seen in the wild:
+
+```yaml
+# ❌ Tier 3 — silently ignored everywhere
+triggers: [...]
+voice-triggers: [...]
+preamble-tier: ...
+benefits-from: ...
+version: v0.1.0
+layer: atomic
+type: reference
+mode: both
+bounded-context: board
+```
+
+**Project-specific metadata (version + 4 dimensions) lives in a
+sibling `.skill-meta.yaml` file, not in frontmatter.** See § "
+board-superpowers metadata convention" below.
+
+### board-superpowers metadata convention
+
+This repo treats each skill as a **mini sub-project**: it has its
+own version, its own taxonomic position, and its own platform
+target. To avoid Tier 3 anti-patterns, these dimensions live in a
+sibling `<skill-dir>/.skill-meta.yaml` file — **not** in the
+SKILL.md frontmatter.
+
+```yaml
+# skills/board-canon/.skill-meta.yaml
+version: v0.1.0           # semver; bump per skill on each behavior change
+layer: atomic             # entry / molecular / atomic — graph position
+type: reference           # technique / pattern / reference / discipline
+mode: both                # claude-code-only / codex-only / both
+bounded-context: board    # board / session / bootstrap / audit / spec
+```
+
+Schema:
+
+| Field | Required | Enum | What it anchors |
+|-------|----------|------|-----------------|
+| `version` | Yes | semver string | Skill's independent version (mono-repo sub-project model). Bump on any behavior change to the SKILL.md body or its references/. |
+| `layer` | Yes | `entry` / `molecular` / `atomic` | Position in the skill graph (per § "Skill graph"). Determines body length budget + what the skill is allowed to depend on. |
+| `type` | Yes | `technique` / `pattern` / `reference` / `discipline` | Body skeleton + testing regime. Pattern → Skeleton A; reference → Skeleton B; pipeline → Skeleton C; discipline → pressure tests. |
+| `mode` | Yes | `claude-code-only` / `codex-only` / `both` | Platform compatibility. Determines what frontmatter fields are safe and whether body can name CC tools directly. |
+| `bounded-context` | Yes | `board` / `session` / `bootstrap` / `audit` / `spec` | DDD bounded context (per `docs/architecture/0003-domain-model/02-bounded-contexts.md`). |
+
+Why a sibling file instead of frontmatter:
+
+- **Tier 3 (A4) compliance** — runtime parsers ignore non-spec
+  frontmatter fields silently. Putting metadata there looks like
+  behavior but isn't.
+- **Zero token cost at runtime** — `.skill-meta.yaml` is never
+  loaded into the skill invocation context. The model doesn't need
+  layer / type / mode to use the skill correctly; only the
+  maintainer / CI needs them.
+- **CI-checkable single source of truth** —
+  `scripts/verify-skill-metadata.sh` validates that every yaml
+  matches the canonical `SKILLS.md` catalog and that no field
+  drifts.
+- **SPOT-clean** — `SKILLS.md` catalog can omit these fields
+  (they live in yaml), reducing inline duplication.
+
+A change to a skill's behavior MUST bump `version` in the yaml in
+the same PR. A change that **only** clarifies wording without
+shifting behavior may keep `version` unchanged but MUST be noted
+in the PR body.
 
 ---
 
@@ -1099,10 +1279,10 @@ the skill triggers. The user-facing overview belongs in
 reads to decide "should I install this plugin" goes in
 `README.md`.
 
-### A4. Custom non-spec frontmatter
+### A4. Custom non-spec frontmatter (= Tier 3 in the three-tier discipline)
 
 **Symptom:** frontmatter contains fields not in
-<https://agentskills.io/specification> or
+<https://agentskills.io/specification> AND not in
 <https://code.claude.com/docs/en/skills.md>.
 
 **Where seen:** gstack's `triggers:`, `voice-triggers:`,
@@ -1117,6 +1297,20 @@ Looks like behavior; isn't.
 depends on another"), state it in the body with a `**REQUIRED
 SUB-SKILL:**` marker. If a real spec extension is needed, add it
 to <https://agentskills.io/specification> upstream first.
+
+**Note — Tier 2 fields are NOT A4 violations.** Fields like
+`argument-hint`, `arguments`, `when_to_use`, `user-invocable`,
+`allowed-tools`, `model`, `effort`, `context: fork`, `agent`,
+`hooks`, `paths`, `shell` are **in CC's official spec**. Codex
+silently ignores them, but CC honors them. They count as
+"additive UX enhancements," not as anti-pattern. See § "Three-tier
+frontmatter discipline" for the full classification.
+
+**Note — board-superpowers metadata is NOT in frontmatter.**
+Project-specific dimensions (version + layer + type + mode +
+bounded-context) live in `<skill-dir>/.skill-meta.yaml`,
+exactly to avoid this trap. See § "board-superpowers metadata
+convention" for the schema.
 
 ### A5. Skill body in mixed language for portability claim
 
@@ -1170,6 +1364,83 @@ user-invocable; the runtime disagrees.
 **Fix:** copy the canonical field names from
 <https://agentskills.io/specification>. When in doubt, hyphen.
 
+### A9. Project-internal references in SKILL body
+
+**Symptom:** SKILL.md cites internal feature codes (`F-08`,
+`F-C12`, `F-B2`), ADR numbers (`ADR-0006`, `ADR-0008`), premise
+codes (`P4b`, `I-7`, `D-AUTONOMY-1`, `C-PLUGIN-1`), or relative
+paths into the project's `docs/architecture/...` tree.
+
+**Where seen:** any board-superpowers SKILL.md authored from
+the spec-doc vocabulary without translation.
+
+**Failure mode:** when the plugin is published, the downstream
+agent that loads the SKILL.md does NOT have access to your
+project's spec docs (those typically live only in the
+maintainer repo, NOT in the installed plugin). A line like
+"Per F-09 + §1.6 (INVEST + vertical slicing) ..." is
+indecipherable — the agent has no "F-09" referent to resolve.
+Even when the spec docs ARE available alongside (e.g., in this
+repo's own dogfood loop), reading a code chain to figure out
+"what should I do" wastes tokens vs reading prose.
+
+**Fix:** translate every internal reference into self-contained
+prose at SKILL-authoring time.
+
+| Internal reference | SKILL-body prose |
+|--------------------|------------------|
+| "Per F-08 intake routine" | "the routine that turns a new requirement into a spec doc, design conversation, or Ready card" |
+| "Per ADR-0006 D-AUTONOMY-1 matrix" | inline the actual A/R/N classification rules |
+| "Per `docs/architecture/0002-product-features-and-flows/04-consumer-surface.md` § F-C12" | "when opening the PR" + inline the procedure |
+| "audit_id 200" | "the audit-log entry for daily routines" (or omit the catalog reference entirely) |
+
+The internal codes belong in spec docs and PR descriptions —
+where maintainers reading the project's source docs can resolve
+them. They do NOT belong in SKILL.md, which ships as a
+black-box artifact to downstream agents.
+
+**Diagnostic**: `grep -rE '\bF-[A-Z]?[0-9]+|ADR-[0-9]{4}|§[0-9]\.|P[0-9]+[a-z]?\b|I-[0-9]+|D-[A-Z]+-[0-9]+|C-[A-Z]+-[0-9]+' skills/` should return zero matches in a clean SKILL.md tree.
+
+### A10. Project-phase narrative in SKILL body
+
+**Symptom:** SKILL.md frames its own behavior as
+"v1-minimum scope covers X" / "Y is deferred to v1-complete" /
+"this block runs as degraded fallback until Z atomic ships" /
+"v1-minimum: <description>; v1-complete: <description>".
+
+**Where seen:** any SKILL.md written during a deliberately
+phased rollout where the maintainer mentally tracked "what
+ships now vs later" and let that framing leak into the skill
+body.
+
+**Failure mode:** the downstream agent does NOT care about
+the project's development phases — it cares about what the
+skill does NOW. Phase narrative creates three problems:
+
+1. **Cognitive overhead**: agent has to parse "v1-minimum
+   degraded behavior" framing to figure out actual current
+   behavior.
+2. **Self-deprecating tone**: the skill describes itself as
+   "incomplete" / "degraded", which can affect the agent's
+   confidence in following its instructions.
+3. **Decay**: phase markers become wrong the moment a phase
+   transitions and someone forgets to update them. SKILLs
+   without phase markers don't have this decay surface.
+
+**Fix:** describe **current behavior** as the contract.
+Project-phase narrative belongs in CHANGELOG / PR description /
+project's developer guide (e.g., AGENTS.md / CONTRIBUTING.md) —
+NOT in SKILL.md.
+
+| Phase narrative (anti-pattern) | Current-behavior framing (correct) |
+|--------------------------------|-------------------------------------|
+| "v1-minimum: all mutating actions = R-class default" | "Every mutating action this skill performs follows propose → wait for ack → act → audit" |
+| "Audit log writes go to local jsonl in v1-minimum; BYO RDBMS in v1-complete" | "Audit log writes append a JSON line to `~/.board-superpowers/<host>/<repo>/audit-local.jsonl`" |
+| "Mode-2 Producer-spawned Consumer is CC-only at v1-minimum" | "When this skill runs as a Producer-spawned subagent (Claude Code only), ..." |
+| "F-09 (decomposition) deferred to v1-complete; Producer hand-decomposes for now" | (just describe the manual hand-decomposition flow as the actual procedure) |
+
+**Diagnostic**: `grep -rE 'v1-minimum|v1-complete|v[0-9]+-(minimum|complete)|deferred to|degradation block|degraded mode' skills/` should return zero matches.
+
 ---
 
 ## Honest gaps in official docs
@@ -1213,7 +1484,7 @@ each is a known unknown to re-check periodically.
 
 ## Maintenance discipline for this doc
 
-- All URLs verified **2026-04-26**. **Re-verify when modifying
+- All URLs verified **2026-04-27**. **Re-verify when modifying
   related code.** A broken or moved canonical URL is a
   load-bearing fact and must be patched in this PR, not deferred.
 - When a new skill-authoring surface lands in either product
