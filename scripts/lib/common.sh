@@ -200,6 +200,16 @@ sys.exit(1)
 # decision_class ∈ {A, R, N} (per ADR-0006 D-AUTONOMY-1).
 # action_id catalog lives inline in each v1-minimum molecular skill.
 #
+# Concurrency: writes use Python's open(path, 'a') which on POSIX
+# uses O_APPEND. Single-line writes under PIPE_BUF (4096 bytes;
+# audit lines are ~200) are atomic at the kernel level — multiple
+# concurrent writers do not interleave. Migration mv is race-tolerant
+# (see body).
+#
+# Schema: a migrated audit-local.jsonl can contain both legacy entries
+# (with `host` + `repo` fields, mode=v1-minimum-degraded) and new
+# entries (with `repo_root` field). Future readers must handle both.
+#
 # Inline legacy migration:
 #   Before computing the new path, this function checks whether the
 #   canonical new path exists. If not, it scans the legacy
@@ -217,7 +227,10 @@ sys.exit(1)
 #
 #   On match: mkdir -p the new directory and `mv` the legacy file
 #   to the new path. Subsequent calls see the new path exists and
-#   skip the migration scan entirely (idempotent).
+#   skip the migration scan entirely (idempotent). The mv is
+#   race-tolerant: if another concurrent process beat us to the
+#   migration (legacy gone, new now exists), we proceed without
+#   error; the appended line lands on the canonical new path.
 #
 #   On no match: no migration; just create the new path and append.
 
@@ -290,8 +303,18 @@ bsp_audit_local_write() {
 
         if [ -n "${legacy_match}" ]; then
             mkdir -p "$(dirname "${path}")"
-            mv "${legacy_match}" "${path}"
-            bsp_log "audit-local: migrated legacy file ${legacy_match} → ${path}"
+            # Race-tolerant migration: another concurrent writer may
+            # have beaten us to the mv between our [ ! -f "${path}" ]
+            # check above and now. When that happens the mv fails
+            # because the legacy source is gone; the canonical new
+            # path is already in place, so we proceed normally.
+            if mv "${legacy_match}" "${path}" 2>/dev/null; then
+                bsp_log "audit-local: migrated legacy file ${legacy_match} → ${path}"
+            elif [ -f "${path}" ]; then
+                bsp_log "audit-local: migration was completed by another process — proceeding"
+            else
+                bsp_warn "audit-local: migration mv failed and new path absent — falling through to fresh write"
+            fi
         fi
     fi
     # --- End migration ---------------------------------------------------
@@ -354,10 +377,25 @@ bsp_worktree_path() {
 bsp_pick_worktree_dir() {
     local repo_root="${1:-}"
 
-    # Priority 1: env var.
+    # Priority 1: env var. MUST be absolute (start with "/"). All
+    # priority levels are contractually absolute (priority 2 inherits
+    # absoluteness from <repo_root>; priority 3 derives from $HOME).
+    # A relative env value would silently break audit-log writes and
+    # other path consumers. Per spec lines 51-58 (07-path-conventions.md).
+    #
+    # Recovery: warn to stderr and fall through to priority 2/3 instead
+    # of hard-fail — env var is user-set, a typo shouldn't break the
+    # session; the warning preserves visibility.
     if [ -n "${BOARD_SP_WORKTREE_DIR:-}" ]; then
-        printf '%s\n' "${BOARD_SP_WORKTREE_DIR}"
-        return 0
+        case "${BOARD_SP_WORKTREE_DIR}" in
+            /*)
+                printf '%s\n' "${BOARD_SP_WORKTREE_DIR}"
+                return 0
+                ;;
+            *)
+                bsp_warn "BOARD_SP_WORKTREE_DIR=${BOARD_SP_WORKTREE_DIR} is not absolute, ignoring; falling through"
+                ;;
+        esac
     fi
 
     # Priority 2: project-local <repo_root>/.worktrees/ when it exists

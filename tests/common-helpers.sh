@@ -78,6 +78,20 @@ capture_helper() {
     set -e
 }
 
+# Capture stdout, stderr, and exit code separately.
+# Sets globals OUT, ERR, RC.
+capture_helper_split() {
+    local code="$1"
+    local err_file
+    err_file="$(mktemp)"
+    set +e
+    OUT="$(bash -c "set -euo pipefail; source '${COMMON_SH}'; ${code}" 2>"${err_file}")"
+    RC=$?
+    set -e
+    ERR="$(cat "${err_file}")"
+    rm -f "${err_file}"
+}
+
 # ---------------------------------------------------------------------------
 # Scenario 1: bsp_normalize_repo_path — happy path
 # ---------------------------------------------------------------------------
@@ -129,6 +143,49 @@ TMP="$(mktemp -d)"
 capture_helper "BOARD_SP_WORKTREE_DIR=/custom/wt bsp_pick_worktree_dir '${TMP}'"
 assert_eq 'env override beats project-local .worktrees' '/custom/wt' "${OUT}"
 rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
+# Scenario 3b: bsp_pick_worktree_dir — relative env value falls through with warning
+# ---------------------------------------------------------------------------
+printf 'Scenario: bsp_pick_worktree_dir relative env value rejected (warn + fall-through)\n'
+
+# Relative env, no repo arg → falls through to priority 3 default; stderr
+# carries the warning about the rejected env value.
+capture_helper_split "BOARD_SP_WORKTREE_DIR=relative/path; export BOARD_SP_WORKTREE_DIR; HOME=/test/home bsp_pick_worktree_dir"
+assert_eq 'relative env → priority-3 default stdout' \
+    '/test/home/.config/superpowers/worktrees' "${OUT}"
+
+if printf '%s' "${ERR}" | grep -q 'BOARD_SP_WORKTREE_DIR'; then
+    printf '  PASS — relative env emits warning to stderr (mentions BOARD_SP_WORKTREE_DIR)\n'
+    PASS=$((PASS + 1))
+else
+    printf '  FAIL — relative env stderr missing warning. stderr=%q\n' "${ERR}" >&2
+    FAIL=$((FAIL + 1))
+fi
+
+if printf '%s' "${ERR}" | grep -q 'not absolute'; then
+    printf '  PASS — warning explains the cause (not absolute)\n'
+    PASS=$((PASS + 1))
+else
+    printf '  FAIL — warning text missing reason. stderr=%q\n' "${ERR}" >&2
+    FAIL=$((FAIL + 1))
+fi
+
+# Relative env should NOT abort the helper (exit 0).
+assert_eq 'relative env exit code is 0 (fall-through, not hard-fail)' '0' "${RC}"
+
+# Bare-word relative value (no slash) is also rejected.
+capture_helper_split "BOARD_SP_WORKTREE_DIR=foo; export BOARD_SP_WORKTREE_DIR; HOME=/test/home bsp_pick_worktree_dir"
+assert_eq 'bare-word relative env → priority-3 default' \
+    '/test/home/.config/superpowers/worktrees' "${OUT}"
+
+if printf '%s' "${ERR}" | grep -q 'BOARD_SP_WORKTREE_DIR=foo'; then
+    printf '  PASS — bare-word relative env warning includes the bad value\n'
+    PASS=$((PASS + 1))
+else
+    printf '  FAIL — bare-word warning text. stderr=%q\n' "${ERR}" >&2
+    FAIL=$((FAIL + 1))
+fi
 
 # ---------------------------------------------------------------------------
 # Scenario 4: bsp_pick_worktree_dir — project-local .worktrees/ (priority 2)

@@ -172,6 +172,94 @@ check 'new entry appended to existing new file' \
 rm -rf "${TMP}"
 
 # ---------------------------------------------------------------------------
+# Scenario 2b: race tolerance — both legacy AND new path exist before invoke
+# ---------------------------------------------------------------------------
+# Differs from Scenario 2 in intent. Scenario 2 asserts: "when new exists,
+# don't even look at legacy" (the migration block is skipped wholesale —
+# legacy stays untouched). Scenario 2b simulates the narrow race window
+# where this writer's earlier `[ ! -f "${path}" ]` check passed, then
+# another concurrent writer migrated, then we got the cpu and tried to
+# `mv legacy → new`. The mv should fail-but-tolerated; the appended line
+# still lands on the canonical new path; no error escapes.
+#
+# Hard to deterministically simulate the in-flight race in a test harness,
+# so we approximate by pre-populating BOTH paths to the state the racer
+# would leave behind. The first call's `[ ! -f "${path}" ]` check will
+# evaluate against the new path; if it sees new exists, the migration
+# block is skipped and we get Scenario 2 behavior. To genuinely exercise
+# the mv race-tolerance branch we need the migration block to enter, then
+# fail. We do that by making the new path NOT exist when bsp_audit_local_write
+# starts, then watch behavior when legacy disappears mid-flight: in real
+# systems this is the racer beating us. In the test harness the mv simply
+# fails (legacy actually present, but if we delete legacy between the
+# scan loop and the mv, it errors). Practical assertion below:
+#   - both files seeded → outer `[ ! -f "${path}" ]` is false, migration
+#     block is skipped, we hit the append directly. New path receives the
+#     new entry; legacy untouched. This already covers Scenario 2.
+#   - The race-tolerance branch fires when an external writer races us
+#     between the existence check and the mv. Mocking that needs a
+#     coprocess; out of scope for a single-file bash test.
+#
+# Concrete behavior we CAN assert: bsp_audit_local_write must not ERROR
+# when both paths happen to exist at function-entry time. Asserting
+# error-free completion + correct append covers the externally observable
+# guarantee.
+printf 'Scenario 2b: race tolerance — both paths seeded, no error, append succeeds\n'
+
+TMP="$(mktemp -d)"
+HOME_DIR="${TMP}/home"
+REPO_ROOT="${TMP}/checkout/board-superpowers"
+mkdir -p "${REPO_ROOT}"
+
+mkdir -p "${HOME_DIR}/.board-superpowers/somehost/board-superpowers"
+LEGACY_FILE="${HOME_DIR}/.board-superpowers/somehost/board-superpowers/audit-local.jsonl"
+printf '{"ts":"legacy-pre-race"}\n' > "${LEGACY_FILE}"
+
+NORMALIZED="$(normalize_path "${REPO_ROOT}")"
+NEW_FILE="${HOME_DIR}/.board-superpowers/repos/${NORMALIZED}/audit-local.jsonl"
+mkdir -p "$(dirname "${NEW_FILE}")"
+printf '{"ts":"new-pre-race"}\n' > "${NEW_FILE}"
+
+# Run with stderr captured separately so we can fail loud on errors.
+RUN_ERR="$(mktemp)"
+set +e
+bash -c "
+    set -euo pipefail
+    export HOME='${HOME_DIR}'
+    source '${COMMON_SH}'
+    bsp_audit_local_write '${REPO_ROOT}' '199' 'R' 'managing-board' 'race-tolerant'
+" >/dev/null 2>"${RUN_ERR}"
+RC=$?
+set -e
+
+if [ "${RC}" = "0" ]; then
+    printf '  PASS — bsp_audit_local_write succeeded with both paths present (rc=0)\n'
+    PASS=$((PASS + 1))
+else
+    printf '  FAIL — bsp_audit_local_write errored (rc=%s). stderr:\n%s\n' \
+        "${RC}" "$(cat "${RUN_ERR}")" >&2
+    FAIL=$((FAIL + 1))
+fi
+rm -f "${RUN_ERR}"
+
+# Append landed on new path (was 1 line, now 2).
+check 'race scenario: append landed on canonical new path' \
+    count_eq "${NEW_FILE}" 2
+
+check 'race scenario: pre-existing new entry preserved' \
+    grep -q '"ts":"new-pre-race"' "${NEW_FILE}"
+
+check 'race scenario: new entry written' \
+    grep -q '"action_id": "199"' "${NEW_FILE}"
+
+# Legacy stays untouched — the outer `[ ! -f "${path}" ]` short-circuits
+# the migration block when new exists.
+check 'race scenario: legacy file untouched' \
+    test -f "${LEGACY_FILE}"
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
 # Scenario 3: no legacy match → no migration
 # ---------------------------------------------------------------------------
 printf 'Scenario 3: unrelated legacy file → no migration\n'
