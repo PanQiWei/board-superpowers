@@ -34,19 +34,57 @@ bsp_plugin_root() {
     printf '%s\n' "${lib_dir%/scripts/lib}"
 }
 
+# --- Path normalization --------------------------------------------------
+#
+# Per docs/architecture/0005-contracts/07-path-conventions.md
+# § "Path-normalization rule for the per-repo sub-directory":
+#
+#   1. Strip leading "/".
+#   2. Replace remaining "/" with "-".
+#
+# Examples:
+#   /Users/foo/bar-baz                                  -> Users-foo-bar-baz
+#   /Users/panqiwei/Dev/repos/nemori-ai/board-superpowers
+#                                                       -> Users-panqiwei-Dev-repos-nemori-ai-board-superpowers
+#
+# Defensive: strip any trailing "/" first so a path like "/Users/foo/"
+# normalizes cleanly to "Users-foo" (instead of "Users-foo-").
+#
+# Input MUST be absolute (start with "/"); relative input is a usage
+# error that exits non-zero.
+
+bsp_normalize_repo_path() {
+    local p="${1:?usage: bsp_normalize_repo_path <abs-repo-root>}"
+    case "${p}" in
+        /*) ;;
+        *) bsp_die "bsp_normalize_repo_path: path must be absolute, got: ${p}" ;;
+    esac
+    # Strip trailing slash (defensive for "/Users/foo/" inputs).
+    p="${p%/}"
+    # Strip leading slash.
+    p="${p#/}"
+    # Replace remaining "/" with "-".
+    printf '%s\n' "${p//\//-}"
+}
+
 # --- Host-local + per-repo state paths ----------------------------------
 #
-# Per AGENTS.md Architecture-at-a-glance and ADR-0006 path conventions:
-#   ~/.board-superpowers/<host>/<repo>/state.yml         (host-local, not in git)
-#   <repo>/.board-superpowers/config.yml                  (per-repo, in git)
-#   ~/.board-superpowers/<host>/<repo>/audit-local.jsonl  (degraded audit)
+# Per AGENTS.md Architecture-at-a-glance + 07-path-conventions.md
+# "Per-host layout" (post-Card 1 normalized layout):
+#   ~/.board-superpowers/repos/<normalized>/state.yml         (host-local, not in git)
+#   ~/.board-superpowers/repos/<normalized>/audit-local.jsonl (degraded audit)
+#   <repo>/.board-superpowers/config.yml                       (per-repo, in git)
 #
-# For v1-minimum the (host, repo) tuple is derived from `gh repo view`.
+# <normalized> is computed from the repo's absolute path via
+# bsp_normalize_repo_path (above). All three helpers below take a
+# single <repo_root> argument and derive the canonical sub-directory
+# name internally.
 
 bsp_host_state_dir() {
-    local host="${1:?usage: bsp_host_state_dir <host> <repo>}"
-    local repo="${2:?usage: bsp_host_state_dir <host> <repo>}"
-    printf '%s/.board-superpowers/%s/%s\n' "${HOME}" "${host}" "${repo}"
+    local repo_root="${1:?usage: bsp_host_state_dir <repo_root>}"
+    local normalized
+    normalized="$(bsp_normalize_repo_path "${repo_root}")"
+    printf '%s/.board-superpowers/repos/%s\n' "${HOME}" "${normalized}"
 }
 
 bsp_repo_config_path() {
@@ -55,10 +93,9 @@ bsp_repo_config_path() {
 }
 
 bsp_audit_local_path() {
-    local host="${1:?usage: bsp_audit_local_path <host> <repo>}"
-    local repo="${2:?usage: bsp_audit_local_path <host> <repo>}"
+    local repo_root="${1:?usage: bsp_audit_local_path <repo_root>}"
     local dir
-    dir="$(bsp_host_state_dir "${host}" "${repo}")"
+    dir="$(bsp_host_state_dir "${repo_root}")"
     printf '%s/audit-local.jsonl\n' "${dir}"
 }
 
@@ -155,23 +192,133 @@ sys.exit(1)
 # --- Audit log degraded-mode writer --------------------------------------
 #
 # v1-minimum substitute for the auditing-actions skill's BYO-RDBMS write.
-# Appends one JSON line per action to the host-local audit-local.jsonl.
+# Appends one JSON line per action to the host-local audit-local.jsonl
+# at ~/.board-superpowers/repos/<normalized>/audit-local.jsonl.
 #
-# Args: <host> <repo> <action_id> <decision_class> <skill> <summary>
+# Args: <repo_root> <action_id> <decision_class> <skill> <summary>
 #
 # decision_class ∈ {A, R, N} (per ADR-0006 D-AUTONOMY-1).
 # action_id catalog lives inline in each v1-minimum molecular skill.
+#
+# Concurrency: writes use Python's open(path, 'a') which on POSIX
+# uses O_APPEND. Single-line writes under PIPE_BUF (4096 bytes;
+# audit lines are ~200) are atomic at the kernel level — multiple
+# concurrent writers do not interleave. Migration mv is race-tolerant
+# (see body).
+#
+# Schema: a migrated audit-local.jsonl can contain both legacy entries
+# (with `host` + `repo` fields, mode=v1-minimum-degraded) and new
+# entries (with `repo_root` field). Future readers must handle both.
+#
+# Inline legacy migration:
+#   Before computing the new path, this function checks whether the
+#   canonical new path exists. If not, it scans the legacy
+#   ~/.board-superpowers/<host>/<repo>/audit-local.jsonl layout
+#   (excluding paths under ~/.board-superpowers/repos/) for a match.
+#
+#   Match heuristic:
+#     - The legacy path's last directory segment (the "<repo>" part)
+#       must equal the basename of the supplied <repo_root>.
+#     - On ambiguity (multiple matches), prefer the one whose
+#       grandparent segment (the "<host>" part) matches the
+#       owner slug parsed from `git -C <repo_root> remote get-url
+#       origin` (when the remote is reachable and parseable).
+#     - Fallback: basename-only match.
+#
+#   On match: mkdir -p the new directory and `mv` the legacy file
+#   to the new path. Subsequent calls see the new path exists and
+#   skip the migration scan entirely (idempotent). The mv is
+#   race-tolerant: if another concurrent process beat us to the
+#   migration (legacy gone, new now exists), we proceed without
+#   error; the appended line lands on the canonical new path.
+#
+#   On no match: no migration; just create the new path and append.
 
 bsp_audit_local_write() {
-    local host="${1:?usage: bsp_audit_local_write <host> <repo> <action_id> <class> <skill> <summary>}"
-    local repo="${2:?}"
-    local action_id="${3:?}"
-    local decision="${4:?}"
-    local skill="${5:?}"
-    local summary="${6:?}"
+    local repo_root="${1:?usage: bsp_audit_local_write <repo_root> <action_id> <class> <skill> <summary>}"
+    local action_id="${2:?}"
+    local decision="${3:?}"
+    local skill="${4:?}"
+    local summary="${5:?}"
 
     local path
-    path="$(bsp_audit_local_path "${host}" "${repo}")"
+    path="$(bsp_audit_local_path "${repo_root}")"
+
+    # --- Legacy migration (one-shot, idempotent) -------------------------
+    if [ ! -f "${path}" ]; then
+        local legacy_root="${HOME}/.board-superpowers"
+        local repo_basename
+        repo_basename="$(basename "${repo_root}")"
+        local legacy_match=""
+
+        if [ -d "${legacy_root}" ]; then
+            # Try owner-aware match first when origin remote is parseable.
+            local owner_slug=""
+            if command -v git >/dev/null 2>&1; then
+                local origin_url
+                origin_url="$(git -C "${repo_root}" remote get-url origin 2>/dev/null || true)"
+                if [ -n "${origin_url}" ]; then
+                    # Strip protocol + host: works for https://github.com/owner/repo(.git)
+                    # and git@github.com:owner/repo(.git).
+                    local trimmed="${origin_url}"
+                    trimmed="${trimmed%.git}"
+                    trimmed="${trimmed##*github.com[:/]}"
+                    trimmed="${trimmed##*/}"  # noop fallback if pattern didn't match
+                    # Re-parse: take the segment immediately after github.com[:/]
+                    case "${origin_url}" in
+                        *github.com[:/]*)
+                            trimmed="${origin_url##*github.com}"
+                            trimmed="${trimmed#:}"
+                            trimmed="${trimmed#/}"
+                            owner_slug="${trimmed%%/*}"
+                            ;;
+                    esac
+                fi
+            fi
+
+            # Scan legacy paths. Skip the new "repos/" subtree.
+            local candidate
+            for candidate in "${legacy_root}"/*/*/audit-local.jsonl; do
+                [ -f "${candidate}" ] || continue
+                # Path layout: <legacy_root>/<host>/<repo>/audit-local.jsonl
+                local cand_dir host_seg repo_seg
+                cand_dir="$(dirname "${candidate}")"
+                repo_seg="$(basename "${cand_dir}")"
+                host_seg="$(basename "$(dirname "${cand_dir}")")"
+                # Skip the new layout root.
+                [ "${host_seg}" = "repos" ] && continue
+                # Basename match required.
+                [ "${repo_seg}" = "${repo_basename}" ] || continue
+                # Strong match: host_seg equals owner_slug.
+                if [ -n "${owner_slug}" ] && [ "${host_seg}" = "${owner_slug}" ]; then
+                    legacy_match="${candidate}"
+                    break
+                fi
+                # Otherwise remember the first basename match as fallback.
+                if [ -z "${legacy_match}" ]; then
+                    legacy_match="${candidate}"
+                fi
+            done
+        fi
+
+        if [ -n "${legacy_match}" ]; then
+            mkdir -p "$(dirname "${path}")"
+            # Race-tolerant migration: another concurrent writer may
+            # have beaten us to the mv between our [ ! -f "${path}" ]
+            # check above and now. When that happens the mv fails
+            # because the legacy source is gone; the canonical new
+            # path is already in place, so we proceed normally.
+            if mv "${legacy_match}" "${path}" 2>/dev/null; then
+                bsp_log "audit-local: migrated legacy file ${legacy_match} → ${path}"
+            elif [ -f "${path}" ]; then
+                bsp_log "audit-local: migration was completed by another process — proceeding"
+            else
+                bsp_warn "audit-local: migration mv failed and new path absent — falling through to fresh write"
+            fi
+        fi
+    fi
+    # --- End migration ---------------------------------------------------
+
     mkdir -p "$(dirname "${path}")"
 
     bsp_require_cmd python3
@@ -179,17 +326,16 @@ bsp_audit_local_write() {
 import json, sys, time
 entry = {
     'ts': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-    'host': sys.argv[1],
-    'repo': sys.argv[2],
-    'action_id': sys.argv[3],
-    'decision_class': sys.argv[4],
-    'skill': sys.argv[5],
-    'summary': sys.argv[6],
+    'repo_root': sys.argv[1],
+    'action_id': sys.argv[2],
+    'decision_class': sys.argv[3],
+    'skill': sys.argv[4],
+    'summary': sys.argv[5],
     'mode': 'v1-minimum-degraded',
 }
-with open(sys.argv[7], 'a') as f:
+with open(sys.argv[6], 'a') as f:
     f.write(json.dumps(entry) + '\n')
-" "${host}" "${repo}" "${action_id}" "${decision}" "${skill}" "${summary}" "${path}"
+" "${repo_root}" "${action_id}" "${decision}" "${skill}" "${summary}" "${path}"
 
     bsp_log "audit-local: ${decision}-class action ${action_id} (${skill}) → ${path}"
 }
@@ -205,6 +351,67 @@ bsp_worktree_path() {
     local branch="${2:?usage: bsp_worktree_path <repo> <branch>}"
     local base="${BOARD_SP_WORKTREE_DIR:-${HOME}/.config/superpowers/worktrees}"
     printf '%s/%s/%s\n' "${base}" "${repo}" "${branch}"
+}
+
+# bsp_pick_worktree_dir [repo_root] — return BASE worktree dir (not
+# per-repo or per-branch). Three-priority resolution per
+# docs/architecture/0005-contracts/07-path-conventions.md lines 51-58
+# and ADR-0003 § "Path resolution priority":
+#
+#   1. $BOARD_SP_WORKTREE_DIR (if set + non-empty)
+#   2. Project-local <repo_root>/.worktrees/ — only when the directory
+#      exists AND `git check-ignore -q .worktrees` (run from repo_root)
+#      returns 0, i.e. the path is gitignored. This protects against a
+#      stray .worktrees/ accidentally getting committed.
+#   3. Default: ${HOME}/.config/superpowers/worktrees
+#
+# This helper is RICHER than bsp_worktree_path (which honors only env +
+# default). bsp_worktree_path stays unchanged so existing callers
+# (claim-card.sh) keep working with their current `<repo> <branch>`
+# signature.
+#
+# NOTE: spec line 53 cites this helper as living in scripts/claim-card.sh;
+# it actually lives here in scripts/lib/common.sh (where reusable helpers
+# live). Spec drift to be reconciled in a later card.
+
+bsp_pick_worktree_dir() {
+    local repo_root="${1:-}"
+
+    # Priority 1: env var. MUST be absolute (start with "/"). All
+    # priority levels are contractually absolute (priority 2 inherits
+    # absoluteness from <repo_root>; priority 3 derives from $HOME).
+    # A relative env value would silently break audit-log writes and
+    # other path consumers. Per spec lines 51-58 (07-path-conventions.md).
+    #
+    # Recovery: warn to stderr and fall through to priority 2/3 instead
+    # of hard-fail — env var is user-set, a typo shouldn't break the
+    # session; the warning preserves visibility.
+    if [ -n "${BOARD_SP_WORKTREE_DIR:-}" ]; then
+        case "${BOARD_SP_WORKTREE_DIR}" in
+            /*)
+                printf '%s\n' "${BOARD_SP_WORKTREE_DIR}"
+                return 0
+                ;;
+            *)
+                bsp_warn "BOARD_SP_WORKTREE_DIR=${BOARD_SP_WORKTREE_DIR} is not absolute, ignoring; falling through"
+                ;;
+        esac
+    fi
+
+    # Priority 2: project-local <repo_root>/.worktrees/ when it exists
+    # AND is gitignored. `git check-ignore -q <path>` exits 0 iff the
+    # path matches a gitignore rule; non-zero otherwise (including when
+    # not in a git repo). Wrap in `2>/dev/null` to swallow git's stderr
+    # when invoked outside a repo.
+    if [ -n "${repo_root}" ] && [ -d "${repo_root}/.worktrees" ]; then
+        if (cd "${repo_root}" && git check-ignore -q .worktrees) 2>/dev/null; then
+            printf '%s\n' "${repo_root}/.worktrees"
+            return 0
+        fi
+    fi
+
+    # Priority 3: default.
+    printf '%s\n' "${HOME}/.config/superpowers/worktrees"
 }
 
 # --- Card slug helper ----------------------------------------------------

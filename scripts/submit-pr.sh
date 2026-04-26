@@ -25,6 +25,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
+# shellcheck source-path=SCRIPTDIR
 . "${SCRIPT_DIR}/lib/common.sh"
 
 TITLE=""
@@ -105,7 +106,7 @@ trap 'rm -f "${TMP_BODY}"' EXIT
 cp "${BODY_FILE}" "${TMP_BODY}"
 {
     printf '\n\n---\n'
-    printf 'Closes #%s — board-superpowers v0.1.0-minimum claim trailer.\n' "${CARD}"
+    printf 'Closes #%s — board-superpowers v0.1.1 claim trailer.\n' "${CARD}"
 } >> "${TMP_BODY}"
 
 # --- Open the PR ---------------------------------------------------------

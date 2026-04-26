@@ -167,7 +167,7 @@ Every mutating action this skill performs (Status flips, card body writes, PR cr
 1. **Propose** the action with a one-line description.
 2. **Wait** for explicit architect acknowledgement.
 3. **Act**.
-4. **Append an audit-log entry** to `~/.board-superpowers/<host>/<repo>/audit-local.jsonl` via `bsp_audit_local_write` (defined in `scripts/lib/common.sh`).
+4. **Append an audit-log entry** to `~/.board-superpowers/repos/<normalized>/audit-local.jsonl` via `bsp_audit_local_write` (defined in `scripts/lib/common.sh`).
 
 Some actions may be classified as auto-act-OK by per-repo or per-user override rules in `.board-superpowers/config.yml`; until those overrides are configured, treat every action as requiring acknowledgement.
 

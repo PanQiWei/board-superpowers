@@ -317,7 +317,7 @@ means for board-superpowers" #3 for the full rationale.
   inlined 5 times.
 - **v1-minimum degradation**: until this skill ships, every
   v1-minimum molecular SKILL.md appends a one-line jsonl entry
-  to a local `~/.board-superpowers/<host>/<repo>/audit-local.jsonl`
+  to a local `~/.board-superpowers/repos/<normalized>/audit-local.jsonl`
   file as an interim trace. Replace with full schema + BYO
   RDBMS write when this skill lands.
 

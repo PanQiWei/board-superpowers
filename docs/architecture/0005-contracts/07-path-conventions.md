@@ -50,7 +50,7 @@ These rules apply to every path in this section:
 
 Three-priority list for `<WORKTREE_DIR>` (the **parent** directory
 under which a per-claim worktree lives). Pinned by ADR-0003 and
-implemented in `scripts/claim-card.sh` (`bsp_pick_worktree_dir`).
+implemented in `scripts/lib/common.sh` (`bsp_pick_worktree_dir`).
 
 | Priority | Source | Condition | Path |
 |----------|--------|-----------|------|
@@ -113,8 +113,8 @@ table.
 
 - ADR-0003 — "Path resolution priority" (the canonical 3-priority
   list landing here as a contract).
-- `scripts/claim-card.sh` — `bsp_pick_worktree_dir` is the
-  implementation; lines 132–160 are the canonical reference.
+- `scripts/lib/common.sh` — `bsp_pick_worktree_dir` is the
+  canonical implementation of the 3-priority resolution.
 - `AGENTS.md` "Worktree default path" — the same priority list
   surfaced in the developer guide; it points here.
 - I-7 (one-card-one-worktree).

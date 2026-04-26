@@ -61,7 +61,7 @@ follow-up; no current consumer.
 |----------|-------|
 | Format | Absolute filesystem path. Relative paths are rejected. |
 | Default | unset → falls through to project-local `.worktrees/` (priority 2) → `$HOME/.config/superpowers/worktrees/<project>/` (priority 3) |
-| Read by | `scripts/claim-card.sh` (`bsp_pick_worktree_dir`) |
+| Read by | `scripts/lib/common.sh` (`bsp_pick_worktree_dir`) |
 | Validation | If set, MUST start with `/`. Relative input → `bsp_die "BOARD_SP_WORKTREE_DIR must be absolute, got: ..." 30` (exit `30`). |
 
 When set, this is the **highest-priority** worktree-parent
@@ -74,7 +74,7 @@ where `$HOME` is ephemeral.
 #### Cited rationale
 
 - ADR-0003 — "Path resolution priority" (priority-1 entry).
-- `scripts/claim-card.sh` lines 132–160 — implementation.
+- `scripts/lib/common.sh` `bsp_pick_worktree_dir` — implementation.
 - [`07-path-conventions.md`](./07-path-conventions.md) "Worktree
   path resolution" — canonical contract pin.
 - `AGENTS.md` "Override via `$BOARD_SP_WORKTREE_DIR`" — protocol

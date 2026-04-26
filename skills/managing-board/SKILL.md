@@ -55,7 +55,7 @@ Goal: produce a one-screen briefing of the board's current state that helps the 
    - "Claim a Ready card" (if `Ready` count > 0 and the Producer wants to context-switch into Consumer mode)
    - "Run intake" (if all the above are empty — the board is idle)
 
-5. **Audit-log entry**. Append one line to `~/.board-superpowers/<host>/<repo>/audit-local.jsonl` recording that the daily routine ran (helper: `bsp_audit_local_write` from `scripts/lib/common.sh`).
+5. **Audit-log entry**. Append one line to `~/.board-superpowers/repos/<normalized>/audit-local.jsonl` recording that the daily routine ran (helper: `bsp_audit_local_write` from `scripts/lib/common.sh`).
 
 `references/daily.md` covers the empty-board case, single-Consumer projects, stale-claim detection mechanics, and tone notes.
 
@@ -114,6 +114,6 @@ Every mutating action this skill performs (Status flips, card body writes, PR co
 1. **Propose** the action to the architect with a one-line description.
 2. **Wait** for explicit acknowledgement.
 3. **Act**.
-4. **Append an audit-log entry** to `~/.board-superpowers/<host>/<repo>/audit-local.jsonl` via `bsp_audit_local_write` (defined in `scripts/lib/common.sh`).
+4. **Append an audit-log entry** to `~/.board-superpowers/repos/<normalized>/audit-local.jsonl` via `bsp_audit_local_write` (defined in `scripts/lib/common.sh`).
 
 Some actions may be classified as auto-act-OK by per-repo or per-user override rules in `.board-superpowers/config.yml`; until those overrides are configured, treat every action as requiring acknowledgement.

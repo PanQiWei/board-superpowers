@@ -32,14 +32,14 @@ deferred atomics ship):
   triage from `classifying-actions` is inlined as one block per
   v1-minimum molecular SKILL.md.
 - All audit entries write to a **local jsonl trace file** at
-  `~/.board-superpowers/<host>/<repo>/audit-local.jsonl`. The
+  `~/.board-superpowers/repos/<normalized>/audit-local.jsonl`. The
   full BYO RDBMS schema from `auditing-actions` is deferred.
 - **No `bootstrapping-repo` skill yet** — the plugin assumes
   the repo's GitHub Project + standard labels are already set
   up manually. The hook never injects `INVOKE: bootstrapping-repo`
   in v1-minimum.
 - **No `migrating-repo-version` skill yet** — current plugin
-  version is `v0.1.0-minimum`; nothing to migrate from. The
+  version is `v0.1.1`; nothing to migrate from. The
   hook never injects `INVOKE: migrating-repo-version` in
   v1-minimum.
 
@@ -532,7 +532,8 @@ The v1-minimum plugin is loadable. The operational checklist:
 ### Release flow
 
 - Bump `.claude-plugin/plugin.json` + `.codex-plugin/plugin.json`
-  `version` field per semver (this PR: `v0.1.0-minimum`).
+  `version` field per semver (e.g., `v0.1.0-minimum` → `v0.1.1`
+  is a patch; `v0.1.x` → `v0.2.0` is a minor).
 - For deferred-atomic landings, also bump per-skill
   `.skill-meta.yaml` `version` (per
   [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md) § "
@@ -554,7 +555,7 @@ ls docs/architecture/adr/                      # what's decided
 <!-- board-superpowers:routing -->
 ## board-superpowers session routing
 
-This project uses the `board-superpowers` plugin (v0.1.0-minimum).
+This project uses the `board-superpowers` plugin (v0.1.1).
 Any Claude Code session in this project plays one of two roles:
 
 - **Board Consumer** — if the first message contains `[board-card:#N]`,

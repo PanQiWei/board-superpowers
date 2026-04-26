@@ -2,7 +2,7 @@
 
 Per-transition checklist that the parent `SKILL.md` § "State machine" points at.
 
-Every transition writes one entry to the audit log at `~/.board-superpowers/<host>/<repo>/audit-local.jsonl`. Helper: `bsp_audit_local_write` from `scripts/lib/common.sh`.
+Every transition writes one entry to the audit log at `~/.board-superpowers/repos/<normalized>/audit-local.jsonl`. Helper: `bsp_audit_local_write` from `scripts/lib/common.sh`.
 
 ## Backlog → Ready
 
