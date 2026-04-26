@@ -32,22 +32,25 @@
 #                             # config.yml even when present)
 #       [--plugin-root P]     # for testability; defaults to derived
 #                             # from this file's location
-#       [--audit-db-url URL]  # non-interactive override for step 2e;
-#                             # highest precedence (above
-#                             # $BOARD_SP_AUDIT_DB_URL and pre-existing
-#                             # credentials.yml). Same 6-scheme
-#                             # allowlist applies.
+#       [--audit-db-url URL]  # non-interactive equivalent of typing
+#                             # the DSN at the interactive prompt;
+#                             # ALWAYS persists to credentials.yml
+#                             # (chmod 0600) regardless of scheme. Use
+#                             # $BOARD_SP_AUDIT_DB_URL for ephemeral /
+#                             # runtime override that does NOT persist.
 #
 # --owner and --project are REQUIRED for step 2b (Status field check).
 # --repo-root defaults to ${CLAUDE_PROJECT_DIR:-$PWD} resolved to
 # `git rev-parse --show-toplevel`.
 #
 # Step 2e BYO-RDBMS resolution priority:
-#   1. --audit-db-url FLAG (highest)
-#   2. $BOARD_SP_AUDIT_DB_URL env var
+#   1. --audit-db-url FLAG (highest; PERSISTS to credentials.yml at
+#      chmod 0600 — same end state as Path C accept).
+#   2. $BOARD_SP_AUDIT_DB_URL env var (runtime override; does NOT
+#      persist — ephemeral by design).
 #   3. pre-existing ~/.board-superpowers/credentials.yml (with valid
-#      audit_db_url)
-#   4. interactive prompt
+#      audit_db_url).
+#   4. interactive prompt (PERSISTS on accept; records decline on skip).
 #
 # Exit codes:
 #   0  success
@@ -354,19 +357,55 @@ fi
 # 6-scheme allowlist per ADR-0009 + 03-config-schemas.md.
 BSP_AUDIT_SCHEMES="postgresql:// postgres:// mysql:// mysql+pymysql:// sqlite:// sqlite3://"
 
-# Validate a DSN's scheme prefix. Returns 0 on match, 1 on miss.
-# Stdin: nothing. Arg: the DSN to test.
-audit_dsn_scheme_ok() {
+# Validate a DSN structurally via python3 + urllib.parse.
+# Returns 0 on accept, 1 on reject. The DSN is passed via env var
+# (not heredoc interpolation) so shell metacharacters in the DSN
+# can't break the python source.
+#
+# Accept rules:
+#   - scheme ∈ {postgresql, postgres, mysql, mysql+pymysql, sqlite, sqlite3}
+#   - non-sqlite schemes: urlparse(dsn).hostname must be non-empty
+#   - sqlite / sqlite3: urlparse(dsn).path must start with "/"
+#     (the 4-slash form `sqlite:////abs/path` yields path='//abs/path'
+#     which still starts with '/'; 3-slash relative form yields
+#     path='relative/...' and is rejected)
+audit_dsn_validate() {
     local dsn="$1"
-    local sch
-    for sch in ${BSP_AUDIT_SCHEMES}; do
-        case "${dsn}" in
-            "${sch}"*)
-                return 0
-                ;;
-        esac
-    done
-    return 1
+    BSP_AUDIT_DSN="${dsn}" python3 - <<'PY' 2>/dev/null
+import os, sys
+from urllib.parse import urlparse
+
+dsn = os.environ.get("BSP_AUDIT_DSN", "")
+allowed = {"postgresql", "postgres", "mysql", "mysql+pymysql",
+           "sqlite", "sqlite3"}
+try:
+    u = urlparse(dsn)
+except (ValueError, TypeError):
+    sys.exit(1)
+if u.scheme not in allowed:
+    sys.exit(1)
+if u.scheme in ("sqlite", "sqlite3"):
+    # Per ADR-0009: require the 4-slash absolute form
+    # (sqlite:////abs/path). urlparse on the 4-slash form yields
+    # path='//abs/path' (two leading slashes); the 3-slash relative
+    # form (sqlite:///rel/path) yields path='/rel/path' (one leading
+    # slash). Require two leading slashes so the 3-slash form is
+    # rejected even though it technically begins with '/'.
+    if not u.path or not u.path.startswith("//"):
+        sys.exit(1)
+else:
+    if not u.hostname:
+        sys.exit(1)
+    # Catch malformed port-position garbage — e.g.
+    # `postgres://user@host:5432:wrong/db`. urlparse extracts
+    # hostname='host' but accessing .port raises ValueError because
+    # '5432:wrong' isn't a valid integer port.
+    try:
+        _ = u.port
+    except ValueError:
+        sys.exit(1)
+sys.exit(0)
+PY
 }
 
 print_scheme_allowlist() {
@@ -532,9 +571,11 @@ audit_interactive_prompt() {
                 ;;
         esac
 
-        if ! audit_dsn_scheme_ok "${dsn}"; then
-            printf '[bsp ERROR] step 2e: invalid scheme in DSN: %s\n' "${dsn}" >&2
+        if ! audit_dsn_validate "${dsn}"; then
+            printf '[bsp ERROR] step 2e: DSN is malformed or has unsupported scheme: %s\n' "${dsn}" >&2
             print_scheme_allowlist stderr
+            printf '[bsp]   non-sqlite schemes require a host part\n' >&2
+            printf '[bsp]   sqlite/sqlite3 require the 4-slash absolute form (sqlite:////abs/path) per ADR-0009\n' >&2
             if [ "${attempt}" -lt "${max_attempts}" ]; then
                 printf '[bsp] retry (%d of %d remaining)\n' \
                     "$((max_attempts - attempt))" "${max_attempts}" >&2
@@ -576,39 +617,40 @@ BSP_AUDIT_DECLINED=0
 CREDENTIALS_FILE="${HOME}/.board-superpowers/credentials.yml"
 
 if [ -n "${AUDIT_DB_URL_FLAG}" ]; then
-    if ! audit_dsn_scheme_ok "${AUDIT_DB_URL_FLAG}"; then
-        printf '[bsp ERROR] step 2e: --audit-db-url has invalid scheme: %s\n' \
+    if ! audit_dsn_validate "${AUDIT_DB_URL_FLAG}"; then
+        printf '[bsp ERROR] step 2e: --audit-db-url is malformed or has unsupported scheme: %s\n' \
             "${AUDIT_DB_URL_FLAG}" >&2
         print_scheme_allowlist stderr
+        printf '[bsp]   non-sqlite schemes require a host part\n' >&2
+        printf '[bsp]   sqlite/sqlite3 require the 4-slash absolute form (sqlite:////abs/path) per ADR-0009\n' >&2
         exit 4
     fi
+    # SQLite-only filesystem-side check: parent dir must be writable.
     case "${AUDIT_DB_URL_FLAG}" in
         sqlite://*|sqlite3://*)
             if ! audit_sqlite_parent_writable "${AUDIT_DB_URL_FLAG}"; then
                 exit 4
             fi
-            # Flag with a sqlite scheme is intentional persistence
-            # — write credentials.yml so subsequent sessions don't
-            # need the flag re-passed.
-            write_credentials_yml "${AUDIT_DB_URL_FLAG}"
-            ;;
-        *)
-            # Non-sqlite flag is treated as runtime override (same as
-            # env var); we honor it without persisting credentials.yml.
-            bsp_log "step 2e: --audit-db-url provided (non-sqlite); using as runtime override (no credentials.yml write)"
             ;;
     esac
+    # Flag is the non-interactive equivalent of typing the DSN at the
+    # prompt — persist for ALL valid schemes (chmod 0600). Use
+    # $BOARD_SP_AUDIT_DB_URL for ephemeral / runtime overrides that
+    # should NOT be written to disk.
+    write_credentials_yml "${AUDIT_DB_URL_FLAG}"
 elif [ -n "${BOARD_SP_AUDIT_DB_URL:-}" ]; then
-    if ! audit_dsn_scheme_ok "${BOARD_SP_AUDIT_DB_URL}"; then
-        printf '[bsp ERROR] step 2e: BOARD_SP_AUDIT_DB_URL has invalid scheme: %s\n' \
+    if ! audit_dsn_validate "${BOARD_SP_AUDIT_DB_URL}"; then
+        printf '[bsp ERROR] step 2e: BOARD_SP_AUDIT_DB_URL is malformed or has unsupported scheme: %s\n' \
             "${BOARD_SP_AUDIT_DB_URL}" >&2
         print_scheme_allowlist stderr
+        printf '[bsp]   non-sqlite schemes require a host part\n' >&2
+        printf '[bsp]   sqlite/sqlite3 require the 4-slash absolute form (sqlite:////abs/path) per ADR-0009\n' >&2
         exit 4
     fi
     bsp_log "step 2e: BOARD_SP_AUDIT_DB_URL env var present; using as runtime override (no credentials.yml write)"
 elif [ -f "${CREDENTIALS_FILE}" ]; then
     EXISTING_DSN="$(credentials_yml_dsn "${CREDENTIALS_FILE}")"
-    if [ -n "${EXISTING_DSN}" ] && audit_dsn_scheme_ok "${EXISTING_DSN}"; then
+    if [ -n "${EXISTING_DSN}" ] && audit_dsn_validate "${EXISTING_DSN}"; then
         # Pre-existing valid file. Check mode; warn if loose.
         EXISTING_MODE=""
         if EXISTING_MODE="$(stat -f '%A' "${CREDENTIALS_FILE}" 2>/dev/null)"; then

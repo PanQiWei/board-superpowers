@@ -613,12 +613,14 @@ check 'flag sqlite: state.yml written' \
 rm -rf "${TMP}"
 
 # ---------------------------------------------------------------------------
-# Scenario 9: --audit-db-url flag (postgres — does NOT write credentials.yml)
+# Scenario 9: --audit-db-url flag (postgres) PERSISTS to credentials.yml
 # ---------------------------------------------------------------------------
-# Spec contract: when the architect supplies a DSN by --flag or env var
-# (Path A precedence), we honor it as a runtime override and do NOT
-# materialize credentials.yml on disk. Same as env-var precedence.
-printf 'Scenario 9: --audit-db-url flag (postgres — same as env)\n'
+# Spec contract (per BLOCKER 1 fix): the --audit-db-url flag is the
+# non-interactive equivalent of typing the DSN at the interactive
+# prompt. It ALWAYS persists to credentials.yml at chmod 0600,
+# regardless of scheme. Use BOARD_SP_AUDIT_DB_URL for ephemeral /
+# runtime overrides that should NOT touch disk.
+printf 'Scenario 9: --audit-db-url flag (postgres) persists like sqlite\n'
 
 TMP="$(mktemp -d)"
 HOME_DIR="${TMP}/home"
@@ -633,17 +635,24 @@ stub_gh "${STUBS_DIR}"
 printf '%s\n' "${CANONICAL_STATUS}" > "${STUBS_DIR}/status_opts"
 printf '[]\n' > "${STUBS_DIR}/labels.json"
 
+PG_DSN="postgresql://u:p@h:5432/d"
+
 set +e
 run_bootstrap_input "${HOME_DIR}" "${PLUGIN_ROOT}" "${STUBS_DIR}" \
     "" "" \
     --owner foo --project 1 --repo-root "${REPO_ROOT}" \
-    --audit-db-url "postgresql://u:p@h:5432/d" >/dev/null 2>&1
+    --audit-db-url "${PG_DSN}" >/dev/null 2>&1
 RC=$?
 set -e
 
 assert_eq 'flag postgres: exit 0' '0' "${RC}"
-check_not 'flag postgres: NO credentials.yml written (precedence)' \
-    test -f "${HOME_DIR}/.board-superpowers/credentials.yml"
+CRED="${HOME_DIR}/.board-superpowers/credentials.yml"
+check 'flag postgres: credentials.yml written (flag persists)' \
+    test -f "${CRED}"
+assert_eq 'flag postgres: credentials.yml mode 0600' \
+    '600' "$(file_mode "${CRED}")"
+check 'flag postgres: credentials.yml has the DSN we passed' \
+    grep -Fq "${PG_DSN}" "${CRED}"
 STATE_DIR="$(normalized_state_dir "${HOME_DIR}" "${REPO_ROOT}")"
 check 'flag postgres: state.yml written' \
     test -f "${STATE_DIR}/state.yml"
@@ -691,6 +700,158 @@ check 'envvar+file: state.yml written' \
     test -f "${STATE_DIR}/state.yml"
 
 rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
+# Scenario 11: structural DSN validation — malformed network DSNs reject
+# ---------------------------------------------------------------------------
+# Per BLOCKER 2 fix: scheme-prefix matching alone is insufficient. We
+# require urlparse(dsn).hostname for non-sqlite schemes, so loose
+# strings that happen to start with `postgres://` but have no host or
+# malformed authority are rejected with exit 4.
+printf 'Scenario 11: malformed network DSN rejected (no hostname)\n'
+
+run_validation_reject() {
+    local label="$1"
+    local dsn="$2"
+
+    local tmp home_dir plugin_root stubs_dir repo_root
+    tmp="$(mktemp -d)"
+    home_dir="${tmp}/home"
+    plugin_root="${tmp}/plugin"
+    stubs_dir="${tmp}/stubs"
+    repo_root="${tmp}/repo"
+
+    mkdir -p "${home_dir}" "${stubs_dir}"
+    make_stub_plugin_root "0.2.0" "${plugin_root}"
+    init_tmp_repo "${repo_root}" "foo/bar"
+    stub_gh "${stubs_dir}"
+    printf '%s\n' "${CANONICAL_STATUS}" > "${stubs_dir}/status_opts"
+    printf '[]\n' > "${stubs_dir}/labels.json"
+
+    set +e
+    local err_out rc
+    err_out="$(run_bootstrap_input "${home_dir}" "${plugin_root}" "${stubs_dir}" \
+        "" "BOARD_SP_AUDIT_DB_URL=${dsn}" \
+        --owner foo --project 1 --repo-root "${repo_root}" 2>&1 1>/dev/null)"
+    rc=$?
+    set -e
+
+    assert_eq "${label}: exit 4" '4' "${rc}"
+    local state_dir
+    state_dir="$(normalized_state_dir "${home_dir}" "${repo_root}")"
+    check_not "${label}: NO state.yml leak" \
+        test -f "${state_dir}/state.yml"
+    check_not "${label}: NO credentials.yml leak" \
+        test -f "${home_dir}/.board-superpowers/credentials.yml"
+    # Suppress unused-var warning for err_out — we keep it captured for
+    # ad-hoc print-on-failure debugging.
+    : "${err_out:-}"
+
+    rm -rf "${tmp}"
+}
+
+run_validation_accept() {
+    local label="$1"
+    local dsn="$2"
+
+    local tmp home_dir plugin_root stubs_dir repo_root
+    tmp="$(mktemp -d)"
+    home_dir="${tmp}/home"
+    plugin_root="${tmp}/plugin"
+    stubs_dir="${tmp}/stubs"
+    repo_root="${tmp}/repo"
+
+    mkdir -p "${home_dir}" "${stubs_dir}"
+    make_stub_plugin_root "0.2.0" "${plugin_root}"
+    init_tmp_repo "${repo_root}" "foo/bar"
+    stub_gh "${stubs_dir}"
+    printf '%s\n' "${CANONICAL_STATUS}" > "${stubs_dir}/status_opts"
+    printf '[]\n' > "${stubs_dir}/labels.json"
+
+    set +e
+    run_bootstrap_input "${home_dir}" "${plugin_root}" "${stubs_dir}" \
+        "" "BOARD_SP_AUDIT_DB_URL=${dsn}" \
+        --owner foo --project 1 --repo-root "${repo_root}" >/dev/null 2>&1
+    local rc=$?
+    set -e
+
+    assert_eq "${label}: exit 0" '0' "${rc}"
+    local state_dir
+    state_dir="$(normalized_state_dir "${home_dir}" "${repo_root}")"
+    check "${label}: state.yml written" \
+        test -f "${state_dir}/state.yml"
+
+    rm -rf "${tmp}"
+}
+
+# Rejects: malformed network forms.
+run_validation_reject 'malformed: postgres://user@host:5432:wrong/db' \
+    'postgres://user@host:5432:wrong/db'
+run_validation_reject 'malformed: mysql:// (no hostname)' \
+    'mysql://'
+run_validation_reject 'malformed: postgresql:/single-slash (no ://)' \
+    'postgresql:/single-slash'
+
+# ---------------------------------------------------------------------------
+# Scenario 12: 3-slash sqlite (relative path) is rejected
+# ---------------------------------------------------------------------------
+# Per ADR-0009 + BLOCKER 2: SQLite must use the 4-slash absolute form
+# (sqlite:////abs/path). The 3-slash form (sqlite:///rel/path) parses
+# to a relative path and is rejected; the error message must reference
+# ADR-0009's 4-slash convention so the architect knows the fix.
+printf 'Scenario 12: 3-slash sqlite (relative path) rejected; error references 4-slash convention\n'
+
+TMP="$(mktemp -d)"
+HOME_DIR="${TMP}/home"
+PLUGIN_ROOT="${TMP}/plugin"
+STUBS_DIR="${TMP}/stubs"
+REPO_ROOT="${TMP}/repo"
+
+mkdir -p "${HOME_DIR}" "${STUBS_DIR}"
+make_stub_plugin_root "0.2.0" "${PLUGIN_ROOT}"
+init_tmp_repo "${REPO_ROOT}" "foo/bar"
+stub_gh "${STUBS_DIR}"
+printf '%s\n' "${CANONICAL_STATUS}" > "${STUBS_DIR}/status_opts"
+printf '[]\n' > "${STUBS_DIR}/labels.json"
+
+set +e
+ERR_OUT="$(run_bootstrap_input "${HOME_DIR}" "${PLUGIN_ROOT}" "${STUBS_DIR}" \
+    "" "BOARD_SP_AUDIT_DB_URL=sqlite:///relative/path/audit.db" \
+    --owner foo --project 1 --repo-root "${REPO_ROOT}" 2>&1 1>/dev/null)"
+RC=$?
+set -e
+
+assert_eq 'sqlite 3-slash: exit 4' '4' "${RC}"
+check 'sqlite 3-slash: error references ADR-0009 4-slash convention' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq '4-slash'" _ "${ERR_OUT}"
+check 'sqlite 3-slash: error mentions ADR-0009' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq 'ADR-0009'" _ "${ERR_OUT}"
+check_not 'sqlite 3-slash: no state.yml' \
+    test -f "$(normalized_state_dir "${HOME_DIR}" "${REPO_ROOT}")/state.yml"
+check_not 'sqlite 3-slash: no credentials.yml' \
+    test -f "${HOME_DIR}/.board-superpowers/credentials.yml"
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
+# Scenario 13: structural DSN validation — well-formed DSNs accept
+# ---------------------------------------------------------------------------
+# Per BLOCKER 2 fix: the validator must continue to accept the
+# canonical well-formed shapes. Sqlite 4-slash + postgres with full
+# auth/port/db/query + minimal postgres host-only.
+printf 'Scenario 13: well-formed DSNs accept (4-slash sqlite, full + minimal postgres)\n'
+
+# 4-slash sqlite (absolute path): accept. Use a writable parent.
+TMP_SQLITE_PARENT="$(mktemp -d)"
+run_validation_accept 'accept: 4-slash sqlite' \
+    "sqlite:////${TMP_SQLITE_PARENT#/}/audit.db"
+rm -rf "${TMP_SQLITE_PARENT}"
+
+run_validation_accept 'accept: postgres with auth+port+db+query' \
+    'postgresql://user:pwd@host:5432/db?ssl=true'
+
+run_validation_accept 'accept: postgres host-only (no port/auth)' \
+    'postgresql://localhost/db'
 
 # ---------------------------------------------------------------------------
 # Summary
