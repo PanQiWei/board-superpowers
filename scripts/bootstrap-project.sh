@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # scripts/bootstrap-project.sh — F-B2 per-repo bootstrap engine
-# (slices 2 + 3 — steps 2a-2e + initial state.yml write).
+# (slices 2 + 3 + 4 — steps 2a-2e, step 4 routing block injection,
+# initial state.yml write with routing_blocks[]).
 #
 # Spec:
 #   docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md
@@ -18,10 +19,9 @@
 # Capability: when invoked with --owner/--project/--repo-root, run
 # F-B2 steps 2a-2e (standard labels via setup-labels.sh, Status field
 # validation, config.yml write, .gitignore append, BYO-RDBMS credential
-# UX) and write the initial host-local state.yml. Step 4 (routing
-# block injection) is deferred to slice 4 of the same card;
-# routing_blocks is written as the empty list [] so the state file is
-# valid v1 schema today.
+# UX), step 4 (dual-file routing block injection into AGENTS.md +
+# CLAUDE.md with per-file SHA256 tamper hashes), and write the initial
+# host-local state.yml with the recorded routing_blocks[] entries.
 #
 # Argument vector:
 #   bash scripts/bootstrap-project.sh \
@@ -59,6 +59,8 @@
 #   3  step 2a (labels) delegation failed
 #   4  step 2e BYO-RDBMS config invalid (bad scheme; sqlite parent
 #      not writable; interactive retry budget exhausted)
+#   5  step 4 routing block injection blocked by orphan markers
+#      (only one of opening / closing marker present in target file)
 #   64 unknown argument
 
 set -euo pipefail
@@ -670,6 +672,57 @@ else
     audit_interactive_prompt
 fi
 
+# --- Step 4 — dual-file routing block injection --------------------------
+#
+# Per spec § 1.5.2 step 4: inject the canonical routing block into
+# <repo>/AGENTS.md AND <repo>/CLAUDE.md between the marker pair, record
+# per-file SHA256 hashes for state.yml:routing_blocks[].
+#
+# Source-of-truth file:
+#   <plugin-root>/skills/using-board-superpowers/references/agentsmd-routing.md
+#
+# Helper: bsp_inject_routing_block (in scripts/lib/common.sh) — handles
+# normalization, marker scan, atomic write. Returns exit 5 on orphan
+# markers (one but not both); on that we abort step 4 BEFORE any
+# state.yml write so the repo stays in pre-bootstrap state.
+
+ROUTING_SOURCE="${PLUGIN_ROOT}/skills/using-board-superpowers/references/agentsmd-routing.md"
+if [ ! -f "${ROUTING_SOURCE}" ]; then
+    bsp_die "step 4: routing source not found at ${ROUTING_SOURCE}"
+fi
+
+bsp_log "step 4: injecting routing block into AGENTS.md + CLAUDE.md"
+
+ROUTING_HASH_AGENTS=""
+ROUTING_HASH_CLAUDE=""
+
+# AGENTS.md.
+set +e
+ROUTING_HASH_AGENTS="$(bsp_inject_routing_block "${REPO_ROOT}/AGENTS.md" "${ROUTING_SOURCE}")"
+RC_AGENTS=$?
+set -e
+if [ "${RC_AGENTS}" -eq 5 ]; then
+    # Orphan marker — error already printed verbatim by helper. Pass
+    # through the same exit code so end-to-end tests can grep for
+    # "F-B2 step 4" in stderr.
+    exit 5
+fi
+if [ "${RC_AGENTS}" -ne 0 ]; then
+    bsp_die "step 4: routing injection into ${REPO_ROOT}/AGENTS.md failed (exit ${RC_AGENTS})"
+fi
+
+# CLAUDE.md.
+set +e
+ROUTING_HASH_CLAUDE="$(bsp_inject_routing_block "${REPO_ROOT}/CLAUDE.md" "${ROUTING_SOURCE}")"
+RC_CLAUDE=$?
+set -e
+if [ "${RC_CLAUDE}" -eq 5 ]; then
+    exit 5
+fi
+if [ "${RC_CLAUDE}" -ne 0 ]; then
+    bsp_die "step 4: routing injection into ${REPO_ROOT}/CLAUDE.md failed (exit ${RC_CLAUDE})"
+fi
+
 # --- Step 3 — initial state.yml write (host-local) -----------------------
 
 # Ensure ~/.board-superpowers exists at mode 0700; mkdir -p is idempotent.
@@ -700,6 +753,9 @@ yaml_get() {
 write_state_yml() {
     local ts="$1"
     local version="$2"
+    local hash_agents="$3"
+    local hash_claude="$4"
+    local routing_ts="$5"
 
     if [ -d "${STATE_FILE}" ]; then
         bsp_die "refuses to write: ${STATE_FILE} exists as a directory, not a file"
@@ -711,15 +767,29 @@ write_state_yml() {
     # shellcheck disable=SC2064
     trap "rm -f '${tmp}'" EXIT
 
-    cat > "${tmp}" <<EOF
-schema_version: 1
-repo_bootstrapped_at: "${ts}"
-last_seen_version_in_repo: "${version}"
-features_enabled:
-  - bootstrap.host
-  - bootstrap.per_repo
-routing_blocks: []
-EOF
+    {
+        printf 'schema_version: 1\n'
+        printf 'repo_bootstrapped_at: "%s"\n' "${ts}"
+        printf 'last_seen_version_in_repo: "%s"\n' "${version}"
+        printf 'features_enabled:\n'
+        printf '  - bootstrap.host\n'
+        printf '  - bootstrap.per_repo\n'
+        if [ -n "${hash_agents}" ] || [ -n "${hash_claude}" ]; then
+            printf 'routing_blocks:\n'
+            if [ -n "${hash_agents}" ]; then
+                printf '  - target_file: "AGENTS.md"\n'
+                printf '    block_hash: "sha256:%s"\n' "${hash_agents}"
+                printf '    injected_at: "%s"\n' "${routing_ts}"
+            fi
+            if [ -n "${hash_claude}" ]; then
+                printf '  - target_file: "CLAUDE.md"\n'
+                printf '    block_hash: "sha256:%s"\n' "${hash_claude}"
+                printf '    injected_at: "%s"\n' "${routing_ts}"
+            fi
+        else
+            printf 'routing_blocks: []\n'
+        fi
+    } > "${tmp}"
 
     chmod 0644 "${tmp}"
 
@@ -752,14 +822,16 @@ if [ -f "${STATE_FILE}" ]; then
         else
             bsp_log "state.yml refresh: ${EXISTING_VERSION:-<unset>} → ${PLUGIN_VERSION}"
         fi
-        write_state_yml "${EXISTING_TS}" "${PLUGIN_VERSION}"
+        write_state_yml "${EXISTING_TS}" "${PLUGIN_VERSION}" \
+            "${ROUTING_HASH_AGENTS}" "${ROUTING_HASH_CLAUDE}" "${NOW_TS}"
         bsp_log "wrote ${STATE_FILE}"
     fi
 else
     bsp_log "writing initial state.yml at ${STATE_FILE}"
-    write_state_yml "${NOW_TS}" "${PLUGIN_VERSION}"
+    write_state_yml "${NOW_TS}" "${PLUGIN_VERSION}" \
+        "${ROUTING_HASH_AGENTS}" "${ROUTING_HASH_CLAUDE}" "${NOW_TS}"
     bsp_log "wrote ${STATE_FILE}"
 fi
 
-bsp_log "F-B2 slice 3 complete (steps 2a-2e + initial state.yml). Slice 4 (routing block injection) deferred."
+bsp_log "F-B2 slice 4 complete (steps 2a-2e + step 4 routing block injection + state.yml with routing_blocks)."
 exit 0

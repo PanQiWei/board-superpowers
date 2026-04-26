@@ -123,6 +123,11 @@ EOF
     cp "${SCRIPT_UNDER_TEST}" "${target_dir}/scripts/bootstrap-project.sh"
     chmod +x "${target_dir}/scripts/setup-labels.sh"
     chmod +x "${target_dir}/scripts/bootstrap-project.sh"
+    # Slice 4 — routing block injection source-of-truth (required by
+    # step 4 even though this test exercises step 2e).
+    mkdir -p "${target_dir}/skills/using-board-superpowers/references"
+    cp "${PLUGIN_ROOT_REAL}/skills/using-board-superpowers/references/agentsmd-routing.md" \
+       "${target_dir}/skills/using-board-superpowers/references/agentsmd-routing.md"
 }
 
 init_tmp_repo() {

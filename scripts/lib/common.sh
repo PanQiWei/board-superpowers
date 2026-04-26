@@ -414,6 +414,264 @@ bsp_pick_worktree_dir() {
     printf '%s\n' "${HOME}/.config/superpowers/worktrees"
 }
 
+# --- Routing block injection ---------------------------------------------
+#
+# Injects the canonical routing block from a source file (typically
+# skills/using-board-superpowers/references/agentsmd-routing.md) into a
+# target file (typically <repo>/AGENTS.md or <repo>/CLAUDE.md) between
+# the marker pair:
+#
+#     <!-- board-superpowers:routing -->
+#     ...
+#     <!-- /board-superpowers:routing -->
+#
+# Source-file normalization (always applied before hashing AND before
+# injection — see spec
+# docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md
+# § 1.5.2 step 4 + the slice-4 note in
+# docs/plans/bootstrap/card-2-bootstrap.md):
+#   1. Strip leading UTF-8 BOM (EF BB BF) if present.
+#   2. Replace every CRLF / CR with LF.
+# The post-normalization bytes ARE the canonical routing block and
+# are SHA256-hashed to populate state.yml:routing_blocks[].block_hash.
+#
+# Target-file rules:
+#   - Absent: create with marker pair wrapping the block content.
+#   - Existing, BOTH markers present: replace bytes between markers
+#     with normalized block content. Bytes OUTSIDE markers (including
+#     BOM at byte 0, original line endings) are preserved verbatim.
+#   - Existing, NEITHER marker present: append the marker-wrapped
+#     block to the file (preserving original ending).
+#   - Existing, exactly ONE marker (orphan): emit verbatim error and
+#     return exit 5 — DO NOT modify the file.
+#
+# Stdout on success: the hex SHA256 hash (no "sha256:" prefix), one
+# line. Caller is expected to prepend "sha256:" when recording into
+# state.yml.
+#
+# Args: <target_file> <source_file>
+# Exit codes:
+#   0  success — hash printed to stdout
+#   1  bad args / source file unreadable / target write failure
+#   5  target has orphan marker (one but not both)
+
+bsp_inject_routing_block() {
+    local target="${1:?usage: bsp_inject_routing_block <target_file> <source_file>}"
+    local source="${2:?usage: bsp_inject_routing_block <target_file> <source_file>}"
+
+    if [ ! -f "${source}" ]; then
+        bsp_die "bsp_inject_routing_block: source file not found: ${source}"
+    fi
+
+    bsp_require_cmd python3 "macOS / Linux ship python3 by default"
+
+    # Hand the entire injection to python3: reading binary, BOM
+    # stripping, LF normalization, SHA256 over the post-normalization
+    # bytes, marker scan, byte-precise replacement, atomic write via
+    # mktemp+os.replace are all easier in python than bash. The script
+    # writes the hex hash to stdout; bash captures it.
+    BSP_TARGET="${target}" BSP_SOURCE="${source}" python3 - <<'PY'
+import hashlib
+import os
+import sys
+import tempfile
+
+target = os.environ["BSP_TARGET"]
+source = os.environ["BSP_SOURCE"]
+
+OPEN  = b"<!-- board-superpowers:routing -->"
+CLOSE = b"<!-- /board-superpowers:routing -->"
+BOM   = b"\xef\xbb\xbf"
+
+def normalize(data: bytes) -> bytes:
+    # Strip leading UTF-8 BOM if present.
+    if data.startswith(BOM):
+        data = data[len(BOM):]
+    # Normalize CRLF / lone CR to LF.
+    data = data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    return data
+
+# Read + normalize source bytes.
+try:
+    with open(source, "rb") as f:
+        raw_source = f.read()
+except OSError as e:
+    sys.stderr.write(f"[bsp ERROR] cannot read source: {e}\n")
+    sys.exit(1)
+
+block_content = normalize(raw_source)
+# Hash over the normalized bytes (which become exactly what we write
+# between markers). Trim a single trailing newline before hashing so
+# the recorded hash matches the bytes literally between markers.
+content_for_hash = block_content
+if content_for_hash.endswith(b"\n"):
+    content_for_hash = content_for_hash[:-1]
+block_hash = hashlib.sha256(content_for_hash).hexdigest()
+
+# The bytes that go between markers — no leading newline, exactly one
+# trailing newline so closing marker sits on its own line.
+between = content_for_hash + b"\n"
+
+def atomic_write(path, payload):
+    parent = os.path.dirname(path) or "."
+    fd, tmp = tempfile.mkstemp(prefix=".bsp-inject-", dir=parent)
+    try:
+        with os.fdopen(fd, "wb") as fh:
+            fh.write(payload)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+if not os.path.exists(target):
+    payload = OPEN + b"\n" + between + CLOSE + b"\n"
+    try:
+        atomic_write(target, payload)
+    except OSError as e:
+        sys.stderr.write(f"[bsp ERROR] cannot write target: {e}\n")
+        sys.exit(1)
+    print(block_hash)
+    sys.exit(0)
+
+# Existing target — read, scan, classify.
+try:
+    with open(target, "rb") as f:
+        original = f.read()
+except OSError as e:
+    sys.stderr.write(f"[bsp ERROR] cannot read target: {e}\n")
+    sys.exit(1)
+
+# Preserve a leading BOM at byte 0 of the target file. It's NOT part
+# of the marker scan and NOT part of the hashed region. The scan
+# happens against `body`; final write reattaches the BOM unchanged.
+bom_prefix = b""
+body = original
+if body.startswith(BOM):
+    bom_prefix = BOM
+    body = body[len(BOM):]
+
+open_idx  = body.find(OPEN)
+close_idx = body.find(CLOSE)
+
+# Orphan detection.
+if (open_idx == -1) ^ (close_idx == -1):
+    # Determine line numbers (1-based) for the present marker — only
+    # for stderr explanatory text. Use original (with BOM) so the
+    # numbers match what `cat -n` would show the architect.
+    def line_of(buf, idx_no_bom):
+        if idx_no_bom == -1:
+            return -1
+        idx = idx_no_bom + len(bom_prefix)
+        return buf[:idx].count(b"\n") + 1
+
+    open_present = open_idx != -1
+    if open_present:
+        present_marker = OPEN.decode("utf-8")
+        absent_marker  = CLOSE.decode("utf-8")
+        line_no = line_of(original, open_idx)
+    else:
+        present_marker = CLOSE.decode("utf-8")
+        absent_marker  = OPEN.decode("utf-8")
+        line_no = line_of(original, close_idx)
+
+    sys.stderr.write(
+        "ERROR: F-B2 step 4 (routing block injection) cannot proceed.\n"
+        "\n"
+        f"Target file:    {target}\n"
+        f"Detected:       opening marker '{OPEN.decode('utf-8')}'\n"
+        f"                present at line {line_no if open_present else '?'}, but closing marker\n"
+        f"                '{CLOSE.decode('utf-8')}' is absent.\n"
+        "                (Or vice versa.)\n"
+        "\n"
+        "This indicates either:\n"
+        "  (1) a partial or corrupted previous injection\n"
+        "  (2) hand-edited markers (one removed, one left)\n"
+        "  (3) a third party stripped one marker\n"
+        "\n"
+        "Recovery options (pick one, then re-run F-B2):\n"
+        "  (a) Restore both markers — add the closing marker AT or AFTER the\n"
+        "      content you want preserved as plugin-managed.\n"
+        "  (b) Delete the entire file — F-B2 will re-create it with just the\n"
+        "      routing block. Use only if AGENTS.md content was minimal.\n"
+        "  (c) Strip the orphan marker — manually remove the lone opening\n"
+        "      marker. F-B2 will then treat the file as case-C (no markers,\n"
+        "      will append fresh block).\n"
+        "\n"
+        "F-B2 has NOT written state.yml. Repo state remains pre-bootstrap.\n"
+        "Re-run after fixing.\n"
+    )
+    # Dummy reads to keep flake8 happy if any are unused
+    _ = present_marker, absent_marker
+    sys.exit(5)
+
+if open_idx == -1 and close_idx == -1:
+    # Append marker-wrapped block. Preserve everything before; tack
+    # on a leading newline if the file doesn't already end with one.
+    suffix = b""
+    if body and not body.endswith(b"\n"):
+        suffix += b"\n"
+    suffix += b"\n"  # blank line separator between existing content + marker
+    suffix += OPEN + b"\n" + between + CLOSE + b"\n"
+    payload = bom_prefix + body + suffix
+    try:
+        atomic_write(target, payload)
+    except OSError as e:
+        sys.stderr.write(f"[bsp ERROR] cannot write target: {e}\n")
+        sys.exit(1)
+    print(block_hash)
+    sys.exit(0)
+
+# Both markers present — replace bytes between them.
+if open_idx > close_idx:
+    sys.stderr.write(
+        "ERROR: F-B2 step 4 (routing block injection) cannot proceed.\n"
+        f"Target file:    {target}\n"
+        "Detected:       closing marker appears BEFORE opening marker.\n"
+        "                Markers are reversed or the file is corrupted.\n"
+        "\n"
+        "Fix the file manually (markers must appear in the order\n"
+        "open-then-close), then re-run F-B2.\n"
+        "\n"
+        "F-B2 has NOT written state.yml. Repo state remains pre-bootstrap.\n"
+    )
+    sys.exit(5)
+
+# Inclusive end position: keep everything through CLOSE marker bytes.
+close_end = close_idx + len(CLOSE)
+
+before = body[: open_idx]
+after  = body[close_end :]
+
+# Strip the immediate newline AFTER the OPEN marker we are removing
+# (start of region to replace) and the immediate newline BEFORE the
+# CLOSE marker we are keeping start-of (end of region) is implicit in
+# how we slice; we replace bytes between OPEN and CLOSE wholesale.
+new_middle = OPEN + b"\n" + between + CLOSE
+
+# Ensure the file ends with a single trailing newline. Don't double
+# up if `after` already starts with content, just preserve.
+payload = bom_prefix + before + new_middle + after
+# Guarantee single trailing newline at EOF.
+if not payload.endswith(b"\n"):
+    payload += b"\n"
+else:
+    # Trim accidental trailing-newline doubling at EOF only.
+    while payload.endswith(b"\n\n"):
+        payload = payload[:-1]
+
+try:
+    atomic_write(target, payload)
+except OSError as e:
+    sys.stderr.write(f"[bsp ERROR] cannot write target: {e}\n")
+    sys.exit(1)
+print(block_hash)
+sys.exit(0)
+PY
+}
+
 # --- Card slug helper ----------------------------------------------------
 #
 # Convert a card title to a branch-safe slug per board-canon's

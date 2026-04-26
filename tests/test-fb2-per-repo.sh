@@ -7,9 +7,9 @@
 #
 # Scope: Slice 2 of Card 2 — F-B2 engine steps 2a-2d + initial
 # state.yml write. Step 2e (BYO-RDBMS) is slice 3, step 4 (routing
-# block injection) is slice 4 — both OUT of scope here. The state.yml
-# this slice writes contains `routing_blocks: []` (empty list);
-# slice 4 will populate it.
+# block injection) is slice 4 — both shipped now. The routing_blocks
+# assertions below were tightened in slice 4 once injection wiring
+# landed.
 #
 # Contracts under test (8 scenarios):
 #   1. Cold start: tmp HOME + tmp git repo. Stubbed gh returns
@@ -29,8 +29,8 @@
 #   6. .gitignore creation: tmp git repo with NO .gitignore. F-B2
 #      creates it with the entries.
 #   7. state.yml initial write: assert all 5 schema fields present,
-#      routing_blocks is the empty list, file mode 0644, parent dir
-#      0700.
+#      routing_blocks has 2 entries (one per target file — wired by
+#      slice 4), file mode 0644, parent dir 0700.
 #   8. Labels delegation failure: stub gh fails on label create.
 #      Exit 3; F-B2 aborts BEFORE writing state.yml (no state.yml
 #      lingers).
@@ -134,6 +134,12 @@ EOF
     cp "${SCRIPT_UNDER_TEST}" "${target_dir}/scripts/bootstrap-project.sh"
     chmod +x "${target_dir}/scripts/setup-labels.sh"
     chmod +x "${target_dir}/scripts/bootstrap-project.sh"
+    # Slice 4 — routing block injection requires the source-of-truth
+    # file under the plugin tree. Copy it so bootstrap-project.sh
+    # step 4 finds it.
+    mkdir -p "${target_dir}/skills/using-board-superpowers/references"
+    cp "${PLUGIN_ROOT_REAL}/skills/using-board-superpowers/references/agentsmd-routing.md" \
+       "${target_dir}/skills/using-board-superpowers/references/agentsmd-routing.md"
 }
 
 # Initialize a tmp git repo with origin pointing at owner/name.
@@ -362,8 +368,8 @@ check 'state.yml has bootstrap.host item' \
     grep -Fxq '  - bootstrap.host' "${STATE}"
 check 'state.yml has bootstrap.per_repo item' \
     grep -Fxq '  - bootstrap.per_repo' "${STATE}"
-check 'state.yml has empty routing_blocks' \
-    grep -Fxq 'routing_blocks: []' "${STATE}"
+check 'state.yml has routing_blocks with 2 entries (slice 4 wired)' \
+    bash -c "grep -c '^  - target_file:' \"\$1\" | grep -Fxq '2'" _ "${STATE}"
 check 'state.yml has ISO-8601 repo_bootstrapped_at' \
     grep -Eq '^repo_bootstrapped_at: "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z"$' "${STATE}"
 
@@ -637,8 +643,8 @@ check 'repo_bootstrapped_at field' \
 check 'last_seen_version_in_repo field' \
     grep -Fxq 'last_seen_version_in_repo: "0.2.0"' "${STATE}"
 check 'features_enabled field' grep -Eq '^features_enabled:' "${STATE}"
-check 'routing_blocks field — empty list' \
-    grep -Fxq 'routing_blocks: []' "${STATE}"
+check 'routing_blocks field populated with both target files (slice 4)' \
+    bash -c "grep -c '^  - target_file:' \"\$1\" | grep -Fxq '2'" _ "${STATE}"
 
 rm -rf "${TMP}"
 
