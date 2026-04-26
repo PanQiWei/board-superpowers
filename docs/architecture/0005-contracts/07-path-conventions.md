@@ -113,7 +113,7 @@ table.
 
 - ADR-0003 — "Path resolution priority" (the canonical 3-priority
   list landing here as a contract).
-- `scripts/claim-card.sh` — `bsp_pick_worktree_dir` is the
+- `scripts/lib/common.sh` — `bsp_pick_worktree_dir` is the
   implementation; lines 132–160 are the canonical reference.
 - `AGENTS.md` "Worktree default path" — the same priority list
   surfaced in the developer guide; it points here.

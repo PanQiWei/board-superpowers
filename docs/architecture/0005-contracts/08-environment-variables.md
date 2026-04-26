@@ -61,7 +61,7 @@ follow-up; no current consumer.
 |----------|-------|
 | Format | Absolute filesystem path. Relative paths are rejected. |
 | Default | unset → falls through to project-local `.worktrees/` (priority 2) → `$HOME/.config/superpowers/worktrees/<project>/` (priority 3) |
-| Read by | `scripts/claim-card.sh` (`bsp_pick_worktree_dir`) |
+| Read by | `scripts/lib/common.sh` (`bsp_pick_worktree_dir`) |
 | Validation | If set, MUST start with `/`. Relative input → `bsp_die "BOARD_SP_WORKTREE_DIR must be absolute, got: ..." 30` (exit `30`). |
 
 When set, this is the **highest-priority** worktree-parent
