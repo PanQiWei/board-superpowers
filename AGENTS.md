@@ -39,7 +39,7 @@ deferred atomics ship):
   up manually. The hook never injects `INVOKE: bootstrapping-repo`
   in v1-minimum.
 - **No `migrating-repo-version` skill yet** — current plugin
-  version is `v0.1.0-minimum`; nothing to migrate from. The
+  version is `v0.1.1`; nothing to migrate from. The
   hook never injects `INVOKE: migrating-repo-version` in
   v1-minimum.
 
@@ -554,7 +554,7 @@ ls docs/architecture/adr/                      # what's decided
 <!-- board-superpowers:routing -->
 ## board-superpowers session routing
 
-This project uses the `board-superpowers` plugin (v0.1.0-minimum).
+This project uses the `board-superpowers` plugin (v0.1.1).
 Any Claude Code session in this project plays one of two roles:
 
 - **Board Consumer** — if the first message contains `[board-card:#N]`,

@@ -50,7 +50,7 @@ These rules apply to every path in this section:
 
 Three-priority list for `<WORKTREE_DIR>` (the **parent** directory
 under which a per-claim worktree lives). Pinned by ADR-0003 and
-implemented in `scripts/claim-card.sh` (`bsp_pick_worktree_dir`).
+implemented in `scripts/lib/common.sh` (`bsp_pick_worktree_dir`).
 
 | Priority | Source | Condition | Path |
 |----------|--------|-----------|------|

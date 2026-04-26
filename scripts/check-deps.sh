@@ -310,5 +310,5 @@ if [ "${RUNTIME_FAILURES}" -gt 0 ]; then
     exit 3
 fi
 
-printf '\nAll dependencies satisfied (board-superpowers v0.1.0-minimum).\n'
+printf '\nAll dependencies satisfied (board-superpowers v0.1.1).\n'
 exit 0

@@ -55,7 +55,7 @@ dep_ok = "${DEP_OK}"
 has_config = "${HAS_CONFIG}"
 dep_output = """${DEP_OUTPUT}"""
 
-lines = ["board-superpowers v0.1.0-minimum loaded."]
+lines = ["board-superpowers v0.1.1 loaded."]
 if dep_ok != "yes":
     lines.append("⚠️  Dependency check failed:")
     lines.append(dep_output)
