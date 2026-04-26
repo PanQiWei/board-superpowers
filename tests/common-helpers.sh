@@ -6,7 +6,8 @@
 #   bsp_normalize_repo_path <abs-repo-root> — strip leading "/", replace
 #       remaining "/" with "-"; reject relative paths.
 #   bsp_pick_worktree_dir [repo_root] — 3-priority resolution
-#       (env > config.yml > default) per ADR-0003.
+#       (env > project-local .worktrees/ > default) per ADR-0003 and
+#       docs/architecture/0005-contracts/07-path-conventions.md L51-58.
 #   bsp_host_state_dir <repo_root> — emit
 #       ${HOME}/.board-superpowers/repos/<normalized>
 #       (signature change: was <host> <repo>).
@@ -113,49 +114,57 @@ printf 'Scenario: bsp_pick_worktree_dir env override\n'
 capture_helper 'BOARD_SP_WORKTREE_DIR=/custom/wt bsp_pick_worktree_dir'
 assert_eq 'env override (no repo arg)' '/custom/wt' "${OUT}"
 
-# Even if a repo arg is passed, env wins.
+# Even if a repo arg with a gitignored .worktrees/ is passed, env wins.
 TMP="$(mktemp -d)"
-mkdir -p "${TMP}/.board-superpowers"
-cat > "${TMP}/.board-superpowers/config.yml" <<EOF
-worktree_dir: /per-repo/dir
-EOF
+(
+    cd "${TMP}"
+    git init -q -b main
+    git config user.email test@example.com
+    git config user.name 'Test'
+    mkdir .worktrees
+    printf '.worktrees/\n' > .gitignore
+    git add .gitignore
+    git -c commit.gpgsign=false commit -q -m gitignore
+)
 capture_helper "BOARD_SP_WORKTREE_DIR=/custom/wt bsp_pick_worktree_dir '${TMP}'"
-assert_eq 'env override beats config.yml' '/custom/wt' "${OUT}"
+assert_eq 'env override beats project-local .worktrees' '/custom/wt' "${OUT}"
 rm -rf "${TMP}"
 
 # ---------------------------------------------------------------------------
-# Scenario 4: bsp_pick_worktree_dir — config.yml (priority 2)
+# Scenario 4: bsp_pick_worktree_dir — project-local .worktrees/ (priority 2)
 # ---------------------------------------------------------------------------
-printf 'Scenario: bsp_pick_worktree_dir config.yml lookup\n'
+printf 'Scenario: bsp_pick_worktree_dir project-local .worktrees/ lookup\n'
 
+# Happy path: dir exists AND is gitignored → priority 2 fires.
 TMP="$(mktemp -d)"
-mkdir -p "${TMP}/.board-superpowers"
-cat > "${TMP}/.board-superpowers/config.yml" <<EOF
-# project intent
-worktree_dir: /per-repo/dir
-project_owner: PanQiWei
-EOF
-capture_helper "unset BOARD_SP_WORKTREE_DIR; bsp_pick_worktree_dir '${TMP}'"
-assert_eq 'config.yml worktree_dir' '/per-repo/dir' "${OUT}"
+(
+    cd "${TMP}"
+    git init -q -b main
+    git config user.email test@example.com
+    git config user.name 'Test'
+    mkdir .worktrees
+    printf '.worktrees/\n' > .gitignore
+    git add .gitignore
+    git -c commit.gpgsign=false commit -q -m gitignore
+)
+capture_helper "unset BOARD_SP_WORKTREE_DIR; HOME=/test/home bsp_pick_worktree_dir '${TMP}'"
+assert_eq 'project-local .worktrees (dir exists + gitignored)' "${TMP}/.worktrees" "${OUT}"
 rm -rf "${TMP}"
 
-# Quoted values should also work.
+# Negative: dir exists but NOT gitignored → priority 2 must NOT match,
+# falls through to priority 3 default.
 TMP="$(mktemp -d)"
-mkdir -p "${TMP}/.board-superpowers"
-cat > "${TMP}/.board-superpowers/config.yml" <<EOF
-worktree_dir: "/quoted/dir"
-EOF
-capture_helper "unset BOARD_SP_WORKTREE_DIR; bsp_pick_worktree_dir '${TMP}'"
-assert_eq 'config.yml worktree_dir (double-quoted)' '/quoted/dir' "${OUT}"
-rm -rf "${TMP}"
-
-TMP="$(mktemp -d)"
-mkdir -p "${TMP}/.board-superpowers"
-cat > "${TMP}/.board-superpowers/config.yml" <<EOF
-worktree_dir: '/single/dir'
-EOF
-capture_helper "unset BOARD_SP_WORKTREE_DIR; bsp_pick_worktree_dir '${TMP}'"
-assert_eq 'config.yml worktree_dir (single-quoted)' '/single/dir' "${OUT}"
+(
+    cd "${TMP}"
+    git init -q -b main
+    git config user.email test@example.com
+    git config user.name 'Test'
+    mkdir .worktrees
+    # No .gitignore at all — .worktrees is tracked-eligible.
+)
+capture_helper "unset BOARD_SP_WORKTREE_DIR; HOME=/test/home bsp_pick_worktree_dir '${TMP}'"
+assert_eq 'project-local .worktrees (dir exists but NOT gitignored) → default' \
+    '/test/home/.config/superpowers/worktrees' "${OUT}"
 rm -rf "${TMP}"
 
 # ---------------------------------------------------------------------------
@@ -163,21 +172,23 @@ rm -rf "${TMP}"
 # ---------------------------------------------------------------------------
 printf 'Scenario: bsp_pick_worktree_dir default fallback\n'
 
-TMP="$(mktemp -d)"  # repo without .board-superpowers
+# Repo without any .worktrees dir → default.
+TMP="$(mktemp -d)"
 capture_helper "unset BOARD_SP_WORKTREE_DIR; HOME=/test/home bsp_pick_worktree_dir '${TMP}'"
-assert_eq 'default (no env, no config)' '/test/home/.config/superpowers/worktrees' "${OUT}"
+assert_eq 'default (no env, no .worktrees dir)' '/test/home/.config/superpowers/worktrees' "${OUT}"
 rm -rf "${TMP}"
 
 # No repo_root arg at all → also default.
 capture_helper 'unset BOARD_SP_WORKTREE_DIR; HOME=/test/home bsp_pick_worktree_dir'
 assert_eq 'default (no args at all)' '/test/home/.config/superpowers/worktrees' "${OUT}"
 
-# Repo arg points at a directory without config.yml → default.
+# Path that is not a git repo (mkdir + .worktrees but no `git init`) →
+# `git check-ignore` returns non-zero, falls through to default.
 TMP="$(mktemp -d)"
-mkdir -p "${TMP}/.board-superpowers"
-# no config.yml in there
+mkdir -p "${TMP}/.worktrees"
 capture_helper "unset BOARD_SP_WORKTREE_DIR; HOME=/test/home bsp_pick_worktree_dir '${TMP}'"
-assert_eq 'default (config dir but no file)' '/test/home/.config/superpowers/worktrees' "${OUT}"
+assert_eq 'default (.worktrees dir but not a git repo)' \
+    '/test/home/.config/superpowers/worktrees' "${OUT}"
 rm -rf "${TMP}"
 
 # ---------------------------------------------------------------------------

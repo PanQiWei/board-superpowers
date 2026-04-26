@@ -331,20 +331,25 @@ bsp_worktree_path() {
 }
 
 # bsp_pick_worktree_dir [repo_root] — return BASE worktree dir (not
-# per-repo or per-branch). Three-priority resolution per ADR-0003:
+# per-repo or per-branch). Three-priority resolution per
+# docs/architecture/0005-contracts/07-path-conventions.md lines 51-58
+# and ADR-0003 § "Path resolution priority":
 #
 #   1. $BOARD_SP_WORKTREE_DIR (if set + non-empty)
-#   2. <repo_root>/.board-superpowers/config.yml `worktree_dir:` entry
-#      (only consulted when repo_root is supplied AND the config file
-#      exists). Parser is a simple regex grep — assumes the v1 simple-yaml
-#      convention: one key per line, no nesting at root, optional
-#      single/double quotes around the value.
+#   2. Project-local <repo_root>/.worktrees/ — only when the directory
+#      exists AND `git check-ignore -q .worktrees` (run from repo_root)
+#      returns 0, i.e. the path is gitignored. This protects against a
+#      stray .worktrees/ accidentally getting committed.
 #   3. Default: ${HOME}/.config/superpowers/worktrees
 #
 # This helper is RICHER than bsp_worktree_path (which honors only env +
 # default). bsp_worktree_path stays unchanged so existing callers
 # (claim-card.sh) keep working with their current `<repo> <branch>`
 # signature.
+#
+# NOTE: spec line 53 cites this helper as living in scripts/claim-card.sh;
+# it actually lives here in scripts/lib/common.sh (where reusable helpers
+# live). Spec drift to be reconciled in a later card.
 
 bsp_pick_worktree_dir() {
     local repo_root="${1:-}"
@@ -355,22 +360,15 @@ bsp_pick_worktree_dir() {
         return 0
     fi
 
-    # Priority 2: per-repo config.yml `worktree_dir:`.
-    if [ -n "${repo_root}" ]; then
-        local cfg="${repo_root}/.board-superpowers/config.yml"
-        if [ -f "${cfg}" ]; then
-            local val
-            val="$(
-                grep -E '^worktree_dir:[[:space:]]*' "${cfg}" \
-                    | head -n 1 \
-                    | sed -e 's/^worktree_dir:[[:space:]]*//' \
-                          -e 's/^"\(.*\)"$/\1/' \
-                          -e "s/^'\(.*\)'\$/\1/"
-            )" || val=""
-            if [ -n "${val}" ]; then
-                printf '%s\n' "${val}"
-                return 0
-            fi
+    # Priority 2: project-local <repo_root>/.worktrees/ when it exists
+    # AND is gitignored. `git check-ignore -q <path>` exits 0 iff the
+    # path matches a gitignore rule; non-zero otherwise (including when
+    # not in a git repo). Wrap in `2>/dev/null` to swallow git's stderr
+    # when invoked outside a repo.
+    if [ -n "${repo_root}" ] && [ -d "${repo_root}/.worktrees" ]; then
+        if (cd "${repo_root}" && git check-ignore -q .worktrees) 2>/dev/null; then
+            printf '%s\n' "${repo_root}/.worktrees"
+            return 0
         fi
     fi
 
