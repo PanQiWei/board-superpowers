@@ -1,6 +1,6 @@
 # managing-board — intake routine reference
 
-Decision tree for routing new requirements (F-08).
+Decision tree for routing new requirements.
 
 ## Signal type → routing
 
@@ -12,25 +12,24 @@ Is the user proposing direction (vs implementation)?
 └── NO  → Is this an architecture decision?
     ├── YES → gstack:/plan-eng-review
     └── NO  → Is this multi-step work that needs decomposition?
-        ├── YES → superpowers:brainstorming → (v1-complete: decomposing-into-milestones)
-        │                                  → (v1-minimum: Producer hand-decomposes)
-        └── NO  → Single-card-sized → direct card creation (R-class)
+        ├── YES → superpowers:brainstorming → architect hand-decomposes the result into Ready cards
+        └── NO  → Single-card-sized → direct card creation
 ```
 
 ## Direct card creation (single-card-sized)
 
 When the requirement clearly fits one card (small, well-defined, no design ambiguity):
 
-1. Draft the card body using `board-canon` § "Card body schema":
+1. Draft the card body using the Card body schema from `board-superpowers:board-canon`:
    - thin-pointer (Spec / Owner / Estimate)
    - Goal (1 sentence)
    - Acceptance criteria (≥ 2 verifiable bullets)
    - Out of scope
    - Dependencies
    - Notes
-2. **Show the draft to the architect; do NOT create yet** (R-class).
-3. After ack: `gh issue create --title <title> --body <body>` then add to project + set Status=Backlog.
-4. Audit-log: action_id 300, decision_class R (degraded from v1-complete A).
+2. **Show the draft to the architect; do NOT create yet** (mutating action — needs acknowledgement).
+3. After acknowledgement: `gh issue create --title <title> --body <body>` then add to project + set Status=Backlog.
+4. Append an audit-log entry recording the card creation.
 
 ## Cross-plugin handoff syntax
 
@@ -48,4 +47,4 @@ If the requirement is genuinely just "fix this typo": skip intake entirely, do i
 
 ## Decline policy
 
-If the requirement is misaligned with the project's premises (per `0001-positioning.md` P1..P8 + non-goals), the intake routine produces a "we won't do this and here's why" response. The architect can override; the routine surfaces the conflict explicitly so the override is conscious.
+If the requirement is misaligned with the project's premises (per the project's positioning doc / non-goals), the intake routine produces a "we won't do this and here's why" response. The architect can override; the routine surfaces the conflict explicitly so the override is conscious.

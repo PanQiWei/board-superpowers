@@ -4,12 +4,12 @@ Decision-tree detail for the routing table in the parent SKILL.md.
 
 ## Why an entry skill rather than direct routing in CLAUDE.md
 
-CLAUDE.md / AGENTS.md routing blocks are descriptive — they tell Claude how to think about board-superpowers. The entry SKILL.md is **executable** — it consumes the hook payload, runs dep checks, and explicitly invokes the right downstream skill via the `Skill` tool. The two layers serve different purposes:
+The project's `CLAUDE.md` / `AGENTS.md` may carry a routing block, but those are descriptive — they tell the agent how to think about board-superpowers. The entry SKILL.md is **executable** — it consumes the hook payload, runs dep checks, and explicitly invokes the right downstream skill. The two layers serve different purposes:
 
-- CLAUDE.md routing = standing context (always loaded, read by every prompt)
+- Project routing block in `CLAUDE.md` / `AGENTS.md` = standing context (always loaded by the platform's project-instructions reader, read at every prompt)
 - Entry SKILL.md = actionable skill (loaded when triggered, runs the routing transaction)
 
-Removing either makes the system less robust. CLAUDE.md alone risks Claude picking the wrong molecular skill silently; entry SKILL.md alone risks Claude not knowing the plugin exists when no trigger fires.
+Removing either makes the system less robust. Project routing block alone risks the agent picking the wrong downstream skill silently; entry SKILL.md alone risks the agent not knowing the plugin exists when no trigger fires.
 
 ## When the message matches multiple rows
 
@@ -21,23 +21,23 @@ Resolution: pick the FIRST action mentioned, do that, then prompt for the next. 
 
 ## When the message matches NO row but seems board-related
 
-Examples: "remind me of the WIP rule", "what's the audit log schema again", "explain the F-08 intake routine".
+Examples: "remind me of the WIP rule", "what's the audit log schema again", "explain the daily routine".
 
-These are **informational** queries about the plugin's contracts. Don't route to a molecular skill — answer inline by referencing `board-canon` (for state machine / WIP / schema questions) or referencing the spec docs (for feature numbers like F-08).
+These are **informational** queries about the plugin's contracts. Don't route to a downstream skill — answer inline by referencing `board-canon` (for state machine / WIP / schema questions), or by reading the relevant skill's body (for routine descriptions).
 
 ## When the message is genuinely off-topic
 
-Examples: "fix this bug in my React app".
+Examples: "fix this React bug in src/auth/login.tsx".
 
-Don't route — the plugin doesn't apply. Respond normally as Claude would without the plugin loaded. The plugin's presence shouldn't make Claude refuse off-topic work.
+Don't route — the plugin doesn't apply. Respond normally as the agent would without the plugin loaded. The plugin's presence shouldn't make the agent refuse off-topic work.
 
 ## Hook-injected marker handling
 
-When the SessionStart hook injects an `INVOKE: <skill>` marker (v1-minimum doesn't, but if a future version does):
+When the SessionStart hook injects an `INVOKE: <skill>` marker:
 
-1. Verify the marker's `<skill>` is a known v1-minimum skill (not a deferred one).
-2. If known: invoke it directly via the `Skill` tool, passing the marker's `REASON:` as orientation.
-3. If unknown / deferred: surface the marker text + a "skill not yet available in v1-minimum — falling back to user's natural-language routing" note.
+1. Verify the marker's `<skill>` is one of the actually-shipping plugin skills.
+2. If known: invoke it directly via the Skill tool, passing the marker's `REASON:` as orientation.
+3. If unknown: surface the marker text + a "skill not yet available — falling back to user's natural-language routing" note.
 
 The `INVOKE:` payload is a **hint**, not a contract — the entry skill is allowed to override if context contradicts.
 

@@ -25,7 +25,7 @@ A card's Acceptance criteria block passes INVEST when:
 - **S**mall: card fits in one Consumer session (1-3 days at most)
 - **T**estable: each criterion is mechanically verifiable
 
-Cards that fail INVEST get sent back to Backlog for re-decomposition (in v1-complete via `decomposing-into-milestones`; in v1-minimum the architect splits them by hand).
+Cards that fail INVEST get sent back to Backlog for re-decomposition. The architect splits oversized cards by hand.
 
 ## Thin-pointer block
 
@@ -42,4 +42,4 @@ Optional keys (used when applicable):
 
 ## Bottom marker
 
-The bottom marker is auto-generated. Hand edits to it are explicitly rejected by `enforcing-pr-contract` — the Producer's tooling owns this block.
+The bottom marker is auto-generated. Hand edits to it are explicitly rejected by `enforcing-pr-contract` — the Producer's tooling owns this block. The block points the reader at the audit-log entry stream for forensic queries on the card's history.

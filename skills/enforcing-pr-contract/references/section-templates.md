@@ -71,10 +71,10 @@ Concrete examples per card type. Parent `SKILL.md` shows the canonical templates
 ```markdown
 ## Automated Verification
 
-- [x] `markdown-link-check docs/architecture/**/*.md` — pass
-- [x] All cross-references in the change-impact matrix updated in same PR
+- [x] `markdown-link-check <doc-paths>` — pass (no broken cross-links)
+- [x] All cross-references between the affected docs updated in same PR
 
 ## Retro Notes
 
-- The ADR-0009 decision to defer X had to be cross-linked from 4 different surface docs; the change-impact matrix in `AGENTS.md` was load-bearing for finding all of them. Adding new ADRs without grepping the matrix risks orphan links.
+- A spec change had to be cross-linked from 4 different surface docs; a project's change-impact matrix was load-bearing for finding all of them. Adding a new architectural decision without grepping the matrix risks orphan links.
 ```

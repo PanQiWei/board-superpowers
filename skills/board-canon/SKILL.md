@@ -1,18 +1,13 @@
 ---
 name: board-canon
-description: Use whenever any board operation in board-superpowers needs the canonical contract — the 6-state machine, the Card body schema (thin-pointer + 5 sections + bottom marker), the branch-naming convention (claim/<N>-<slug>), or the WIP counting formula. This is the single read-only source of truth that every other skill in this plugin consults before transitioning a card, validating a claim, or checking WIP. Use it even when the user doesn't say "schema" or "state machine" — any time card / branch / Status / WIP comes up, this is what defines the rules.
+description: Use whenever any board operation in board-superpowers needs the canonical contract — the 6-state machine, the Card body schema, the branch-naming convention (claim/<N>-<slug>), or the WIP counting formula. This is the read-only source of truth that every other board-superpowers skill consults before transitioning a card, validating a claim, or checking WIP. Use it even when the user doesn't say "schema" or "state machine" — any time card, branch, Status, or WIP comes up, this is what defines the rules.
 when_to_use: Use whenever a card transition, claim push, branch name, WIP cap check, or PR-to-card linkage is being reasoned about. Also when validating that a manual edit to the board respects the contract.
 user-invocable: false
 ---
 
 # board-canon
 
-> **Skeleton type**: B (reference). This SKILL.md is the schema
-> authority for the entire plugin. It contains no procedure of
-> its own — it answers "what is the contract" so that callers
-> can act on it.
->
-> **Reflexive — does NOT call any other same-plugin skill.**
+This skill is the schema authority for the board-superpowers plugin. It answers "what is the contract" — it does not perform actions itself. Other skills consult it before mutating the board.
 
 ## Quick reference
 
@@ -26,52 +21,45 @@ user-invocable: false
 
 ## State machine
 
-A card lives in **exactly one** of six Status field values at any
-moment. Transitions are unidirectional except where marked
-↔ (bidirectional). Every transition is recorded in the audit log
-(local jsonl in v1-minimum; BYO RDBMS in v1-complete).
+A card lives in **exactly one** of six Status field values at any moment. Every transition writes one entry to the plugin's audit log (a local JSON-lines file at `~/.board-superpowers/<host>/<repo>/audit-local.jsonl`).
 
 ```
 Backlog ─────► Ready ─────► In Progress ─────► In Review ─────► Done
                                 │   ▲              │
                                 │   │              │
                                 ▼   │              ▼
-                              Blocked              (rework loops to In Progress)
+                              Blocked              (rework loops back to In Progress)
 ```
 
 Legal transitions:
 
-| From | To | Trigger | Who |
-|------|-----|--------|-----|
-| Backlog | Ready | Card meets INVEST + has all required schema sections | Producer (manual or `decomposing-into-milestones`) |
-| Ready | In Progress | Consumer claims via push of `claim/<N>-<slug>` branch | Consumer (`consuming-card` F-C2) |
-| In Progress | Blocked | External dependency unresolved; Consumer surfaces blocker | Consumer (`consuming-card` F-C7) |
-| Blocked | In Progress | Blocker resolved | Consumer or Producer |
-| In Progress | In Review | Consumer pushes PR linked to card | Consumer (`consuming-card` F-C12) |
-| In Review | In Progress | Reviewer requests changes | Consumer (rework) |
-| In Review | Done | PR merged | Producer (`managing-board` F-02 Review Queue) |
+| From | To | Trigger |
+|------|-----|--------|
+| Backlog | Ready | Card body has all 5 mandatory sections + Acceptance criteria pass INVEST (Independent / Negotiable / Valuable / Estimable / Small / Testable) + an Estimate is set + no hard `depends-on` is still in Backlog or Ready |
+| Ready | In Progress | A Consumer claims the card by pushing a `claim/<N>-<slug>` branch (per § Claim protocol). Consumer's WIP count + 1 must not exceed the cap; no other Consumer may already hold a claim branch on this card |
+| In Progress | Blocked | An external dependency is unresolved. The blocker MUST be named in a card comment; "I haven't started yet" is not a blocker |
+| Blocked | In Progress | The named blocker is resolved |
+| In Progress | In Review | The Consumer opens a PR from `claim/<N>-...` whose body passes the three-section PR contract (see the `enforcing-pr-contract` skill) |
+| In Review | In Progress | Reviewer requests changes (rework loop). The Consumer addresses comments on the same claim branch, NOT a new branch |
+| In Review | Done | The PR is merged (NOT closed without merge); no outstanding "request changes" review remains |
 
-**Illegal transitions** (CI / hook gates reject):
+**Illegal transitions** (the plugin's scripts and CI gates reject these):
 
-- Backlog → In Progress (must pass through Ready — INVEST gate)
-- In Review → Done without merged PR (Done is post-merge only)
-- Done → anything (cards in Done are immutable; create a new card)
+- Backlog → In Progress directly (must pass through Ready — this is the INVEST gate)
+- In Review → Done without a merged PR (Done is post-merge only)
+- Done → anything (cards in Done are immutable; create a new card if rework is needed)
 - Any state → Backlog (Backlog is for new cards only)
 
-See `references/state-machine.md` for the per-transition checklist
-including who runs the audit log entry and what `action_id` it
-carries.
+`references/state-machine.md` documents each transition's checklist + audit catalogue.
 
 ## Card body schema
 
-Every Card body MUST have this structure. Sections appear in this
-order. Producer writes them at intake; Consumer reads them at
-claim time.
+Every Card body MUST have this structure. Sections appear in this order. The Producer writes them at intake; the Consumer reads them at claim time.
 
 ```markdown
 <!-- thin-pointer -->
-**Spec**: docs/architecture/0002-product-features-and-flows/03-producer-surface.md § F-08
-**Owner**: @PanQiWei
+**Spec**: <relative path to the spec / design doc, with section anchor>
+**Owner**: @<github-handle>
 **Estimate**: S | M | L
 <!-- /thin-pointer -->
 
@@ -79,7 +67,7 @@ claim time.
 <one-sentence outcome statement; what the user will be able to do once this card is Done>
 
 ## Acceptance criteria
-- [ ] criterion 1 (verifiable; not "tests pass" — be specific)
+- [ ] criterion 1 (verifiable independently; not "tests pass" — be specific)
 - [ ] criterion 2
 - [ ] ...
 
@@ -87,7 +75,7 @@ claim time.
 <things this card explicitly does NOT do, even though they're tempting>
 
 ## Dependencies
-- depends-on: #<other-card-N>     (hard — cannot start until that's Done)
+- depends-on: #<other-card-N>     (hard — cannot start until that card is Done)
 - depends-on (soft): #<other-card-M>  (preferable but not required)
 - depended-on-by: #<other-card-K>     (this card unblocks K)
 
@@ -95,92 +83,59 @@ claim time.
 <free-form context the Consumer will need; design rationale; gotchas>
 
 <!-- bsp-bottom-marker:do-not-edit -->
-**Audit trail**: see ~/.board-superpowers/<host>/<repo>/audit-local.jsonl (v1-minimum)
-or BYO RDBMS audit_trail table (v1-complete) — query by card_number = N.
+**Audit trail**: query ~/.board-superpowers/<host>/<repo>/audit-local.jsonl by `card_number = N`.
 <!-- /bsp-bottom-marker -->
 ```
 
-The 5 visible sections (Goal / Acceptance criteria / Out of scope
-/ Dependencies / Notes) are MANDATORY. The thin-pointer block at
-the top and the bottom marker are MANDATORY but auto-generated by
-`decomposing-into-milestones` (deferred to v1-complete) or
-hand-written by the Producer in v1-minimum.
+The 5 visible sections (Goal / Acceptance criteria / Out of scope / Dependencies / Notes) are MANDATORY. The thin-pointer block at the top and the bottom marker are auto-generated by tooling — hand edits to the bottom marker are explicitly rejected.
 
-See `references/card-body-schema.md` for filler-detection rules
-applied to each section + INVEST checklist for the Acceptance
-criteria block.
+`references/card-body-schema.md` documents the filler-detection rules applied to each section + the INVEST checklist for Acceptance criteria.
 
 ## Claim protocol
 
-A Consumer claims a card by pushing an empty branch named
-`claim/<N>-<slug>` to origin. This is **the** claim signal — the
-board's Status field flip is a downstream effect, not the source
-of truth.
+A Consumer claims a card by pushing an empty branch named `claim/<N>-<slug>` to origin. **The branch push is the claim signal** — the board's Status field flip is a downstream effect, not the source of truth.
 
 Why a branch push, not a Status edit:
 
-1. **Atomic + audit-friendly**: a git push is logged in
-   `git reflog` + GitHub's webhook stream; a Status edit alone
-   is harder to forensic-trace later.
-2. **Conflict-detectable**: two Consumers attempting to claim the
-   same card hit a non-fast-forward push rejection (one wins;
-   the loser sees the rejection).
-3. **Cheap to undo**: `git push origin --delete claim/N-slug`
-   releases the claim cleanly.
+1. **Atomic + audit-friendly**: a git push is logged in `git reflog` + the GitHub event stream; a Status edit alone is harder to forensically trace later.
+2. **Conflict-detectable**: two Consumers attempting to claim the same card hit a non-fast-forward push rejection (one wins; the loser sees the rejection).
+3. **Cheap to undo**: `git push origin --delete claim/N-slug` releases the claim cleanly.
 
-The transactional write order is fixed (per
-`scripts/claim-card.sh`):
+The transactional write order (performed by `scripts/claim-card.sh`):
 
-1. Set Status field → "In Progress" (gh project item-edit).
-2. Create local worktree at
-   `$HOME/.config/superpowers/worktrees/<repo>/claim/<N>-<slug>`.
-3. Create branch `claim/<N>-<slug>` from `origin/main`.
-4. Push branch to origin.
+1. Set the Status field → "In Progress" (via `gh project item-edit`).
+2. Create a local worktree at `$HOME/.config/superpowers/worktrees/<repo>/claim/<N>-<slug>` (override base path with `BOARD_SP_WORKTREE_DIR`).
+3. Create branch `claim/<N>-<slug>` from `origin/main` inside the worktree.
+4. Push the branch to origin so the claim is publicly visible.
 
-If step 4 fails, steps 1-3 are NOT rolled back automatically —
-the Consumer must explicitly call out the partial state when
-asking the architect what to do (R-class action in v1-minimum).
+If step 4 fails, steps 1-3 are NOT rolled back automatically — the Consumer must explicitly surface the partial state to the architect rather than silently retry.
 
-See `references/claim-protocol.md` for the conflict-resolution
-playbook when two Consumers race on the same card.
+`references/claim-protocol.md` documents the conflict-resolution playbook for race conditions and stale-claim release.
 
 ## WIP counting
 
-The plugin enforces a per-Consumer WIP cap. The formula is:
+The plugin enforces a per-Consumer WIP cap. The formula:
 
 ```
-WIP_count = (cards in In Progress)
-          + (cards in In Progress with the suspended label)
-          + (cards in In Review with PR open by this Consumer)
+WIP_count(consumer) =
+    (cards in In Progress claimed by this consumer)
+  + (cards in In Progress with the `suspended` label, claimed by this consumer)
+  + (cards in In Review whose PR was authored by this consumer and is still open)
 ```
 
-Cards in Blocked are **excluded** from the WIP count — being
-blocked is not active work; the Consumer should be picking up
-something else while waiting.
+Cards in `Blocked` are **excluded** from the count — being blocked is not active work; the Consumer should be picking up something else while waiting.
 
-The default cap is 1 per Consumer (single-task focus, per
-ADR-0003). Project-level overrides live in
-`.board-superpowers/config.yml`:
+The default cap is 1 per Consumer. Override per-repo by writing `wip_cap_per_consumer: <N>` in `.board-superpowers/config.yml`. A Consumer attempting to claim a second card while at the cap gets a hard rejection from `claim-card.sh`.
 
-```yaml
-wip_cap_per_consumer: 1   # default
-```
-
-A Consumer attempting to claim a second card while their WIP_count
-is at the cap gets a hard rejection from `claim-card.sh` (R-class
-action — must explicitly ask the architect to override).
-
-See `references/wip-counting.md` for the corner cases (suspended
-cards, abandoned worktrees, post-merge accounting lag).
+`references/wip-counting.md` documents corner cases (suspended cards, abandoned worktrees, post-merge accounting lag, override mechanism).
 
 ## Branch naming
 
 Format: `claim/<N>-<slug>`
 
 Where:
-- `<N>` is the card's issue number (no `#` prefix)
-- `<slug>` is the card title slugified per `bsp_slugify`:
-  lowercase, alphanumeric + hyphens, max 40 chars
+- `<N>` is the card's GitHub issue number (no `#` prefix)
+- `<slug>` is the card title slugified by `bsp_slugify` (defined in `scripts/lib/common.sh`): lowercase, alphanumeric + hyphens, max 40 characters
 
 Examples:
 
@@ -190,24 +145,16 @@ Examples:
 | `Fix issue with WIP counter (race)` | `claim/47-fix-issue-with-wip-counter-race` |
 | `[urgent] add audit log fallback` | `claim/103-urgent-add-audit-log-fallback` |
 
-Banned characters in branch names: spaces, `/`, `:`, `?`, `[`,
-`]`, `^`, `~`, `\`, `*`, control chars. The slugifier replaces
-all of these with hyphens and collapses runs.
+Banned characters in branch names (replaced with hyphens by the slugifier; runs collapsed): spaces, `/`, `:`, `?`, `[`, `]`, `^`, `~`, `\`, `*`, control characters.
 
-PR branches that follow up a claim (e.g., for rework) reuse the
-same `claim/<N>-<slug>` branch — do NOT create a second branch
-for the same card. See `references/branch-naming.md` for the
-edge-case decision table.
+The same card uses exactly **one** `claim/N-slug` branch across its lifetime, including rework. Push new commits to the same branch on a "request changes" review — do NOT create `claim/N-slug-v2`.
+
+`references/branch-naming.md` documents the slugifier edge cases and the rare exception flow for materially-renamed cards.
 
 ## What this skill does NOT cover
 
-- **WHO transitions a card**: that's the role contract in
-  `docs/architecture/0002-product-features-and-flows/02-roles.md`.
-- **WHEN to transition**: that's per-feature in
-  `managing-board` (Producer) and `consuming-card` (Consumer).
-- **HOW to communicate decisions**: that's
-  `enforcing-pr-contract` for PR shape and the audit log spec
-  for the trace.
+- **WHO transitions a card** — that depends on the role (Producer vs Consumer), which is decided by other skills.
+- **WHEN to transition** — that's per-routine in `managing-board` (Producer) and `consuming-card` (Consumer).
+- **HOW to communicate decisions** — that's `enforcing-pr-contract` for PR shape and the audit log writer for the trace.
 
-This skill defines **WHAT** the contract is. The other skills
-say when and how to act on it.
+This skill defines **WHAT** the contract is. The other skills decide when and how to act on it.

@@ -1,13 +1,13 @@
-# managing-board — Review Queue routine reference
+# managing-board — review-queue routine reference
 
-Procedure detail for F-02. Parent `SKILL.md` § "Review Queue routine" describes the validation flow; this file documents merge-conflict handling and per-PR escalation.
+Procedure detail for the review-queue routine. Parent `SKILL.md` § "Review-queue routine" describes the validation flow; this file documents merge-conflict handling and per-PR escalation.
 
 ## PR with merge conflicts
 
 If a PR linked to a card has merge conflicts:
 
 1. Comment on the PR: "Merge conflicts present. Pull main into the claim branch and resolve before re-requesting review."
-2. Transition the card from `In Review` back to `In Progress` (R-class — ask architect first).
+2. Propose to the architect: transition the card from `In Review` back to `In Progress`. Wait for acknowledgement, then transition.
 3. Notify the Consumer — they own the rebase.
 
 Do NOT attempt to resolve the conflict from the Producer side. Conflicts are usually semantic; the Consumer has the context.
@@ -24,7 +24,7 @@ If a PR has a base branch other than `main`, OR the head branch doesn't match `c
 
 If `claim/12-...` exists but card #12 is in `In Progress` or `Done`:
 
-- **Card in In Progress**: the Consumer opened a PR but the Status flip didn't happen. Run the Status flip yourself (R-class action).
+- **Card in In Progress**: the Consumer opened a PR but the Status flip didn't happen. Propose running the Status flip yourself and surface the inconsistency.
 - **Card in Done**: this is suspicious — Done implies the PR was already merged. Likely a re-open. Flag and ask Consumer.
 
 ## Multi-card PR
@@ -37,10 +37,10 @@ If a PR's body says "Closes #12, #13, #14":
 
 ## Producer self-review
 
-When the Producer is also the Consumer (this dogfood case), the Review Queue routine still runs the contract validation, but the "request changes" loop becomes "self-correct in the same session". The `audit-local.jsonl` entry uses `actor: producer-consumer-merged` to mark the conflated identity.
+When the Producer is also the Consumer (single-person dogfood), the review-queue routine still runs the contract validation, but the "request changes" loop becomes "self-correct in the same session". The audit-log entry uses an actor field marking the conflated identity.
 
 ## Approve vs request changes
 
 This skill does NOT approve or merge PRs — that's still a human decision. The skill just **routes**: if contract-compliant, the card stays in `In Review` and the Producer / human decides; if non-compliant, the card flows back to rework.
 
-The merge action itself is performed manually via `gh pr merge` or the GitHub UI. Auto-merge is deferred to v1-complete (and even then, only behind explicit config opt-in).
+The merge action itself is performed manually via `gh pr merge` or the GitHub UI. Auto-merge is not in scope; if it ever becomes scope it must be behind explicit config opt-in.

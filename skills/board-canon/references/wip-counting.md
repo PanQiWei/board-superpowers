@@ -21,7 +21,7 @@ A "suspended" card is one a Consumer parked because of a deeper dependency or co
 
 ### Abandoned worktrees
 
-If a Consumer's local worktree is deleted but the `claim/N-...` branch still exists on origin, the card is still in "In Progress" and still counts. Recovery: either re-create the worktree (`git worktree add ... claim/N-...`) or release the claim (`managing-board` F-15 hygiene path).
+If a Consumer's local worktree is deleted but the `claim/N-...` branch still exists on origin, the card is still in "In Progress" and still counts. Recovery: either re-create the worktree (`git worktree add ... claim/N-...`) or release the claim via the `managing-board` triage routine.
 
 ### Post-merge lag
 
@@ -37,8 +37,8 @@ Setting `wip_cap_per_consumer: 0` in `.board-superpowers/config.yml` means "no c
 
 ## Why Blocked is excluded
 
-Blocked cards are genuinely *not* active work — the Consumer is waiting on something external. Counting Blocked toward WIP would push Consumers toward acting on the wrong cards just to free their slot, which is the opposite of WIP's intent. The cost of excluding Blocked: a Consumer can in principle accumulate many Blocked cards. This is a known footgun; `managing-board` F-15 hygiene calls it out.
+Blocked cards are genuinely *not* active work — the Consumer is waiting on something external. Counting Blocked toward WIP would push Consumers toward acting on the wrong cards just to free their slot, which is the opposite of WIP's intent. The cost of excluding Blocked: a Consumer can in principle accumulate many Blocked cards. This is a known footgun; the `managing-board` triage routine surfaces it.
 
 ## Override mechanism
 
-A Producer can override WIP cap for a single claim by adding the `wip-override` label to the card BEFORE the Consumer claims. The label triggers an A-class audit entry so the override is traceable. After the card transitions to Done, the label is auto-removed (in v1-complete; manual in v1-minimum).
+A Producer can override WIP cap for a single claim by adding the `wip-override` label to the card BEFORE the Consumer claims. The label triggers an audit entry so the override is traceable. After the card transitions to Done, the label is manually removed.

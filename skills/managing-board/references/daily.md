@@ -1,6 +1,6 @@
 # managing-board — daily routine reference
 
-Procedure detail for the F-01 daily routine. Parent `SKILL.md` § "Daily routine" describes the user-visible flow; this file documents the corner cases.
+Procedure detail for the daily routine. Parent `SKILL.md` § "Daily routine" describes the user-visible flow; this file documents the corner cases.
 
 ## Empty board
 
@@ -14,9 +14,9 @@ The board is empty. Run intake (`/board-superpowers:managing-board intake`) when
 
 Don't pad the briefing with "(0)" lines per status — terse is better when there's nothing to report.
 
-## Single-Consumer projects (this dogfood case)
+## Single-Consumer projects
 
-When there's only one Consumer (the Producer-Consumer is the same person, like in this repo), the WIP-cap logic still applies but the visualization simplifies:
+When there's only one Consumer (the Producer-Consumer is the same person), the WIP-cap logic still applies but the visualization simplifies:
 
 ```
 ### In Progress (1)
@@ -31,7 +31,7 @@ A claim is "stale" if:
 
 - Branch exists on origin
 - Branch is older than 72 hours (per first commit timestamp)
-- Branch has no commits beyond the initial empty claim marker (the worktree creation typically adds one commit; we ignore that)
+- Branch has no commits beyond the initial empty claim marker (the worktree creation typically adds one commit; ignore it)
 
 Compute via:
 

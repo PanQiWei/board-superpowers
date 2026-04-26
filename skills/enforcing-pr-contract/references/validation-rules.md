@@ -1,6 +1,6 @@
 # enforcing-pr-contract — validation rules
 
-Precise rules `scripts/submit-pr.sh` enforces (and `managing-board` F-02 mirrors).
+Precise rules `scripts/submit-pr.sh` enforces (and the `managing-board` review-queue routine mirrors).
 
 ## Required headings (literal-string match)
 
@@ -55,9 +55,9 @@ We deliberately did NOT define a JSON-Schema-style strict format for the section
 
 ## Override mechanism
 
-Producer can override validation for a specific PR by adding the `pr-contract-override` label BEFORE merge. The override creates an audit entry (action_id 113, decision_class R) so the bypass is traceable.
+The Producer can override validation for a specific PR by adding the `pr-contract-override` label BEFORE merge. The override creates an audit-log entry so the bypass is traceable.
 
-## Future hardening (deferred to v1-complete)
+## Future hardening (not yet implemented)
 
 - Semantic filler detection (LLM-grade rather than regex)
 - Per-card-type templates (mechanical vs UX vs spec) selected automatically from card labels

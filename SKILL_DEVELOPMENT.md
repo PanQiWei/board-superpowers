@@ -568,6 +568,84 @@ I work on", "decompose this", "today's work", a literal
 GitHub Project state machine." The matcher fires on the user's
 vocabulary, not the architect's.
 
+### Description optimization — the four discipline points
+
+Beyond "WHEN, not WHAT", every description in this repo MUST
+satisfy four optimization criteria. Descriptions are the
+plugin's primary trigger surface — getting them wrong means the
+agent misses the skill when needed (undertriggering) or fires
+it spuriously (overtriggering). Both fail the user.
+
+1. **Lead with "Use when ..."** — Anthropic's empirical pattern.
+   The matcher reads the description prefix first; opening with
+   "Use when" anchors the model in trigger-condition framing.
+
+2. **Include user vocabulary, not domain abstractions.** List
+   the literal phrases a user would type. Quote them. The model
+   matches on string overlap with the user's prompt; a
+   description full of architect-speak ("orchestrate the kanban
+   state machine") matches no realistic prompt. Pull from real
+   user logs if you have them; brainstorm 10 phrasings if you
+   don't.
+
+3. **Discriminate near-miss queries.** Add an explicit
+   "Do NOT use when ..." clause naming the adjacent skill. This
+   prevents the model from picking your skill when a sibling
+   skill is the right one. Example: a `consuming-card` skill's
+   description should say "Do NOT use when the user wants to
+   plan / triage / review the board generally — that's the
+   managing-board skill."
+
+4. **Push back against undertriggering.** Add a
+   "Use even when the user doesn't say X" clause. Anthropic's
+   `skill-creator` documents: "currently Claude has a tendency
+   to undertrigger skills." Counter with explicit override:
+   "Apply even when the user phrases it casually" / "Use even
+   when the user doesn't explicitly say 'schema'".
+
+**Example — the four points applied**:
+
+```yaml
+description: |
+  Use when the user wants to claim, work on, or implement a
+  specific card from the board-superpowers GitHub Project.
+  Triggers immediately on any message containing the literal
+  token [board-card:#N] OR phrases like "claim card 12", "work
+  on card N", "implement #N from the board", "let me take #N",
+  "let's pick up 12". Apply the moment the message names a card
+  number AND signals intent to do the work — do NOT pre-discuss;
+  claim first. Use even when the user phrases it casually
+  ("ok 12") — the claim signal is what matters, not formality.
+  Do NOT use when the user wants to plan / triage / review the
+  board generally — that's the managing-board skill.
+```
+
+This description has all four:
+- Leads with "Use when ..."
+- Lists 6 realistic user phrasings, in quotes
+- Discriminates "Do NOT use when ... that's the managing-board skill"
+- Pushes against undertriggering "Use even when the user phrases it casually"
+
+### Description optimization — the advanced workflow
+
+For high-leverage skills (entry routers, frequently-invoked
+disciplines), iterate the description with Anthropic's
+`skill-creator` description-optimization workflow
+(documented in
+<https://github.com/anthropics/skills/tree/main/skills/.system/skill-creator>):
+
+1. Generate 20 trigger-eval queries — 8-10 should-trigger,
+   8-10 should-not-trigger near-misses.
+2. Run each query 3 times against a candidate description; record
+   trigger rate.
+3. Iterate the description; re-evaluate; pick the version with
+   the best held-out trigger accuracy.
+
+Worth doing for skills where wrong-routing has real cost
+(claim transactions, PR submits, security audits). Skip for
+small reference skills where over/undertriggering is
+inconsequential.
+
 ### Three-tier frontmatter discipline
 
 Frontmatter fields fall into three tiers. The tier determines
@@ -1285,6 +1363,83 @@ user-invocable; the runtime disagrees.
 
 **Fix:** copy the canonical field names from
 <https://agentskills.io/specification>. When in doubt, hyphen.
+
+### A9. Project-internal references in SKILL body
+
+**Symptom:** SKILL.md cites internal feature codes (`F-08`,
+`F-C12`, `F-B2`), ADR numbers (`ADR-0006`, `ADR-0008`), premise
+codes (`P4b`, `I-7`, `D-AUTONOMY-1`, `C-PLUGIN-1`), or relative
+paths into the project's `docs/architecture/...` tree.
+
+**Where seen:** any board-superpowers SKILL.md authored from
+the spec-doc vocabulary without translation.
+
+**Failure mode:** when the plugin is published, the downstream
+agent that loads the SKILL.md does NOT have access to your
+project's spec docs (those typically live only in the
+maintainer repo, NOT in the installed plugin). A line like
+"Per F-09 + §1.6 (INVEST + vertical slicing) ..." is
+indecipherable — the agent has no "F-09" referent to resolve.
+Even when the spec docs ARE available alongside (e.g., in this
+repo's own dogfood loop), reading a code chain to figure out
+"what should I do" wastes tokens vs reading prose.
+
+**Fix:** translate every internal reference into self-contained
+prose at SKILL-authoring time.
+
+| Internal reference | SKILL-body prose |
+|--------------------|------------------|
+| "Per F-08 intake routine" | "the routine that turns a new requirement into a spec doc, design conversation, or Ready card" |
+| "Per ADR-0006 D-AUTONOMY-1 matrix" | inline the actual A/R/N classification rules |
+| "Per `docs/architecture/0002-product-features-and-flows/04-consumer-surface.md` § F-C12" | "when opening the PR" + inline the procedure |
+| "audit_id 200" | "the audit-log entry for daily routines" (or omit the catalog reference entirely) |
+
+The internal codes belong in spec docs and PR descriptions —
+where maintainers reading the project's source docs can resolve
+them. They do NOT belong in SKILL.md, which ships as a
+black-box artifact to downstream agents.
+
+**Diagnostic**: `grep -rE '\bF-[A-Z]?[0-9]+|ADR-[0-9]{4}|§[0-9]\.|P[0-9]+[a-z]?\b|I-[0-9]+|D-[A-Z]+-[0-9]+|C-[A-Z]+-[0-9]+' skills/` should return zero matches in a clean SKILL.md tree.
+
+### A10. Project-phase narrative in SKILL body
+
+**Symptom:** SKILL.md frames its own behavior as
+"v1-minimum scope covers X" / "Y is deferred to v1-complete" /
+"this block runs as degraded fallback until Z atomic ships" /
+"v1-minimum: <description>; v1-complete: <description>".
+
+**Where seen:** any SKILL.md written during a deliberately
+phased rollout where the maintainer mentally tracked "what
+ships now vs later" and let that framing leak into the skill
+body.
+
+**Failure mode:** the downstream agent does NOT care about
+the project's development phases — it cares about what the
+skill does NOW. Phase narrative creates three problems:
+
+1. **Cognitive overhead**: agent has to parse "v1-minimum
+   degraded behavior" framing to figure out actual current
+   behavior.
+2. **Self-deprecating tone**: the skill describes itself as
+   "incomplete" / "degraded", which can affect the agent's
+   confidence in following its instructions.
+3. **Decay**: phase markers become wrong the moment a phase
+   transitions and someone forgets to update them. SKILLs
+   without phase markers don't have this decay surface.
+
+**Fix:** describe **current behavior** as the contract.
+Project-phase narrative belongs in CHANGELOG / PR description /
+project's developer guide (e.g., AGENTS.md / CONTRIBUTING.md) —
+NOT in SKILL.md.
+
+| Phase narrative (anti-pattern) | Current-behavior framing (correct) |
+|--------------------------------|-------------------------------------|
+| "v1-minimum: all mutating actions = R-class default" | "Every mutating action this skill performs follows propose → wait for ack → act → audit" |
+| "Audit log writes go to local jsonl in v1-minimum; BYO RDBMS in v1-complete" | "Audit log writes append a JSON line to `~/.board-superpowers/<host>/<repo>/audit-local.jsonl`" |
+| "Mode-2 Producer-spawned Consumer is CC-only at v1-minimum" | "When this skill runs as a Producer-spawned subagent (Claude Code only), ..." |
+| "F-09 (decomposition) deferred to v1-complete; Producer hand-decomposes for now" | (just describe the manual hand-decomposition flow as the actual procedure) |
+
+**Diagnostic**: `grep -rE 'v1-minimum|v1-complete|v[0-9]+-(minimum|complete)|deferred to|degradation block|degraded mode' skills/` should return zero matches.
 
 ---
 
