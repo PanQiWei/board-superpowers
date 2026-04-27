@@ -55,7 +55,7 @@ Goal: produce a one-screen briefing of the board's current state that helps the 
    - "Claim a Ready card" (if `Ready` count > 0 and the Producer wants to context-switch into Consumer mode)
    - "Run intake" (if all the above are empty — the board is idle)
 
-5. **Audit-log entry**. Append one line to `~/.board-superpowers/repos/<normalized>/audit-local.jsonl` recording that the daily routine ran (helper: `bsp_audit_local_write` from `scripts/lib/common.sh`).
+5. **Audit-log entry**. The daily read is not a mutating action — invoke `board-superpowers:auditing-actions` directly to record that the routine ran (no classify step needed for read-only operations).
 
 `references/daily.md` covers the empty-board case, single-Consumer projects, stale-claim detection mechanics, and tone notes.
 
@@ -68,9 +68,8 @@ Goal: validate every open PR linked to a card against the three-section PR contr
 2. **For each PR**: invoke `board-superpowers:enforcing-pr-contract` to validate the body. (See that skill's § "How the Producer enforces" for the exact rules.)
 
 3. **For each violation**:
-   - Comment on the PR pointing at the failing section + the fix template from the `enforcing-pr-contract` skill's references.
-   - Do NOT immediately transition the card from `In Review` back to `In Progress` — that's a mutating action; propose the transition to the architect, await acknowledgement, then act.
-   - Append an audit-log entry recording the violation (decision class R, reason `pr-contract-violation: <section>`).
+   - Comment on the PR pointing at the failing section + the fix template from the `board-superpowers:enforcing-pr-contract` skill's references.
+   - The card Status transition back to `In Progress` is a mutating action. Apply the 5-step sequence from "How mutating actions are handled" below.
 
 4. **For each compliant PR**: no action — leave the card in `In Review` for human merge approval.
 
@@ -89,11 +88,11 @@ Goal: turn a new requirement (text, design doc, idea) into a shape decision: spe
    - **Idea / vision** → `gstack:/office-hours` for direction-setting. Produces an "is this worth building" verdict.
    - **Architecture decision** → `gstack:/plan-eng-review`. Produces an architecture lock.
    - **Multi-step requirement** that's already direction-set → `superpowers:brainstorming` for sharper decomposition. Then the architect hand-decomposes the result into Ready cards.
-   - **Single-card-sized work** that's clearly defined → propose a card body to the architect using the schema from `board-superpowers:board-canon` § "Card body schema"; after acknowledgement, run `gh issue create` and add it to the project as Backlog.
+   - **Single-card-sized work** that's clearly defined → draft a card body using the schema from `board-superpowers:board-canon` § "Card body schema". Creating the card on the board is a mutating action — apply the 5-step sequence from "How mutating actions are handled" below (action_id 1).
 
 3. **NOT this skill's job to do the work itself**. The intake routine ends with the work being either a spec / design artifact or a Ready card on the board. If the architect tries to "just do it" mid-intake, push back: the design rests on intake → decompose → claim being separate acts.
 
-4. **Audit-log entry** for the intake decision.
+4. **Audit-log entry**. After the intake decision is made and any card creation mutating action resolves, invoke `board-superpowers:auditing-actions` to record the outcome.
 
 ## Triage routine
 
@@ -103,17 +102,29 @@ Goal: scan Blocked cards + stale claims; recommend either unblocking actions or 
 
 2. **Read stale claims**: list `claim/N-...` branches; check commit count beyond the initial empty claim marker; flag any > 72h with no progress.
 
-3. **Recommend release** for stale claims older than 7 days with the original Consumer notified — release is a mutating action; propose to the architect first.
+3. **Recommend release** for stale claims older than 7 days with the original Consumer notified — releasing a claim is a mutating action; apply the 5-step sequence from "How mutating actions are handled" below.
 
 `references/triage.md` covers blocker classification (external-dependency / decision-pending / stale-block), the release procedure, suspended-card review, and what's intentionally NOT in this routine (estimate calibration, velocity tracking — those are out of scope).
 
 ## How mutating actions are handled
 
-Every mutating action this skill performs (Status flips, card body writes, PR comments, branch deletes, audit-log writes) follows this discipline:
+Every mutating action this skill performs (Status flips, card body writes, PR comments, branch deletes) follows this 5-step sequence:
 
-1. **Propose** the action to the architect with a one-line description.
-2. **Wait** for explicit acknowledgement.
-3. **Act**.
-4. **Append an audit-log entry** to `~/.board-superpowers/repos/<normalized>/audit-local.jsonl` via `bsp_audit_local_write` (defined in `scripts/lib/common.sh`).
+At each mutating action point in this routine:
+1. Resolve the action's action_id (from
+   `board-superpowers:classifying-actions/references/action-id-catalog.md`).
+2. Invoke `board-superpowers:classifying-actions` with that action_id;
+   receive a decision: A (auto) or R (requires approval).
+3. If A: act → invoke `board-superpowers:auditing-actions` to record
+   one entry.
+4. If R:
+   a. invoke `board-superpowers:auditing-actions` to record the
+      proposal.
+   b. surface the proposal to the architect.
+   c. wait for the architect's reply (approve / decline).
+   d. on approve: act → invoke `board-superpowers:auditing-actions`
+      to record the approval-and-result.
+   e. on decline: invoke `board-superpowers:auditing-actions` to
+      record the decline; abort.
 
-Some actions may be classified as auto-act-OK by per-repo or per-user override rules in `.board-superpowers/config.yml`; until those overrides are configured, treat every action as requiring acknowledgement.
+The two atomic skills handle matrix lookup, override merging, schema enforcement, and audit row writing. Per-repo and per-user override rules in `config.local.yml` determine which actions are A-class vs R-class; defaults are conservative.
