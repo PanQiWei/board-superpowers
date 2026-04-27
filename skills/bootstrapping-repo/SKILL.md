@@ -81,7 +81,7 @@ The script handles the five F-B2 sub-steps + step 4 (routing injection) + step 3
 | 2c — config.yml write | Renders `<repo>/.board-superpowers/config.yml` with `project: "OWNER/NUM"` and `wip_limit: 5`. Skipped when present unless `--force`. |
 | 2d — .gitignore append | Appends an idempotent block ignoring `.board-superpowers/claims/`. |
 | 2e — credentials.yml | Walks BYO-RDBMS DSN setup. Accepts the 6-scheme allowlist (`postgresql://`, `postgres://`, `mysql://`, `mysql+pymysql://`, `sqlite://`, `sqlite3://` per ADR-0009). Architect can decline → all A-class actions degrade to R-class until they reconfigure. |
-| step 4 — routing injection | Appends the canonical routing block to BOTH `CLAUDE.md` and `AGENTS.md` between the marker pair `<!-- board-superpowers:routing -->` / `<!-- /board-superpowers:routing -->`. Records each block's SHA256 hash for F-B4 tamper detection. |
+| step 4 — routing injection | Appends the canonical routing block to `CLAUDE.md` AND `AGENTS.md` between the marker pair `<!-- board-superpowers:routing -->` / `<!-- /board-superpowers:routing -->`. Records each block's SHA256 hash for F-B4 tamper detection. **Stub-redirect targets are silently skipped** — a target file ≤ 30 lines containing a Claude Code `@-include` line of shape `^@<file>.md$` (e.g. `@AGENTS.md`) is treated as a deliberate redirect; the file is left byte-identical and DOES NOT receive a `routing_blocks[]` entry. |
 | step 3 — state.yml write | Writes `~/.board-superpowers/repos/<normalized>/state.yml` with `schema_version: 1`, `repo_bootstrapped_at`, `last_seen_version_in_repo`, `features_enabled: [bootstrap.host, bootstrap.per_repo]`, and the `routing_blocks[]` array recorded during step 4. |
 
 **Surface to the architect** after each F-B2 sub-step completes:
@@ -132,7 +132,8 @@ Bootstrap actions:
   bootstrap-project-2c    — config.yml write (project + wip_limit)
   bootstrap-project-2d    — .gitignore append (idempotent block)
   bootstrap-project-2e    — credentials.yml write (chmod 0600; DSN allowlist)
-  bootstrap-project-4     — routing block injection (CLAUDE.md + AGENTS.md)
+  bootstrap-project-4     — routing block injection (CLAUDE.md + AGENTS.md;
+                                                      stub-redirect targets skipped)
   bootstrap-project-3     — state.yml write (host-local per-repo)
 ```
 
@@ -182,4 +183,4 @@ If the architect declines BYO-RDBMS at step 2e, the bootstrap completes and the 
 
 This skill works on both Claude Code and Codex CLI. Both `bootstrap-host.sh` and `bootstrap-project.sh` resolve their plugin root via `bsp_plugin_root` (Claude uses `${CLAUDE_PLUGIN_ROOT}`, Codex uses path-derivation) so the architect's invocation works without platform-specific argument shaping.
 
-Routing block injection is dual-target by design — `CLAUDE.md` (for Claude Code's auto-load) and `AGENTS.md` (for Codex CLI's auto-load) both receive the same content, which is why the architect's session lands cleanly regardless of which platform they next open in this repo.
+Routing block injection is dual-target by design — `CLAUDE.md` (for Claude Code's auto-load) and `AGENTS.md` (for Codex CLI's auto-load) both receive the same content, which is why the architect's session lands cleanly regardless of which platform they next open in this repo. **Exception**: when one of the two files is a *stub redirect* (≤ 30 lines AND contains a `^@<file>.md$` line), F-B2 silently skips injecting that file. The architect's intent for such files is "redirect to the other one", and injecting a routing block would defeat that single-source-of-truth purpose; both platforms still receive the routing block via the other, non-stub file (CC's `@AGENTS.md` resolution and Codex's native AGENTS.md auto-load both pick it up from AGENTS.md when CLAUDE.md is the stub).

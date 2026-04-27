@@ -61,11 +61,17 @@ The four user scenarios this matrix covers (see §2.1 / §2.2 /
   taste presets — no canned lint config, no canned PR section
   bodies, no canned retro template.
 - **Dual-platform parity.** Per `PLUGIN_DEVELOPMENT.md`, the
-  routing block lands in **both** `CLAUDE.md` (Claude Code
-  auto-loads) AND `AGENTS.md` (Codex CLI auto-loads). The marker
-  pair `<!-- board-superpowers:routing -->` /
+  routing block lands in `CLAUDE.md` (Claude Code auto-loads) AND
+  `AGENTS.md` (Codex CLI auto-loads). The marker pair
+  `<!-- board-superpowers:routing -->` /
   `<!-- /board-superpowers:routing -->` is identical in both;
-  `check-deps.sh` matches in either.
+  `check-deps.sh` matches in either. **Stub-redirect exception**:
+  when one of the two files is a deliberate stub redirect (≤ 30
+  lines AND contains a `^@<file>.md$` line, e.g. `@AGENTS.md`),
+  F-B2 step 4 silently skips it — the routing block lands in the
+  other (non-stub) file only, and CC's `@-include` resolution +
+  Codex's native AGENTS.md auto-load both pick it up via the
+  redirect.
 - **Plugin-owned vs user-owned region split** (see I-11). State
   files written by these features (`manifest.yml`, `state.yml`)
   are plugin-managed; `config.yml` is user-editable; routing
@@ -387,6 +393,17 @@ needs its config.
      the injected block (everything between the marker pair,
      excluding the markers themselves) — what F-B4 later uses to
      detect user modifications before auto-updating.
+
+     **Stub-redirect target — no-op.** A target file recognized as
+     a *stub redirect* (file ≤ 30 lines AND contains a Claude Code
+     `@-include` line of shape `^@<file>.md$`, e.g.
+     `@AGENTS.md`) is left byte-identical and DOES NOT receive a
+     `routing_blocks[]` entry. The architect's intent for such
+     files is "redirect, not authoritative content"; injecting a
+     routing block would defeat the single-source-of-truth purpose
+     of the pointed-to file. The skip is silent (a `bsp_log` line
+     records the decision); F-B2 still proceeds and writes the
+     other file's `routing_blocks[]` entry normally.
   5. **First-card pointer delivery** — show the architect the
      "what now" surface: how to create their first card via the
      Manager session (or by pasting a card via the GitHub UI and

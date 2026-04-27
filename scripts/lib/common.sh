@@ -532,6 +532,13 @@ bsp_pick_worktree_dir() {
 #
 # Target-file rules:
 #   - Absent: create with marker pair wrapping the block content.
+#   - Existing, recognized as STUB-REDIRECT (file ≤ 30 lines AND
+#     contains a Claude Code @-include line `@<file>.md`): no-op. The
+#     file is left byte-identical, NO hash is printed to stdout, exit
+#     0. Caller's `[ -n "${hash}" ]` guard at write_state_yml elides
+#     the routing_blocks[] entry. Per
+#     docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md
+#     § 1.5.2 step 4 "Stub-redirect target".
 #   - Existing, exactly 1 OPEN + exactly 1 CLOSE: replace bytes
 #     between markers with normalized block content. Bytes OUTSIDE
 #     markers (including BOM at byte 0, original line endings) are
@@ -546,12 +553,13 @@ bsp_pick_worktree_dir() {
 #     be updated, second would silently rot) and return exit 5.
 #
 # Stdout on success: the hex SHA256 hash (no "sha256:" prefix), one
-# line. Caller is expected to prepend "sha256:" when recording into
-# state.yml.
+# line — OR empty (no hash) when the target is a stub redirect. Caller
+# is expected to prepend "sha256:" when recording into state.yml, and
+# to skip the routing_blocks[] entry on empty stdout.
 #
 # Args: <target_file> <source_file>
 # Exit codes:
-#   0  success — hash printed to stdout
+#   0  success — hash printed to stdout (OR empty for stub-redirect)
 #   1  bad args / source file unreadable / source missing fences /
 #      source has nested target markers / target write failure
 #   5  target has orphan marker (one but not both) OR multiple marker
@@ -563,6 +571,24 @@ bsp_inject_routing_block() {
 
     if [ ! -f "${source}" ]; then
         bsp_die "bsp_inject_routing_block: source file not found: ${source}"
+    fi
+
+    # Stub-redirect early-out. A target file that is short (≤ 30 lines)
+    # AND carries a CC @-include line of shape `@<file>.md` is a
+    # deliberate redirect (e.g. board-superpowers' own CLAUDE.md →
+    # @AGENTS.md). Injecting a routing block would defeat its
+    # single-source-of-truth purpose. No write, no stdout, exit 0; the
+    # caller's `[ -n "${hash}" ]` guard then elides the routing_blocks
+    # entry for this target.
+    if [ -f "${target}" ]; then
+        local _bsp_line_count
+        _bsp_line_count="$(wc -l < "${target}" | tr -d ' ')"
+        if [ "${_bsp_line_count}" -le 30 ]; then
+            if grep -Eq '^@[A-Za-z0-9./_-]+\.md[[:space:]]*$' "${target}"; then
+                bsp_log "skipping routing injection: ${target} is a stub redirect (≤30 lines + @<file>.md)"
+                return 0
+            fi
+        fi
     fi
 
     bsp_require_cmd python3 "macOS / Linux ship python3 by default"

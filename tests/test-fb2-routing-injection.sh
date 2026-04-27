@@ -863,6 +863,210 @@ check_not 'orphan e2e: state.yml NOT written' test -f "${STATE_FILE}"
 rm -rf "${TMP}"
 
 # ---------------------------------------------------------------------------
+# Scenario 16: Stub-redirect target — helper skips, prints empty stdout, exit 0
+# ---------------------------------------------------------------------------
+# A target file that is a stub redirect (short + contains `@<file>.md`
+# CC @-include line) should NOT receive routing-block injection. The
+# helper recognizes the stub shape and:
+#   - leaves the target file byte-identical
+#   - prints NOTHING to stdout (no hash)
+#   - exits 0 (not an error — the architect's intent is "redirect")
+# Caller (bootstrap-project.sh) interprets empty stdout as "skip this
+# target's routing_blocks[] entry" via existing `[ -n "${hash}" ]`
+# guard at write_state_yml.
+#
+# Stub definition (per scripts/lib/common.sh:bsp_inject_routing_block):
+#   - File total line count ≤ 30
+#   - File contains at least one line matching `^@[A-Za-z0-9./_-]+\.md$`
+#     (Claude Code @-include syntax for another markdown file)
+# Both conditions required.
+printf 'Scenario 16: Stub-redirect target — skip + empty stdout + exit 0\n'
+
+TMP="$(mktemp -d)"
+TARGET="${TMP}/CLAUDE.md"
+
+# Build a representative stub redirect identical in shape to
+# board-superpowers' own CLAUDE.md (13 lines, ends with `@AGENTS.md`).
+cat > "${TARGET}" <<'EOF'
+# CLAUDE.md (redirect to AGENTS.md)
+
+This file exists only so **Claude Code** auto-loads the project's
+canonical instructions, which live in **`AGENTS.md`** — a single
+source of truth for both Claude Code and OpenAI Codex CLI sessions.
+
+> **Make all edits in `AGENTS.md`, not here.**
+> Claude Code resolves the `@` reference below and pulls AGENTS.md
+> into context automatically. Codex CLI loads AGENTS.md natively per
+> its own auto-load convention (see `PLUGIN_DEVELOPMENT.md` for the
+> exact lookup order).
+
+@AGENTS.md
+EOF
+
+ORIG_BYTES="$(sha256_of_file "${TARGET}")"
+
+set +e
+STDOUT_OUT="$(inject_in_subshell "${TARGET}" "${SOURCE_FILE_REAL}" 2>/dev/null)"
+RC=$?
+set -e
+
+assert_eq 'stub-redirect: exit 0' '0' "${RC}"
+assert_eq 'stub-redirect: stdout is empty (no hash)' '' "${STDOUT_OUT}"
+NEW_BYTES="$(sha256_of_file "${TARGET}")"
+assert_eq 'stub-redirect: file bytes unchanged' "${ORIG_BYTES}" "${NEW_BYTES}"
+check_not 'stub-redirect: opening marker NOT injected' \
+    grep -Fq '<!-- board-superpowers:routing -->' "${TARGET}"
+check_not 'stub-redirect: closing marker NOT injected' \
+    grep -Fq '<!-- /board-superpowers:routing -->' "${TARGET}"
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
+# Scenario 16b: Negative — short file WITHOUT @-include is NOT a stub
+# ---------------------------------------------------------------------------
+# A file can be short (≤ 30 lines) without being a stub redirect; it
+# might be a near-empty template the architect intends to populate.
+# Without an `@<file>.md` line the helper MUST proceed with normal
+# injection (case-C: append marker-wrapped block).
+printf 'Scenario 16b: short file without @-include is NOT a stub — normal append\n'
+
+TMP="$(mktemp -d)"
+TARGET="${TMP}/AGENTS.md"
+
+cat > "${TARGET}" <<'EOF'
+# AGENTS.md
+
+Project notes go here.
+EOF
+
+set +e
+HASH16B="$(inject_in_subshell "${TARGET}" "${SOURCE_FILE_REAL}" 2>/dev/null)"
+RC=$?
+set -e
+
+assert_eq 'short-no-include: exit 0' '0' "${RC}"
+check 'short-no-include: stdout produced 64-char hex hash (NOT empty)' \
+    bash -c "printf '%s' \"\$1\" | grep -Eq '^[0-9a-f]{64}$'" _ "${HASH16B}"
+check 'short-no-include: opening marker present (block was appended)' \
+    grep -Fq '<!-- board-superpowers:routing -->' "${TARGET}"
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
+# Scenario 16c: Negative — long file WITH @-include is NOT a stub
+# ---------------------------------------------------------------------------
+# Similarly, a substantive file (> 30 lines) that happens to mention an
+# `@<file>.md` line for legitimate cross-reference reasons should NOT
+# be classified as a stub. Normal injection proceeds.
+printf 'Scenario 16c: long file containing @-include is NOT a stub — normal append\n'
+
+TMP="$(mktemp -d)"
+TARGET="${TMP}/AGENTS.md"
+
+{
+    printf '# AGENTS.md\n\n'
+    for i in $(seq 1 35); do
+        printf 'Long-form content line %d. The full project guide.\n' "${i}"
+    done
+    printf '\nSee also @ARCHITECTURE.md for architecture details.\n'
+    printf '\nMore content.\n'
+} > "${TARGET}"
+
+set +e
+HASH16C="$(inject_in_subshell "${TARGET}" "${SOURCE_FILE_REAL}" 2>/dev/null)"
+RC=$?
+set -e
+
+assert_eq 'long-with-include: exit 0' '0' "${RC}"
+check 'long-with-include: stdout produced 64-char hex hash (NOT empty)' \
+    bash -c "printf '%s' \"\$1\" | grep -Eq '^[0-9a-f]{64}$'" _ "${HASH16C}"
+check 'long-with-include: opening marker present (block was appended)' \
+    grep -Fq '<!-- board-superpowers:routing -->' "${TARGET}"
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
+# Scenario 17: end-to-end F-B2 with stub CLAUDE.md — only 1 routing_blocks entry
+# ---------------------------------------------------------------------------
+printf 'Scenario 17: end-to-end F-B2 with stub CLAUDE.md — 1 entry only\n'
+
+TMP="$(mktemp -d)"
+HOME_DIR="${TMP}/home"
+PLUGIN_ROOT="${TMP}/plugin"
+STUBS_DIR="${TMP}/stubs"
+REPO_ROOT="${TMP}/repo"
+
+mkdir -p "${HOME_DIR}" "${STUBS_DIR}"
+make_stub_plugin_root "0.2.0" "${PLUGIN_ROOT}"
+init_tmp_repo "${REPO_ROOT}" "foo/bar"
+stub_gh "${STUBS_DIR}"
+printf '%s\n' "${CANONICAL_STATUS}" > "${STUBS_DIR}/status_opts"
+printf '[]\n' > "${STUBS_DIR}/labels.json"
+
+# Pre-seed CLAUDE.md as a stub redirect (matches board-superpowers'
+# own CLAUDE.md form). AGENTS.md is absent — created fresh by F-B2.
+cat > "${REPO_ROOT}/CLAUDE.md" <<'EOF'
+# CLAUDE.md (redirect to AGENTS.md)
+
+This file exists only so **Claude Code** auto-loads the project's
+canonical instructions, which live in **`AGENTS.md`** — a single
+source of truth for both Claude Code and OpenAI Codex CLI sessions.
+
+> **Make all edits in `AGENTS.md`, not here.**
+
+@AGENTS.md
+EOF
+
+CLAUDE_ORIG_SHA="$(sha256_of_file "${REPO_ROOT}/CLAUDE.md")"
+
+set +e
+ALL_OUT="$(run_bootstrap "${HOME_DIR}" "${PLUGIN_ROOT}" "${STUBS_DIR}" \
+    --owner foo --project 1 --repo-root "${REPO_ROOT}" 2>&1)"
+RC=$?
+set -e
+
+assert_eq 'stub-e2e: bootstrap exit 0' '0' "${RC}"
+check 'stub-e2e: AGENTS.md created with marker pair' \
+    bash -c "grep -Fq '<!-- board-superpowers:routing -->' \"\$1\" && grep -Fq '<!-- /board-superpowers:routing -->' \"\$1\"" _ "${REPO_ROOT}/AGENTS.md"
+check_not 'stub-e2e: stub CLAUDE.md NOT given marker pair' \
+    grep -Fq '<!-- board-superpowers:routing -->' "${REPO_ROOT}/CLAUDE.md"
+CLAUDE_NEW_SHA="$(sha256_of_file "${REPO_ROOT}/CLAUDE.md")"
+assert_eq 'stub-e2e: stub CLAUDE.md bytes byte-identical (untouched)' \
+    "${CLAUDE_ORIG_SHA}" "${CLAUDE_NEW_SHA}"
+
+STATE_DIR="$(normalized_state_dir "${HOME_DIR}" "${REPO_ROOT}")"
+STATE_FILE="${STATE_DIR}/state.yml"
+check 'stub-e2e: state.yml created' test -f "${STATE_FILE}"
+
+# routing_blocks should have ONLY AGENTS.md (1 entry). CLAUDE.md skipped.
+COUNT="$(python3 -c "
+import sys
+data = open(sys.argv[1]).read()
+lines = data.splitlines()
+in_rb = False
+n = 0
+for line in lines:
+    if line.startswith('routing_blocks:'):
+        in_rb = True
+        continue
+    if in_rb:
+        if line.startswith('  - target_file:'):
+            n += 1
+        elif line and not line.startswith(' '):
+            break
+print(n)
+" "${STATE_FILE}")"
+assert_eq 'stub-e2e: state.yml has exactly 1 routing_blocks entry (AGENTS.md only)' '1' "${COUNT}"
+check 'stub-e2e: state.yml mentions AGENTS.md target' \
+    bash -c "grep -Eq 'target_file:.*AGENTS\\.md' \"\$1\"" _ "${STATE_FILE}"
+check_not 'stub-e2e: state.yml does NOT mention CLAUDE.md target' \
+    bash -c "grep -Eq 'target_file:.*CLAUDE\\.md' \"\$1\"" _ "${STATE_FILE}"
+
+: "${ALL_OUT:-}"
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 printf '\n— TOTALS —\nPASS: %d\nFAIL: %d\n' "${PASS}" "${FAIL}"
