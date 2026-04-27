@@ -2,7 +2,11 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMPREPO="$(mktemp -d)"
-TMPDB="$(mktemp -t audit.XXXXXX -u).db"
+# Co-locate TMPDB inside TMPREPO so a single trap cleans both.
+# (Previous form used `mktemp -t -u` which is racy + leaks tempdirs on
+# assertion failure under set -e.)
+TMPDB="${TMPREPO}/audit.db"
+trap 'rm -rf "${TMPREPO}"' EXIT
 
 mkdir -p "${TMPREPO}/.board-superpowers"
 git -C "${TMPREPO}" init -q
@@ -26,7 +30,7 @@ bash "${SCRIPT_DIR}/scripts/audit-log-write.sh" \
     --payload "${PAYLOAD}" \
     --repo-root "${TMPREPO}"
 rc=$?
-[ $rc -eq 0 ] || { echo "FAIL: audit-log-write exit $rc"; rm -f "${TMPDB}"; rm -rf "${TMPREPO}"; exit 1; }
+[ $rc -eq 0 ] || { echo "FAIL: audit-log-write exit $rc"; exit 1; }
 
 # Read back and verify byte-equal.
 ROWBACK=$(sqlite3 "${TMPDB}" "SELECT payload FROM audit_log WHERE action_id=100 LIMIT 1")
@@ -36,10 +40,5 @@ else
     echo "FAIL: round-trip mismatch"
     echo "in:  ${PAYLOAD}"
     echo "out: ${ROWBACK}"
-    rm -f "${TMPDB}"
-    rm -rf "${TMPREPO}"
     exit 1
 fi
-
-rm -f "${TMPDB}"
-rm -rf "${TMPREPO}"
