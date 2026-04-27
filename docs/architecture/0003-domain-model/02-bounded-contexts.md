@@ -178,7 +178,7 @@ files at
   user spec docs.)
 
 **Invariants applying here:** I-10 (routing-block mirror rule
-between source-of-truth `claudemd-routing.md` and downstream
+between source-of-truth `agentsmd-routing.md` and downstream
 files), I-11 (plugin-owned vs user-owned region split, with
 `block_hash` as the boundary enforcer), I-12 (schema
 versioning + lazy migration), I-13 (state files in git,
@@ -199,9 +199,13 @@ and Consumer action.
   scoping TBD in `0005-contracts.md`).
 
 **Physical substrate.** A relational database the architect
-provides — Postgres or MySQL only (ADR-0006 §5 backend
-constraint). SQLite, local files, card comments, dedicated
-audit issues are all explicitly forbidden. Connection details
+provides — the 6-scheme allowlist is `postgresql://`,
+`postgres://`, `mysql://`, `mysql+pymysql://`, `sqlite://`,
+`sqlite3://` (ADR-0006 §5 + ADR-0009). SQLite is acceptable
+when host-local under
+`~/.board-superpowers/repos/<normalized>/audit.db`; SQLite
+inside the project tree, bare file paths, card comments, and
+dedicated audit issues remain forbidden. Connection details
 via `~/.board-superpowers/credentials.yml` (chmod 600) or
 `BOARD_SP_AUDIT_DB_URL` env var.
 

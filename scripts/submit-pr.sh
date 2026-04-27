@@ -106,7 +106,7 @@ trap 'rm -f "${TMP_BODY}"' EXIT
 cp "${BODY_FILE}" "${TMP_BODY}"
 {
     printf '\n\n---\n'
-    printf 'Closes #%s — board-superpowers v0.1.1 claim trailer.\n' "${CARD}"
+    printf 'Closes #%s — board-superpowers v0.2.0 claim trailer.\n' "${CARD}"
 } >> "${TMP_BODY}"
 
 # --- Open the PR ---------------------------------------------------------

@@ -8,15 +8,63 @@ when_to_use: Use as a router when intent is ambiguous, when no other board-super
 
 This is the entry skill — first touch when a board-superpowers session starts. It routes; it does not perform real work itself.
 
-The skill handles three things, in this order:
+The skill operates in three steps. Steps 1-3 are the **Layer 2 reliable gate** of the bootstrap surface (the SessionStart hook is Layer 1, advisory). Per [`docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md`](../../docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md) § "three-layer alert + intent-injection strategy", Layer 2 always re-runs the same dep + state check Layer 1 ran, so routing works even when CC `SessionStart` delivery silently drops the hook output.
 
-1. **Verifies dependencies** are present (`bash ${CLAUDE_PLUGIN_ROOT}/scripts/check-deps.sh`, or the equivalent absolute path on Codex). If they fail, surface the dep-check output and stop — no point routing further work into a broken plugin.
+## Step 1 — re-run dep + state check (Layer 2 reliable gate)
 
-2. **Consumes any hook-injected intent marker** delivered as `additionalContext` from the SessionStart hook. Markers follow the format `INVOKE: <skill-name>` followed by `REASON: <one-line>`. The marker is a fast-path hint; if a marker arrives, route to the named skill directly and pass through the reason as orientation.
+The hook is best-effort; this skill is the contract. Always run BOTH probes itself, even if the hook fired correctly.
 
-3. **Routes the user's message** to the right downstream skill using the table below.
+1. Run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/check-deps.sh --machine` (or the equivalent absolute path on Codex). Parse stdout — when non-empty, exactly three lines arrive:
+
+   ```
+   MISSING=<csv-or-empty>
+   ROUTING_INJECTED=<yes|no>
+   PROJECT=<absolute path>
+   ```
+
+   When stdout is empty, all is well — proceed to step 2. When stdout is non-empty, surface the dep / routing problem to the user before any further routing — a broken plugin can't run the routes anyway.
+
+2. Probe the host-local state files (paths per [`07-path-conventions.md`](../../docs/architecture/0005-contracts/07-path-conventions.md) "Per-host layout"):
+
+   - `~/.board-superpowers/manifest.yml` — present or absent?
+   - `~/.board-superpowers/repos/<normalized>/state.yml` — present or absent?
+
+   Resolve the repo root with `bsp_primary_repo_root "${PWD}"` from `scripts/lib/common.sh` — NEVER call `git rev-parse --show-toplevel` directly. From inside a `git worktree`, `--show-toplevel` returns the worktree path, which normalizes to a different `<normalized>` than the canonical primary repo. Probing under that path misses an already-written `state.yml` and falsely concludes the repo is unbootstrapped, which would make every worktree-launched session re-emit the bootstrap prompt. `bsp_primary_repo_root` uses `git rev-parse --git-common-dir` (which always points at the primary repo regardless of worktree vs primary), then takes `dirname` of that, then runs `pwd -P` to resolve symlinks. The same incantation is duplicated inline in `hooks/session-start.sh` as `primary_repo_root` (per the hook's self-containment contract) — keep the two in lockstep when changing the rule.
+
+   `<normalized>` is the resolved primary repo's absolute path with leading `/` stripped and remaining `/` replaced by `-` (e.g. `/Users/foo/proj` → `Users-foo-proj`). Use `bsp_normalize_repo_path` from `scripts/lib/common.sh` AFTER the primary-repo-root resolution.
+
+   For worktree-base path resolution (a different concern — where to PUT new worktrees, not where the primary repo IS) consult `bsp_pick_worktree_dir`. The two helpers do not interchange.
+
+## Step 2 — consume `INVOKE: bootstrapping-repo` marker if present
+
+Inspect the system-reminder / `additionalContext` content delivered with this turn for a marker shaped:
+
+```
+INVOKE: bootstrapping-repo
+REASON: <one-line explanation>
+```
+
+Marker grammar is pinned in [`02-hook-contracts.md`](../../docs/architecture/0005-contracts/02-hook-contracts.md) § "Intent-injection markers". Rules:
+
+- **Marker present, recognized skill name** — route immediately to the named skill. At v0.2.0 the only legal value is `bootstrapping-repo`. Pass through the REASON line as orientation context.
+- **Marker present, unknown skill name** — stop and surface "unrecognized hook intent marker — please file a bug" rather than guessing.
+- **Marker absent BUT step 1 found state files absent** — route the same way (do NOT depend on the hook firing). This is what makes Layer 2 the reliable gate.
+
+The marker is a fast-path optimization, not a correctness requirement. Same routing decision regardless of whether Layer 1 delivered the marker or not.
+
+## Step 3 — chain F-B1 → F-B2 when state files are absent
+
+When step 1's state probe reports a missing file (whether or not step 2 saw the marker), chain bootstrap:
+
+- **`~/.board-superpowers/manifest.yml` absent** — invoke `bash ${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap-host.sh` (F-B1). This writes the host manifest and is idempotent on re-run.
+- **Per-repo `state.yml` absent** — invoke the `bootstrapping-repo` skill, which drives F-B2 via `scripts/bootstrap-project.sh`. F-B2 collects `OWNER/NUMBER`, writes per-repo `config.yml` + host-local `state.yml`, and injects the routing block into `AGENTS.md` / `CLAUDE.md`.
+- **Both absent** — F-B1 first, then chain into F-B2.
+
+After bootstrap completes, continue with the routing table below for the user's actual request.
 
 ## Routing table
+
+The post-bootstrap routing — used after step 1 surfaces no problems and step 2/3 detect no pending bootstrap.
 
 | Signal in user message | Route to |
 |------------------------|---------|
@@ -27,7 +75,7 @@ The skill handles three things, in this order:
 | "new requirement" / "intake this idea" / "I have a feature" | `board-superpowers:managing-board` (intake routine) |
 | "what's blocked" / "triage the board" / "release stale claims" | `board-superpowers:managing-board` (triage routine) |
 | "what does this plugin do" / "how does this work" / "what's available" | Answer inline (informational query) — see `references/first-time-user-guide.md` |
-| "set up board-superpowers on this repo" / "first time on this repo" | Surface manual-setup walkthrough from `references/first-time-user-guide.md` |
+| "set up board-superpowers on this repo" / "first time on this repo" | Route to `bootstrapping-repo` skill (F-B2) |
 | Anything clearly board-related but not in the table | Ask the user to disambiguate — do NOT pick a default |
 
 ## Routing discipline
@@ -49,31 +97,11 @@ Some user messages sound board-related but actually belong to sibling plugins. D
 
 This entry skill exists to route board-scoped intent — not to be the universal entry point for all sessions in this repo.
 
-## Hook-injected intent markers
-
-The SessionStart hook (`hooks/session-start.sh`) emits `additionalContext` JSON with:
-
-- A status line confirming the plugin is loaded.
-- Any failed dep-check details with install hints.
-- A friendly note about manual setup if the per-repo `.board-superpowers/config.yml` is absent.
-
-When this skill triggers, check the most recent system-injected context for the dep-check output. If checks failed, surface that BEFORE attempting any routing — a broken plugin can't run the routes anyway.
-
-If a future plugin version starts injecting `INVOKE: <skill>` markers via the same `additionalContext` channel, the marker is a hint, not a contract — this skill remains free to override based on richer message context.
-
 ## Cross-platform notes
 
 This skill works on both Claude Code and Codex CLI. The routing logic uses only `name` + `description` frontmatter; downstream skills' Tier-2 fields (like the `argument-hint` on `consuming-card`) take effect after routing.
 
-On Codex CLI, the SessionStart hook is wired via `~/.codex/hooks.json` after running `bash scripts/register-codex-hooks.sh --install-user` once per Codex install. The dep-check output reaches this skill via the same `additionalContext` payload — no platform-specific code path needed.
-
-## Friendly intro for first-time invocations
-
-If this is the user's first time invoking the plugin (detection: `.board-superpowers/config.yml` does NOT exist in the current repo), prepend the response with a 3-sentence orientation:
-
-> board-superpowers is a board-driven scheduling layer on top of `superpowers` and `gstack`. It routes every session into Manager (board orchestration) or Consumer (one-card-to-PR) mode and delegates real work — TDD, debugging, review, QA, security audit — to the sibling plugins. See `references/first-time-user-guide.md` for the per-repo setup walkthrough.
-
-Then proceed with routing.
+On Codex CLI, the SessionStart hook is wired via `~/.codex/hooks.json` after running `bash scripts/register-codex-hooks.sh --install-user` once per Codex install. The dep-check output and intent-injection marker reach this skill via the same `additionalContext` payload — no platform-specific code path needed.
 
 ## Anti-pattern: routing that becomes work
 

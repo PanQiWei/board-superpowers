@@ -1,4 +1,4 @@
-# Skills system — board-superpowers v1 catalog (10 skills total: 5 v1-minimum + 5 deferred to v1-complete, 3 layers)
+# Skills system — board-superpowers v1 catalog (10 skills total: 6 v1-minimum + 4 deferred to v1-complete, 3 layers)
 
 > **Always loaded.** This document is referenced from
 > [`AGENTS.md`](./AGENTS.md) via `@SKILLS.md` and rides into
@@ -76,11 +76,11 @@ A9).
 
 ## v1 minimum vs v1 complete
 
-The full v1 catalog defines **10 skills**. The first PR that
-ships skill content lands a deliberate subset — **5 v1-minimum
-skills** — whose purpose is to make the plugin **self-hostable
-on this very repo**. The other 5 are **deferred to v1-complete**
-and ship in a follow-up PR once the dogfood loop is validated.
+The full v1 catalog defines **10 skills**. As of `v0.2.0`,
+**6 v1-minimum skills** ship — enough to make the plugin
+**self-hostable on this very repo** AND to bootstrap a fresh
+consuming repo from zero. The remaining **4 are deferred to
+v1-complete** and ship in follow-up PRs once each is unblocked.
 
 | Skill | Layer | v1 status | Why this scoping |
 |-------|-------|-----------|-------------------|
@@ -88,8 +88,8 @@ and ship in a follow-up PR once the dogfood loop is validated.
 | `managing-board` | Molecular | **v1-minimum** | Producer surface — required for "what should I work on" / Review Queue / intake on this repo. |
 | `consuming-card` | Molecular | **v1-minimum** | Consumer surface — required for the F-C0..F-C14 lifecycle that delivers each card's PR. |
 | `decomposing-into-milestones` | Molecular | deferred to v1-complete | Initial cards on this repo's board are hand-crafted by the architect; automatic decomposition is a v1-complete enhancement. |
-| `bootstrapping-repo` | Molecular | deferred to v1-complete | This repo is already manually bootstrapped (GitHub Project + standard labels exist). The skill is required for **other** repos' first-time setup, not for our own dogfood. |
-| `migrating-repo-version` | Molecular | deferred to v1-complete | No prior version exists; migration only becomes meaningful starting from v0.2.x → v0.3.x transitions. |
+| `bootstrapping-repo` | Molecular | **v1-minimum** (shipped in v0.2.0) | F-B1 (host bootstrap) + F-B2 (per-repo bootstrap, including step 4 routing-block injection) — the entry-skill state probe routes here on first session. |
+| `migrating-repo-version` | Molecular | deferred to v1-complete | Migration becomes meaningful starting from v0.2.x → v0.3.x transitions; the v0.2.0 ship establishes the baseline. |
 | `board-canon` | Atomic | **v1-minimum** | True SPOT — every other v1-minimum skill consumes its state machine + schema + WIP rules. |
 | `enforcing-pr-contract` | Atomic | **v1-minimum** | True SPOT — Consumer's F-C12 PR submit + Manager's F-02 Review Queue both depend on it. |
 | `classifying-actions` | Atomic | deferred to v1-complete | D-AUTONOMY-1 matrix lives inline in v1-minimum skills as "ask-architect-on-every-mutation" (degraded R-class default). Atomic SPOT extraction lands in v1-complete with `auditing-actions`. |
@@ -144,7 +144,7 @@ means for board-superpowers" #3 for the full rationale.
 - **Tier 2 frontmatter**: `when_to_use` (extended trigger
   vocabulary outside the primary `description`).
 
-### Molecular layer (5 skills: 2 v1-minimum + 3 deferred)
+### Molecular layer (5 skills: 3 v1-minimum + 2 deferred)
 
 #### `managing-board` (v1-minimum)
 
@@ -202,26 +202,34 @@ means for board-superpowers" #3 for the full rationale.
   `classifying-actions`, `auditing-actions`.
 - **Composes (cross-plugin)**: see § "Cross-plugin edges" below.
 
-#### `bootstrapping-repo` (deferred to v1-complete)
+#### `bootstrapping-repo` (v1-minimum, shipped v0.2.0)
 
-- **Role**: §1.5.0 dep check + F-B1 (host bootstrap) + F-B2
-  (per-repo bootstrap, with 5 sub-capabilities: standard
-  labels, Status validation, `config.yml` write, `.gitignore`
-  entry, BYO-RDBMS credential setup).
-- **Body target**: 300-400 lines.
-- **References folder**:
-  `references/{intro,first-time-user-guide,byo-rdbms-setup,project-creation-walkthrough}.md`.
-- **Composes (atomic)**: `board-canon` (read schema invariants
-  for Status validation), `auditing-actions`.
+- **Role**: F-B1 (host bootstrap) + F-B2 (per-repo bootstrap with
+  5 sub-capabilities — standard labels, Status validation,
+  `config.yml` write, `.gitignore` entry, BYO-RDBMS credential
+  setup) + step 4 routing-block injection into `AGENTS.md` +
+  `CLAUDE.md` + initial host-local `state.yml` write. Drives
+  `scripts/bootstrap-host.sh` and `scripts/bootstrap-project.sh`
+  end-to-end and orchestrates the architect's first-session UX.
+- **Body target**: 250-450 lines (molecular budget).
+- **References folder**: `references/{intro,first-time-user-guide}.md`
+  + `references/changelog/v0.2.0.md`.
+- **Composes (atomic)**: `board-canon` (read schema invariants for
+  Status validation; static reference at v1-minimum). The deferred
+  atomic `auditing-actions` is inlined as the v1-minimum-degraded
+  jsonl audit trace via `bsp_audit_local_write`.
 - **Composes (cross-plugin)**: none (bootstrap is
   board-superpowers-internal).
-- **Trigger model**: `INVOKE: bootstrapping-repo` marker
-  injected by the `SessionStart` hook when `manifest.yml` or
-  `state.yml` is absent (fast path), OR architect explicitly
-  says "set up board-superpowers" (fallback path). Per the hook
-  intent injection pattern in
-  [`docs/architecture/0004-component-architecture.md`](./docs/architecture/0004-component-architecture.md)
+- **Trigger model**: `INVOKE: bootstrapping-repo` marker injected
+  by the `SessionStart` hook when `manifest.yml` or per-repo
+  `state.yml` is absent (fast path), OR architect explicitly says
+  "set up board-superpowers" / "first time on this repo" /
+  "bootstrap this repo" (fallback path). Per the hook intent
+  injection pattern in [`docs/architecture/0004-component-architecture.md`](./docs/architecture/0004-component-architecture.md)
   § "Hook intent injection pattern".
+- **Tier 2 frontmatter**: `when_to_use` (extended trigger
+  vocabulary covering the architect-spoken fallback phrases plus
+  the entry-skill state-probe trigger).
 
 #### `migrating-repo-version` (deferred to v1-complete)
 

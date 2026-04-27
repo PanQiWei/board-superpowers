@@ -346,12 +346,17 @@ needs its config.
         no longer needed: `state.yml` does not live in the repo at
         all.
      5. **BYO RDBMS audit-log credential setup** (per ADR-0006
-        §5) — checks for `BOARD_SP_AUDIT_DB_URL` env var OR
-        `~/.board-superpowers/credentials.yml` (chmod 600) with
-        an `audit_db_url:` field. **Postgres or MySQL only**;
-        SQLite, local file paths, and any public destination
-        (card comments, audit issue) are explicitly forbidden.
-        If no DB is configured, surface the trade-off: every
+        §5 + ADR-0009) — checks for `BOARD_SP_AUDIT_DB_URL` env
+        var OR `~/.board-superpowers/credentials.yml` (chmod
+        600) with an `audit_db_url:` field. **6-scheme
+        allowlist**: `postgresql://`, `postgres://`, `mysql://`,
+        `mysql+pymysql://`, `sqlite://`, `sqlite3://` (per
+        ADR-0009). SQLite is acceptable when host-local under
+        `~/.board-superpowers/repos/<normalized>/audit.db`;
+        SQLite inside the project tree, bare file paths, and any
+        public destination (card comments, audit issue) remain
+        forbidden. If no DB is configured, surface the trade-off:
+        every
         D-AUTONOMY-1 A-class action degrades to R-class
         (architect prompt required for everything Producer
         would otherwise auto-do) until the architect provisions
@@ -370,7 +375,7 @@ needs its config.
   4. **Dual-file routing injection** — append the canonical
      routing block to **both** `CLAUDE.md` AND `AGENTS.md`. The
      block content is mirrored verbatim from
-     `skills/using-board-superpowers/references/claudemd-routing.md`
+     `skills/using-board-superpowers/references/agentsmd-routing.md`
      between the marker pair `<!-- board-superpowers:routing -->`
      / `<!-- /board-superpowers:routing -->`. If either file
      exists already with content, the block is appended (with one
@@ -512,7 +517,7 @@ needs its config.
        `state.yml:routing_blocks` and compare to its `block_hash`.
      - **If hashes match** (block is plugin-pristine): re-inject
        the new source-of-truth block content from
-       `references/claudemd-routing.md`, update `block_hash` in
+       `references/agentsmd-routing.md`, update `block_hash` in
        `state.yml`, log an audit entry. Auto-update; no architect
        prompt.
      - **If hashes differ** (architect modified the block since
@@ -535,7 +540,7 @@ needs its config.
      every subsequent session for this version.
 - **Composes**: §1.5.0 dep check + `state.yml` parse + SHA256
   + diff (line-based diff for the user-modified surface
-  prompt) + `references/claudemd-routing.md` source-of-truth
+  prompt) + `references/agentsmd-routing.md` source-of-truth
   read + migration-script execution.
 - **Maps to (canonical)**: chezmoi `apply` 3-way prompt for
   modified targets; Debian `dpkg --force-confdef` /

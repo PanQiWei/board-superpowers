@@ -293,10 +293,14 @@ sub-step. Common failure modes worth narrating in detail:
        (per ADR-0006 §5's "trade-off explicitly registered"
        note). Audit-log writes buffer in memory until the DB
        is back; on persistent failure, Producer surfaces and
-       suspends. There is no on-disk audit-log fallback —
-       SQLite / local files are explicitly forbidden per
-       ADR-0006 §5 because the BYO-RDBMS contract is the
-       enforcement mechanism.
+       suspends. SQLite (host-local under
+       `~/.board-superpowers/repos/<normalized>/audit.db`) is
+       acceptable as a primary backend per ADR-0009, but it is
+       still chosen at bootstrap, not silently fallen back to —
+       there is no automatic on-disk fallback when the configured
+       DB is unreachable. Project-tree SQLite and bare file
+       paths remain forbidden per ADR-0006 §5; the BYO contract
+       is the enforcement mechanism either way.
 
 **4. Initial `state.yml` write** (per §1.5.2 F-B2 step 3). Skill
 writes to
@@ -315,7 +319,7 @@ routing_blocks: []    # filled in step 5
 
 **5. Dual-file routing block injection** (per §1.5.2 F-B2
 step 4). Skill reads
-`skills/using-board-superpowers/references/claudemd-routing.md`,
+`skills/using-board-superpowers/references/agentsmd-routing.md`,
 extracts the fenced block, and appends it to both `CLAUDE.md`
 AND `AGENTS.md`. If a file does not exist, it is created with
 just the routing block. After injection, the skill computes
@@ -335,7 +339,7 @@ routing_blocks:
 
 - **Why `block_hash` exists.** Plugin upgrades may want to
   re-inject an updated routing block when the source-of-truth
-  in `claudemd-routing.md` evolves (F-B4). The plugin has to
+  in `agentsmd-routing.md` evolves (F-B4). The plugin has to
   decide: "did the architect modify the on-disk block since I
   last wrote it?" The `block_hash` is the answer — at F-B4
   time, recompute SHA256 of the on-disk block and compare. If
@@ -546,7 +550,7 @@ F-B4 step 4. For each of `CLAUDE.md` and `AGENTS.md`:
 
 **Case 1: hashes match (block is plugin-pristine).** Skill
 auto-re-injects the new source-of-truth block content from
-`references/claudemd-routing.md`, updates `block_hash` in
+`references/agentsmd-routing.md`, updates `block_hash` in
 `state.yml`, writes an audit-log entry. Architect sees:
 
 ```

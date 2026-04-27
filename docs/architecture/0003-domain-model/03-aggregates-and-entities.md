@@ -457,7 +457,7 @@ Path normalization rule pinned at
 - **I-10 routing-block mirror rule** — the block content
   injected into `CLAUDE.md` / `AGENTS.md` is byte-identical
   to the source-of-truth block at
-  `skills/using-board-superpowers/references/claudemd-routing.md`.
+  `skills/using-board-superpowers/references/agentsmd-routing.md`.
 - **I-11 plugin-owned vs user-owned region split** — the
   routing block within marker pair is plugin-owned;
   everything outside is user-owned. `BlockHash` is the
@@ -572,18 +572,23 @@ immutable AuditEntry value objects.
   unreachable, every A-class action degrades to R-class
   (architect prompted). The AuditTrail aggregate is what
   the degradation guards: no write → no autonomy.
-- **Persistence target constraints (ADR-0006 §5):**
-  Postgres OR MySQL (no SQLite); never local files; never
-  in-repo paths; never public destinations (no card
-  comments, no audit issues, no GitHub Discussions).
+- **Persistence target constraints (ADR-0006 §5 + ADR-0009):**
+  6-scheme allowlist — `postgresql://`, `postgres://`,
+  `mysql://`, `mysql+pymysql://`, `sqlite://`, `sqlite3://`.
+  SQLite is acceptable when host-local under
+  `~/.board-superpowers/repos/<normalized>/audit.db`; SQLite
+  inside the project tree, bare file paths, and public
+  destinations (card comments, audit issues, GitHub
+  Discussions) remain forbidden.
 - **Credentials sourced from user layer, never repo layer.**
   Either `~/.board-superpowers/credentials.yml` (chmod 600;
   `audit_db_url:` field) or `BOARD_SP_AUDIT_DB_URL` env
   var. Final mechanism choice TBD in `0005-contracts.md`.
 
-**Physical location.** A user-provided Postgres or MySQL
-database. The plugin owns the schema definition (lives in
-TBD-4) but does NOT own the database itself.
+**Physical location.** A user-provided Postgres, MySQL, or
+SQLite database (per ADR-0009). The plugin owns the schema
+definition (lives in TBD-4) but does NOT own the database
+itself.
 
 **TBD-3.** Per-`action_id` payload shape hardening. ADR-0006 §5
 notes payload is loose JSONB at v1; once Producer features

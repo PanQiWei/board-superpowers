@@ -139,9 +139,11 @@ design — none of these files are tracked in git (per I-13).
 | `~/.board-superpowers/manifest.yml` | no | inherits umask (typically `0644`) | HostBootstrap | Plugin-managed `HostManifest` (per [`03-config-schemas.md`](./03-config-schemas.md)) |
 | `~/.board-superpowers/overrides.yml` | no | inherits umask | RepoConfig (user-layer) | User-level autonomy overrides (per [`03-config-schemas.md`](./03-config-schemas.md)) |
 | `~/.board-superpowers/credentials.yml` | no | **`0600` strict** | AuditTrail | Audit-DB connection string (per [`03-config-schemas.md`](./03-config-schemas.md) + ADR-0006 §5) |
-| `~/.board-superpowers/repos/` | n/a | inherits `0700` | RepoBootstrap | Container for all per-repo `state.yml` files this host has bootstrapped |
-| `~/.board-superpowers/repos/<normalized-repo-path>/` | n/a | inherits | RepoBootstrap | One sub-directory per repo bootstrapped on this host; name is the repo's absolute path with leading `/` stripped and remaining `/` replaced by `-` |
+| `~/.board-superpowers/repos/` | n/a | inherits `0700` | RepoBootstrap | Container for every per-`(host, repo)` directory this host has bootstrapped |
+| `~/.board-superpowers/repos/<normalized-repo-path>/` | n/a | inherits | RepoBootstrap | One sub-directory per repo bootstrapped on this host; name is the repo's absolute path with leading `/` stripped and remaining `/` replaced by `-`. Houses the three per-`(host, repo)` siblings below |
 | `~/.board-superpowers/repos/<normalized-repo-path>/state.yml` | no | inherits | RepoBootstrap | Plugin-managed `RepoState` for this (host, repo) pair (per [`03-config-schemas.md`](./03-config-schemas.md)) |
+| `~/.board-superpowers/repos/<normalized-repo-path>/audit-local.jsonl` | no | inherits | AuditTrail (degraded mode) | Per-`(host, repo)` jsonl trace written when audit DB is unavailable. **Legacy v0.1.0-minimum** wrote this at `~/.board-superpowers/<host>/<repo>/audit-local.jsonl`; Card 1's plumbing migrates the legacy path into the canonical normalized location |
+| `~/.board-superpowers/repos/<normalized-repo-path>/audit.db` | no | inherits | AuditTrail (SQLite scheme) | **Optional.** Default SQLite database path suggested by `bootstrap-project.sh` step 2e when the architect picks `sqlite://` / `sqlite3://` (per ADR-0009). Absent when BYO scheme is Postgres / MySQL or audit DB is not configured |
 
 ### Path-normalization rule for the per-repo sub-directory
 
@@ -168,6 +170,34 @@ from Claude Code's leading-`-` form (`-Users-panqiwei-...`); the
 absence of the leading dash makes the directory listing read more
 naturally with no semantic loss.
 
+### Per-`(host, repo)` directory contents — three siblings
+
+Each `~/.board-superpowers/repos/<normalized-repo-path>/` directory
+houses up to three sibling files, one per concern, all owned by
+distinct aggregates but co-located so a single `(host, repo)` pair
+has exactly one canonical filesystem footprint:
+
+| Sibling | Always present? | Owner | Lifecycle |
+|---------|-----------------|-------|-----------|
+| `state.yml` | Yes (after F-B2) | RepoBootstrap | Created at F-B2 first run; updated by F-B4 on version transitions; schema-versioned per I-12 |
+| `audit-local.jsonl` | Yes during R-class degradation; absent once a BYO audit DB is configured AND reachable | AuditTrail (degraded mode) | Append-only jsonl trace written when `audit_db_url` is unset OR the configured DB is unreachable. **Legacy v0.1.0-minimum location** was `~/.board-superpowers/<host>/<repo>/audit-local.jsonl`; Card 1's plumbing migrates that path forward into the canonical normalized location |
+| `audit.db` | Only when BYO scheme is `sqlite://` / `sqlite3://` AND the architect accepted the default path suggestion | AuditTrail (SQLite scheme) | Created on the first audit write after F-B2 step 2e selects SQLite; lives for the project's lifetime (no rollover); WAL mode enabled on first connection |
+
+**One normalized dir per `(host, repo)` pair.** The directory name
+is fully determined by the host's view of the repo's absolute path
+(per the normalization rule above); no two distinct
+`(host, repo)` pairs share a directory under any architect's `$HOME`.
+The three siblings stay in lockstep — when the architect runs the
+deferred `bootstrap-rollback.sh`, every sibling under this directory
+gets cleaned up symmetrically.
+
+The `audit.db` sibling is **forbidden inside the project tree**
+(e.g., `<repo>/.board-superpowers/audit.db`). Per ADR-0009 the
+default suggestion deliberately steers the architect to this
+host-local location; if they override to a different host-local
+path under `~/.board-superpowers/` that is acceptable, but a
+project-tree location is rejected.
+
 ### Why `~/.board-superpowers/` and not `~/.config/board-superpowers/`
 
 ADR-0003 already places the global-default worktree dir under
@@ -193,6 +223,9 @@ parent dir guards anything new by default.
 - 0003 § 3.3.8 AuditTrail aggregate — `credentials.yml` location +
   permission rules.
 - ADR-0006 §5 (BYO RDBMS — credential-file location finalization).
+- ADR-0009 — `audit.db` sibling location finalization for the
+  SQLite scheme; default path suggestion under
+  `~/.board-superpowers/repos/<normalized-repo-path>/audit.db`.
 - I-13 (state files in git, machine-state files not).
 - [`03-config-schemas.md`](./03-config-schemas.md) — schemas for
   every file in this table.
@@ -470,6 +503,8 @@ project. Out-of-scope per P3.
 - ADR-0002 (atomic claim — claim marker is the lock payload).
 - ADR-0003 (worktree path priority — canonical home).
 - ADR-0006 §5 (BYO RDBMS — `credentials.yml` location).
+- ADR-0009 (allow SQLite as a BYO audit DB scheme — `audit.db`
+  sibling default path).
 - ADR-0007 C-PLUGIN-2 (no daemon — session-log paths are read,
   never written).
 - `MULTI_AGENT_DEVELOPMENT.md` — session-log path canonical home

@@ -1,0 +1,138 @@
+# bootstrapping-repo — first-time user guide
+
+This is the "what now" content delivered immediately after F-B2 step 4 (state.yml write) completes. Surface it inline to the architect once F-B2 reports success. The guide is post-bootstrap orientation — it assumes the architect has just had F-B1 + F-B2 succeed and now needs to know what to do next.
+
+For pre-bootstrap conceptual orientation, see `references/intro.md`. For the GitHub Project UI walkthrough that has to happen BEFORE F-B2, see `references/project-creation-walkthrough.md`.
+
+## You are bootstrapped — what now
+
+Two paths for the first card on your board:
+
+### Path 1 — drive the first card via a Manager session (recommended)
+
+This is the path that gets you the most out of the plugin from day one. Open a fresh CC / Codex session in this repo and say something like:
+
+> "Let's intake this idea: <one-line description of the feature>"
+
+The router (`using-board-superpowers`) sees an intake-shaped phrase and routes to `managing-board` (intake routine). That skill walks you through the routing decision: is this a direction question (`gstack:/office-hours`), an architecture question (`gstack:/plan-eng-review`), a multi-step requirement (`superpowers:brainstorming`), or a single-card-sized piece of work (direct card creation)? After the appropriate sibling skill returns its artifact, the Manager session drafts cards and proposes them to you for `gh issue create`.
+
+### Path 2 — paste a card body in the GitHub UI
+
+If you already know what you want to build and just need a card on the board, open your Project on GitHub, click "Add item", and paste a card body following the `board-canon` Card body schema. The schema has 5 mandatory sections plus a thin pointer at the top:
+
+```
+**Spec**: <link or "(none)">
+**Owner**: <handle>
+**Estimate**: <XS|S|M|L>
+
+## Goal
+
+<one sentence>
+
+## Acceptance criteria
+
+- <verifiable bullet 1>
+- <verifiable bullet 2>
+
+## Out of scope
+
+- <bullet>
+
+## Dependencies
+
+- <none, or "depends-on: #<N>">
+
+## Notes
+
+<freeform>
+
+<!-- board-superpowers:card -->
+```
+
+The bottom marker `<!-- board-superpowers:card -->` is what the plugin uses to recognize a board-superpowers-shaped card vs a generic GitHub Issue. Cards without the marker are still readable but get treated as untracked-by-board.
+
+After pasting, set the card's Status field to `Backlog` (or `Ready` if it is genuinely ready to claim).
+
+## Claiming a card
+
+Once at least one card is in `Ready`, open a fresh session and use either:
+
+- **The literal token**: `[board-card:#N]` somewhere in your first message. Example: `let's do [board-card:#12]`.
+- **A natural phrase that names the card**: `claim card 12`, `work on card 12`, `let me take #12`, `let's pick up 12`.
+
+The router fires `consuming-card`. That skill:
+
+1. Reads the card body.
+2. Verifies the card is in `Ready` (not already claimed).
+3. Creates a git worktree at `$HOME/.config/superpowers/worktrees/<repo>/claim/<N>-<slug>` and a branch `claim/<N>-<slug>`.
+4. Flips the card's Status to `In Progress`.
+5. Walks you through TDD-driven implementation, the verification chain, and PR submission.
+
+Do NOT claim cards by hand — the worktree + branch + Status flip happens as a four-step transaction, and a partial claim leaves the board in an inconsistent state. Always go through `consuming-card`.
+
+## Where things live
+
+After bootstrap, four locations matter:
+
+| Path | Layer | Tracked in git? | What's in it |
+|------|-------|-----------------|--------------|
+| `~/.board-superpowers/manifest.yml` | Host | No (per machine) | `schema_version`, `host_bootstrapped_at`, `last_seen_version`. Plugin-managed. |
+| `~/.board-superpowers/repos/<normalized>/state.yml` | Repo (host-local) | No (per `(host, repo)`) | `schema_version`, `repo_bootstrapped_at`, `last_seen_version_in_repo`, `features_enabled`, `routing_blocks` (with SHA256 hashes). Plugin-managed. |
+| `~/.board-superpowers/credentials.yml` | Host | No (chmod 0600) | Optional `audit_db_url`. Only present if you accepted BYO-RDBMS at F-B2 step 2e. |
+| `<repo>/.board-superpowers/config.yml` | Repo | **Yes** | `project: "OWNER/NUMBER"`, `wip_limit`. Hand-editable. Team-shared. |
+| `<repo>/.board-superpowers/claims/` | Repo | No (gitignored) | Per-session claim markers. Forensic state, not configuration. |
+
+`<normalized>` is the repo's absolute path with leading `/` stripped and remaining `/` replaced by `-`. For `/Users/foo/proj` the normalized name is `Users-foo-proj`.
+
+## Routing block injected into CLAUDE.md and AGENTS.md
+
+F-B2 step 4 appended a routing block to both `CLAUDE.md` (for Claude Code's auto-load) and `AGENTS.md` (for Codex CLI's auto-load). The block sits between the marker pair:
+
+```
+<!-- board-superpowers:routing -->
+...routing instructions for sessions in this repo...
+<!-- /board-superpowers:routing -->
+```
+
+The block content is plugin-owned within the marker pair, user-owned outside. The plugin records a SHA256 hash of the injected content in `state.yml`; on the next plugin upgrade, F-B4 (deferred to `migrating-repo-version`) compares the on-disk block to the recorded hash. Match → auto-update. Mismatch → ask you what to do (replace / merge / leave alone).
+
+Do not edit anything **between** the markers by hand — your edits will be overwritten by the next auto-update. If you need to customize the routing, edit content **outside** the markers (CLAUDE.md / AGENTS.md are otherwise yours).
+
+## When to invoke each skill
+
+This skill (`bootstrapping-repo`) does NOT fire again unless one of the state files goes missing. From here on:
+
+- "What should I work on" / "morning briefing" / "review the PRs" / "intake this feature" / "what's blocked" → `managing-board` (Producer routines).
+- `[board-card:#N]` / "claim card N" / "work on card N" → `consuming-card` (Consumer lifecycle).
+- "What does this plugin do" / "how does this work" → answered inline by `using-board-superpowers` from `references/first-time-user-guide.md` (note: that's the entry-skill's first-time guide, separate from this one).
+
+If you forget which skill drives which routine, the entry skill `using-board-superpowers` always re-routes — start a session with a vague phrase like "let's look at the board" and it asks rather than guessing.
+
+## Verifying the bootstrap
+
+Quick sanity checks you can run after F-B2 reports success:
+
+```bash
+# Host manifest exists.
+test -f ~/.board-superpowers/manifest.yml && echo "host OK"
+
+# Per-repo state exists (replace <normalized> with your repo path).
+ls ~/.board-superpowers/repos/
+
+# Project config in the repo is committed.
+cat .board-superpowers/config.yml
+
+# Routing block injected into CLAUDE.md.
+grep -A1 'board-superpowers:routing' CLAUDE.md | head -5
+
+# Dependency check passes (the same check that runs on every session start).
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/check-deps.sh"
+```
+
+The `check-deps.sh` invocation should exit 0. If it exits 2, the routing block injection failed in some way; if it exits 3, a runtime command (`gh`, `python3`) is missing from PATH.
+
+## What about audit logging
+
+If you accepted BYO-RDBMS at F-B2 step 2e, every R-class mutating action writes a row to your audit DB once `auditing-actions` ships (deferred to v1-complete). At v0.2.0 the audit goes to a host-local jsonl trace file at `~/.board-superpowers/repos/<normalized>/audit-local.jsonl` — that's the v1-minimum-degraded interim trace, not your forever solution.
+
+If you declined BYO-RDBMS, the same jsonl trace is your audit log. Every A-class action that would normally auto-act becomes R-class (the agent asks you first). That's the documented friction-feature per ADR-0006 — chattier sessions, but no silent state mutation.

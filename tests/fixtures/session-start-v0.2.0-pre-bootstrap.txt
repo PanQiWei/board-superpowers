@@ -1,0 +1,1 @@
+{"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": "board-superpowers v0.2.0 loaded.\n\nINVOKE: bootstrapping-repo\nREASON: host bootstrap pending; both manifest and per-repo state files are absent."}}
