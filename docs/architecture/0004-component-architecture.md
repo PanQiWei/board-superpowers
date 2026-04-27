@@ -126,7 +126,7 @@ in `using-board-superpowers/SKILL.md` body:
 
 CC's `SessionStart` delivery is documented as unreliable
 (`PLUGIN_DEVELOPMENT.md` "Hooks (`hooks/hooks.json`)" calls out
-the buggy delivery; `AGENTS.md` "Maintaining hooks" mandates
+the buggy delivery; `hooks/AGENTS.md` mandates
 silent-no-op-on-error). So:
 
 - `using-board-superpowers/SKILL.md` Step 1 always re-runs

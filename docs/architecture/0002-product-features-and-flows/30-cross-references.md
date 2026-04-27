@@ -61,7 +61,7 @@ feature, all are listed.
 | 1.6.2 Vertical slicing rule | `skills/decomposing-into-milestones/SKILL.md` ("Vertical slicing") + `references/decomposition-patterns.md` |
 | 1.6.3 Card body schema | `skills/decomposing-into-milestones/references/card-schema.md`; `skills/board-protocol/SKILL.md` |
 | 1.6.4 Size labels | `skills/decomposing-into-milestones/SKILL.md` ("Size calibration"); `scripts/bootstrap-project.sh` (creates `size:*` labels) |
-| 1.7 Cross-cutting invariants I-1..I-13 | Distributed across skills + scripts; `CLAUDE.md` change-impact matrix; `docs/architecture/adr/*.md`; for I-11..I-13 also `${CLAUDE_PLUGIN_ROOT}/scripts/migrations/` (planned) |
+| 1.7 Cross-cutting invariants I-1..I-13 | Distributed across skills + scripts; `docs/architecture/AGENTS.md` change-impact matrix; `docs/architecture/adr/*.md`; for I-11..I-13 also `${CLAUDE_PLUGIN_ROOT}/scripts/migrations/` (planned) |
 | 1.8.1 `## Automated Verification` | `skills/consuming-card/references/pr-template.md` |
 | 1.8.2 `## Human Verification TODO` | `skills/consuming-card/references/pr-template.md` |
 | 1.8.3 `## Retro Notes` | `skills/consuming-card/references/pr-template.md`; aggregated by F-12 |

@@ -46,53 +46,73 @@ index lists everything else in canonical order. v1-minimum
 implementation is the **current state**, not the **target
 state** — v1-complete is the target.
 
-## Required reading
+## Subdirectory contracts
 
-The three documents below are large
-(`PLUGIN_DEVELOPMENT.md` ~440 lines,
-`MULTI_AGENT_DEVELOPMENT.md` ~700 lines,
-`SKILL_DEVELOPMENT.md` ~1290 lines). They are intentionally
-**referenced by name, not loaded with `@`-prefix**, so they do
-not ride into every session's context. Open them on demand
-using `Read` (or its platform equivalent) when the work matches
-their scope. **Do not "fix" these references back to
-`@`-prefix** — that change would force-load all three docs into
-every session and is exactly the anti-pattern they themselves
-warn against.
+This project's per-directory rules are sharded into nested
+`AGENTS.md` files. **Read the relevant contract before any
+work that touches the listed directory** — including planning
+/ design / discussion phases, not just file edits.
 
-### Quick reference: when to read what
+CC auto-loads the nested `CLAUDE.md` shim lazily when you Read
+or Edit a file under that path; Codex CLI does **not** —
+Codex sessions must Read the contract file explicitly before
+editing that subtree.
 
-Use this table to decide before any code or spec change. If
-multiple rows match, read all matched docs.
+When you need to consult a contract during planning, design,
+or cross-directory discussion (i.e., before any file is
+touched), Read the listed file directly — don't rely on lazy
+loading.
 
-| Trigger (what you're about to touch / design) | Read first | Why it's load-bearing |
-|-----------------------------------------------|-----------|----------------------|
-| Anything under `hooks/`, `scripts/`, `.claude-plugin/`, `.codex-plugin/`, or any `marketplace.json`; editing the plugin manifest, adding / changing a hook event, modifying a script's exit-code / stdout contract | `PLUGIN_DEVELOPMENT.md` | Defines the dual-platform (Claude Code + Codex CLI) contracts every script / hook / manifest in this repo conforms to. Wrong contract change = silently broken downstream installs. |
-| Designing or modifying any orchestration where one agent spawns another (Producer → Consumer subagent, agent-teams, `SendMessage`, fan-out / fan-in pipelines, session-id reachback) | `MULTI_AGENT_DEVELOPMENT.md` | Documents the experimental surfaces and the hard rules (e.g., "subagents cannot spawn subagents"). Get this wrong and Mode-2 designs assume capabilities that do not exist. |
-| Writing a new `skills/<name>/SKILL.md` or revising any existing one (incl. its `references/`, `scripts/`, `agents/`, `assets/`, `evals/` siblings); adding a new skill type; renaming a skill; touching frontmatter `description`, `argument-hint`, `arguments`, `when_to_use`, or any other Tier 2 field | `SKILL_DEVELOPMENT.md` | Canonical guide for skill design / creation / maintenance — covers the skill-graph framing (entry / molecular / atomic), three-tier frontmatter discipline, body skeletons, anti-patterns, testing regimes. Skills are this repo's product surface; sloppy authoring fails downstream invisibly. |
-| Creating or modifying a `<skill-dir>/.skill-meta.yaml` (the version + 4-dim metadata file) | `SKILL_DEVELOPMENT.md` § "board-superpowers metadata convention" | Defines the schema: `version` (semver) + `layer` (entry/molecular/atomic) + `type` (technique/pattern/reference/discipline) + `mode` (claude-code-only/codex-only/both) + `bounded-context` (board/session/bootstrap/audit/spec). CI gate `scripts/verify-skill-metadata.sh` enforces consistency between yaml and `SKILLS.md` catalog. Drift here causes silent topology rot. |
-| **Adding, removing, renaming, or re-layering any skill** (anything that changes the topology of `skills/` or the cross-plugin edges board-superpowers depends on) | `SKILLS.md` (already always-loaded) — **edit it BEFORE editing `skills/`**, then both halves land in the same PR. Per `SKILLS.md` "Source-of-truth contract", a `skills/` change without a `SKILLS.md` change is incomplete and unmergeable. | `SKILLS.md` is the source of truth for the skills system topology. Bypassing it lets the catalog drift silently; SPOT (single-point-of-truth) consolidations decay; cross-plugin Mode-2 compatibility loses its checklist. |
-| Editing any file under `docs/architecture/` | All three docs that match the affected surface | The spec leads the implementation. A spec change that violates a platform / multi-agent / skill contract is worse than a code change that does, because every future implementer trusts the spec. |
-| Anything that **clearly** falls in two or three categories above | All matched docs | These docs are designed to compose. Their cross-references assume each is read when its scope is touched. |
+| Working in / about | Contract file | CC auto-load? | Codex auto-load? |
+|--------------------|---------------|---------------|------------------|
+| `skills/**` (writing / editing / discussing skills) | [`skills/AGENTS.md`](./skills/AGENTS.md) | yes (lazy on Read/Edit) | no — Read explicitly |
+| `hooks/**` (hook scripts, `hooks.json`) | [`hooks/AGENTS.md`](./hooks/AGENTS.md) | yes (lazy) | no — Read explicitly |
+| `scripts/**` (bash tooling, `common.sh`) | [`scripts/AGENTS.md`](./scripts/AGENTS.md) | yes (lazy) | no — Read explicitly |
+| `docs/architecture/**` (spec, ADRs, change-impact matrix) | [`docs/architecture/AGENTS.md`](./docs/architecture/AGENTS.md) | yes (lazy) | no — Read explicitly |
+
+The nested `CLAUDE.md` files in each of those directories are
+one-line shims that `@`-include the sibling `AGENTS.md`. Make
+all edits in the `AGENTS.md`, not in the `CLAUDE.md` shim.
+
+### Cross-cutting reference docs
+
+The three large companion docs below are referenced by name —
+**not loaded with `@`-prefix** — so they don't ride into every
+session's context. Open them on demand using `Read` (or its
+platform equivalent) when the work matches their scope. Each
+nested `AGENTS.md` above sends you to the relevant companion
+doc when its scope is touched.
+
+| Doc | When it applies |
+|-----|-----------------|
+| [`PLUGIN_DEVELOPMENT.md`](./PLUGIN_DEVELOPMENT.md) (~440 lines) | hook scripts, bash tooling, plugin manifest, dual-platform (CC + Codex CLI) contracts. |
+| [`MULTI_AGENT_DEVELOPMENT.md`](./MULTI_AGENT_DEVELOPMENT.md) (~700 lines) | subagent / agent-team / orchestration design, `Agent` tool / `SendMessage` / fan-out-fan-in. |
+| [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md) (~1290 lines) | skill authoring — frontmatter, body skeletons, anti-patterns, testing, `.skill-meta.yaml` schema. |
+
+**Do not "fix" these references back to `@`-prefix** — that
+change would force-load all three docs into every session and
+is exactly the anti-pattern they themselves warn against.
 
 ### Doctrine
 
-These three rules close the rationalization loopholes that make
-"required reading" merely advisory:
+These three rules close the rationalization loopholes that
+make per-directory contracts merely advisory:
 
-1. **No "I already know."** If the trigger row matches, the doc
-   gets read in this session. "I read it last week" is not a
-   substitute — the doc may have changed, and your context
-   window has long since dropped the relevant passages.
+1. **No "I already know."** If a Subdirectory contract row
+   matches your work, the contract file gets read in this
+   session. "I read it last week" is not a substitute — the
+   doc may have changed, and your context window has long
+   since dropped the relevant passages.
 2. **No "this change is too small."** A one-line edit to a
    spec table, a single new field in a SKILL frontmatter, a
    one-character rename of a hook marker — each can violate a
-   contract documented in one of these three docs. Smallness of
+   contract documented in one of these files. Smallness of
    diff is not smallness of blast radius.
-3. **Same-PR contract update.** If your change makes a contract
-   in one of these docs (or in `docs/architecture/`) stale, fix
-   the doc in the **same PR** — not a follow-up. Doc lag is the
-   primary failure mode that makes this pattern decay over time.
+3. **Same-PR contract update.** If your change makes a
+   contract in a nested `AGENTS.md` or a cross-cutting
+   companion doc stale, fix the doc in the **same PR** — not a
+   follow-up. Doc lag is the primary failure mode that makes
+   this pattern decay over time.
 
 ## Architecture at a glance (v1 design)
 
@@ -424,100 +444,19 @@ consumer to read past the other's noise.
   contract — promote it. `docs/plans/` is human-readable
   scaffolding only.
 
-## Spec change-impact matrix
-
-The v1 spec is a graph of cross-references. Touching one node
-often forces companion edits. Use this matrix during PR
-preparation:
-
-| If you change… | You must also update… |
-|----------------|----------------------|
-| `0001-positioning.md` premise (P1..P8) or non-goal | Every spec doc that cites the changed premise (grep `docs/architecture/` for `P<N>`). Promote to a new ADR if the premise materially shifts. |
-| ADR-0005 BoardAdapter contract surface | `0003-domain-model/03-aggregates-and-entities.md` § 3.6.3 (Anti-Corruption Layer); spec for any v1 script that calls the adapter (`board-canon` skill, future scripts). Per ADR-0005 Consequences (as amended by ADR-0010), the GitHubProjectAdapter wrapper port lands before v1 GA. |
-| ADR-0006 D-AUTONOMY-1 matrix (rows or A/R/N classification) | `0002-product-features-and-flows/03-producer-surface.md` + `04-consumer-surface.md` (every feature row that cites the matrix); `classifying-actions` skill spec; `auditing-actions` skill spec (`action_id` catalog); `0005-contracts/06-audit-log-schema.md`. |
-| ADR-0007 plugin-runtime constraint set (C-PLUGIN-1/-2/-3) | Every Producer / Consumer feature with verbs like *monitor*, *detect*, *trigger automatically*. The preflight-piggyback idiom citation. |
-| ADR-0008 plugin-to-plugin SKILL invocation | `0005-contracts/04-skill-contracts.md` (sibling-skill classification table); `consuming-card` skill spec (F-C4 fallback rule). |
-| `0002-product-features-and-flows/05-bootstrap-surface.md` (state file path / schema) | `0003-domain-model/02-bounded-contexts.md` § 3.2.3; `0003-domain-model/03-aggregates-and-entities.md` § RepoBootstrap / HostBootstrap; `0005-contracts/03-config-schemas.md` + `07-path-conventions.md`; `bootstrapping-repo` + `migrating-repo-version` skill specs. |
-| `0002-product-features-and-flows/08-pr-contract.md` (three-section shape) | `consuming-card` skill spec (F-C12); `enforcing-pr-contract` skill spec; `managing-board` Review Queue routine spec (F-02 violation flagging). |
-| Skill catalog (add / rename / split / merge any of the 10 v1 skills) | **`SKILLS.md` FIRST** (per its Source-of-truth contract — do not touch `skills/` until SKILLS.md is updated); then `0004-component-architecture.md` Decision 2 (capability → slot table); `0005-contracts/04-skill-contracts.md` (sibling-skill classification; v1 catalog table); the trigger row above; `README.md` and `README.zh-CN.md` if user-facing trigger phrases change. |
-| Hook intent-injection marker grammar (`INVOKE:` / `REASON:`) | `0004-component-architecture.md` § "Hook intent injection pattern"; `0005-contracts/02-hook-contracts.md` § "Intent-injection markers"; `using-board-superpowers` entry-skill spec. |
-| `~/.board-superpowers/` path layout (host-local state) | `0002-product-features-and-flows/05-bootstrap-surface.md`; `0003-domain-model/02-bounded-contexts.md` § 3.2.3; `0005-contracts/03-config-schemas.md` + `07-path-conventions.md`; `0002-product-features-and-flows/07-cross-cutting-invariants.md` I-13. |
-
-When v1 implementation lands, this matrix grows additional rows
-mapping spec → code (e.g., "if `0005-contracts/04-skill-contracts.md`
-description discipline changes → re-read every `skills/*/SKILL.md`
-frontmatter").
-
-## Maintaining the spec
-
-1. **Read the relevant Required-reading docs first.** The
-   trigger table above tells you which.
-2. **One ADR per architectural decision.** ADRs are immutable
-   once accepted. Superseding an ADR creates a new one; the old
-   one's status field gets `superseded by ADR-N`.
-3. **Cite sources.** When a spec page makes a claim about the
-   platform, link the canonical doc URL (CC docs, Codex docs,
-   agentskills.io). When it makes a claim about academic
-   methodology, link the primary source. The Required-reading
-   docs maintain a "URL freshness" check — adopt the same
-   discipline for new pages.
-4. **Same-PR contract update.** If a spec change makes a
-   companion doc stale, fix the companion in the same PR.
-5. **Spec body stays in English** for shareability across
-   collaborators and locales (per
-   [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md) Anti-pattern
-   A5). Chinese discussion belongs in commit messages, PR
-   bodies, or `notes-zh.md` files outside the spec tree.
-
 ## Maintaining v1 implementation
 
-The v1-minimum plugin is loadable. The operational checklist:
+Per-directory operational checklists live in nested `AGENTS.md`
+files — see "Subdirectory contracts" above. The
+[`docs/architecture/AGENTS.md`](./docs/architecture/AGENTS.md)
+file owns spec governance (ADR discipline, citation rules,
+Spec change-impact matrix). This section captures only the
+cross-cutting checks that span multiple subdirectories.
 
-### Skills (`skills/<name>/`)
+### Tests / smoke checks (cross-cutting)
 
-- Frontmatter: Tier 1 portable subset (`name` + `description`)
-  is mandatory; Tier 2 fields per the recommendation table in
-  [`SKILLS.md`](./SKILLS.md) catalog. Tier 3 (custom non-spec
-  fields like `version: ...`) is forbidden — those go in
-  `.skill-meta.yaml`.
-- Every skill directory must contain `SKILL.md` AND
-  `.skill-meta.yaml`. CI gate `scripts/verify-skill-metadata.sh`
-  enforces.
-- New skills: edit `SKILLS.md` catalog FIRST (per its
-  Source-of-truth contract), then create the directory.
-- Body length: ≤200 lines for entry, 250-450 for molecular,
-  200-300 for atomic. References move to `references/<topic>.md`
-  past 100 lines.
-
-### Scripts (`scripts/`)
-
-- Strict-mode bash: callers `set -euo pipefail` before sourcing
-  `scripts/lib/common.sh`.
-- Header comment + shellcheck `-x` clean (CI gate).
-- AI-callable tools live under `scripts/`; user-facing CLIs do
-  NOT exist in this plugin (the plugin is consumed via skills /
-  slash commands, not a dedicated CLI).
-
-### Hooks (`hooks/`)
-
-- v1-minimum wires only `SessionStart`. Future hook events use
-  the same `INVOKE: <skill> / REASON: <line>` payload pattern
-  per [`docs/architecture/0005-contracts/02-hook-contracts.md`](./docs/architecture/0005-contracts/02-hook-contracts.md).
-- Every hook script must declare a 10s timeout in `hooks.json`.
-- **Dual-platform registration**: CC auto-discovers
-  `hooks/hooks.json` at plugin load. Codex CLI does NOT — users
-  run `scripts/register-codex-hooks.sh --install-user` (or
-  `--install-repo`) once per Codex install to wire the same
-  `SessionStart` script into `~/.codex/hooks.json` (or
-  `<repo>/.codex/hooks.json`). The script is idempotent and
-  backs up the target file before merging. When adding a new
-  hook event, update BOTH `hooks/hooks.json` AND the snippet
-  generator inside `register-codex-hooks.sh`.
-
-### Tests / smoke checks
-
-- `scripts/verify-skill-metadata.sh` — yaml ↔ SKILLS.md catalog
-  consistency.
+- `scripts/verify-skill-metadata.sh` — yaml ↔ `SKILLS.md`
+  catalog consistency.
 - `scripts/verify-skill-frontmatter.sh` — Tier 1 + Tier 2 +
   no-Tier-3 compliance per SKILL.md.
 - `shellcheck -x scripts/**/*.sh hooks/*.sh` — full pass.
@@ -527,25 +466,12 @@ The v1-minimum plugin is loadable. The operational checklist:
 ### Release flow
 
 - Bump `.claude-plugin/plugin.json` + `.codex-plugin/plugin.json`
-  `version` field per semver (e.g., `v0.1.0-minimum` → `v0.1.1`
-  is a patch; `v0.1.x` → `v0.2.0` is a minor).
+  `version` field per semver (e.g., `v0.1.0-minimum` →
+  `v0.1.1` is a patch; `v0.1.x` → `v0.2.0` is a minor).
 - For deferred-atomic landings, also bump per-skill
   `.skill-meta.yaml` `version` (per
-  [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md) § "
-  board-superpowers metadata convention").
-
-## Commands (v1 target)
-
-```bash
-# Spec review
-ls docs/architecture/                          # what's specced
-ls docs/architecture/adr/                      # what's decided
-
-# v1 implementation (when it begins)
-# bash scripts/check-deps.sh                   (not yet implemented)
-# for t in tests/*.sh; do bash "$t" || exit 1; done
-# (cd scripts && shellcheck -x ./*.sh)
-```
+  [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md) §
+  "board-superpowers metadata convention").
 
 <!-- board-superpowers:routing -->
 ## board-superpowers session routing
@@ -644,3 +570,37 @@ a release process.
   skill's "start coding" suggestion does not excuse skipping
   Red → Green → Refactor.
 <!-- /board-superpowers:routing -->
+
+## Do Not
+
+High-frequency footguns. Items here are documented in detail
+elsewhere; this list is a quick scan before submitting a PR.
+
+- **Do not edit at the repo root on a feature branch.** Repo
+  root stays on `main`; all feature work happens in a
+  `git worktree`. See "Working tree discipline" above.
+- **Do not put worktrees inside the repo tree** (e.g.,
+  `<repo>/.worktrees/<branch>`). IDEs and file watchers scan
+  them and the visual confusion is real.
+- **Do not edit `skills/` before `SKILLS.md`.** Per its
+  Source-of-truth contract, a `skills/` change without a
+  paired `SKILLS.md` change is unmergeable.
+- **Do not "fix" `PLUGIN_DEVELOPMENT.md` /
+  `MULTI_AGENT_DEVELOPMENT.md` / `SKILL_DEVELOPMENT.md`
+  references back to `@`-prefix.** That force-loads all three
+  into every session and is the exact anti-pattern they warn
+  against.
+- **Do not skip pre-commit hooks** (`--no-verify`,
+  `--no-gpg-sign`) unless explicitly authorized. Investigate
+  and fix the underlying issue.
+- **Do not amend a commit when a hook failed** — the commit
+  did not happen. Fix the issue, re-stage, and create a NEW
+  commit.
+- **Do not commit changes to `~/.board-superpowers/`** — that
+  directory is host-local state, not project state, and is
+  outside the repo tree.
+- **Do not auto-reach for `gstack:/ship` / `/canary` /
+  `/land-and-deploy`** — board-superpowers does not prescribe
+  a release process. Enable these skills only if they match
+  this repo's deployment shape; otherwise use whatever release
+  flow the consuming repo already has.

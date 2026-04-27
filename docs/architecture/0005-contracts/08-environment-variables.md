@@ -32,8 +32,9 @@ These rules apply to every env var in this section:
   table. Silent fallback to the default on bad input is forbidden.
 - **Reserved namespace: `BOARD_SP_*`.** All plugin-specific env
   vars live in this namespace. Adding a new one requires updating
-  this file and any caller in the same PR (per `AGENTS.md`
-  change-impact matrix; new env vars are a contract surface).
+  this file and any caller in the same PR (per
+  `docs/architecture/AGENTS.md` change-impact matrix; new env
+  vars are a contract surface).
 
 ### `--machine` keys are NOT env vars
 
@@ -198,7 +199,7 @@ event), not board-superpowers-driven.
 The **only** reliable way to reference plugin-internal files
 (scripts, references, agent definitions) from a hook or skill.
 Hard-coding `~/.claude/plugins/board-superpowers/...` is forbidden
-per `AGENTS.md` "Maintaining scripts" + `PLUGIN_DEVELOPMENT.md`
+per `scripts/AGENTS.md` + `PLUGIN_DEVELOPMENT.md`
 "Claude Code → `${CLAUDE_PLUGIN_ROOT}`".
 
 **Codex CLI equivalent: none.** Codex scripts must derive their own
@@ -214,9 +215,9 @@ surface mapping → Plugin install env var".
   — canonical home for the upstream contract.
 - `hooks/session-start.sh` line 21 + `hooks/hooks.json` line 8 —
   v1 consumers.
-- `AGENTS.md` "Maintaining scripts → `${CLAUDE_PLUGIN_ROOT}` is the
-  only reliable way for scripts to reference the plugin's own files."
-  — protocol invariant.
+- `scripts/AGENTS.md` — `${CLAUDE_PLUGIN_ROOT}` is the only
+  reliable way for scripts to reference the plugin's own files,
+  surfaced as a protocol invariant.
 
 ---
 
@@ -303,5 +304,6 @@ change-impact matrix.
 - `MULTI_AGENT_DEVELOPMENT.md` "What this means for
   board-superpowers" — context for the experimental-flag entries
   in the "does NOT read" table.
-- `AGENTS.md` "Worktree default path", "Maintaining scripts" —
-  protocol invariants surfaced here.
+- `AGENTS.md` § "Working tree discipline" → "Default worktree
+  path" + `scripts/AGENTS.md` — protocol invariants surfaced
+  here.
