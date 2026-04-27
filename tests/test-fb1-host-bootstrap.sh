@@ -137,12 +137,14 @@ assert_eq 'state dir mode 0700' '700' "$(file_mode "${STATE_DIR}")"
 assert_eq 'manifest file mode 0644' '644' "$(file_mode "${MANIFEST}")"
 
 # Content shape
-check 'schema_version: 1 present' \
-    grep -Fxq 'schema_version: 1' "${MANIFEST}"
+check 'schema_version: 2 present' \
+    grep -Fxq 'schema_version: 2' "${MANIFEST}"
 check 'last_seen_version: "0.2.0" present' \
     grep -Fxq 'last_seen_version: "0.2.0"' "${MANIFEST}"
 check 'host_bootstrapped_at present + ISO-8601 shape' \
     grep -Eq '^host_bootstrapped_at: "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z"$' "${MANIFEST}"
+check 'uv_version field present' \
+    grep -Eq '^uv_version: ".+"$' "${MANIFEST}"
 
 # Atomic write: no leftover .tmp file
 check_not 'no leftover manifest.yml.tmp' test -f "${MANIFEST}.tmp"
