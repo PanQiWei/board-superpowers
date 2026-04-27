@@ -425,25 +425,50 @@ bsp_pick_worktree_dir() {
 #     ...
 #     <!-- /board-superpowers:routing -->
 #
-# Source-file normalization (always applied before hashing AND before
-# injection — see spec
+# Source-file fence extraction:
+#   The source file MUST contain a fence sentinel pair distinct from
+#   the target marker pair so a naive find() for the target markers
+#   against the source returns nothing:
+#
+#     <!-- routing-block:start -->
+#     ...content the helper extracts and injects...
+#     <!-- routing-block:end -->
+#
+#   Any prose ABOVE the start fence is plugin-maintainer-facing
+#   docstring (NOT injected). Any prose BELOW the end fence is
+#   maintainer notes (NOT injected).
+#
+# Source-file normalization (always applied to the fence-bounded
+# content before hashing AND before injection — see spec
 # docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md
-# § 1.5.2 step 4 + the slice-4 note in
-# docs/plans/bootstrap/card-2-bootstrap.md):
+# § 1.5.2 step 4):
 #   1. Strip leading UTF-8 BOM (EF BB BF) if present.
 #   2. Replace every CRLF / CR with LF.
+#   3. Strip leading/trailing newlines so the injected block is tight.
 # The post-normalization bytes ARE the canonical routing block and
 # are SHA256-hashed to populate state.yml:routing_blocks[].block_hash.
 #
+# Source-file fatal errors:
+#   - Fence sentinels missing → fatal error pointing at the source
+#     file path.
+#   - Fence-bounded content contains a literal target marker
+#     (<!-- board-superpowers:routing --> or its closing form) → fatal
+#     error (would otherwise produce nested markers in the target).
+#
 # Target-file rules:
 #   - Absent: create with marker pair wrapping the block content.
-#   - Existing, BOTH markers present: replace bytes between markers
-#     with normalized block content. Bytes OUTSIDE markers (including
-#     BOM at byte 0, original line endings) are preserved verbatim.
-#   - Existing, NEITHER marker present: append the marker-wrapped
-#     block to the file (preserving original ending).
-#   - Existing, exactly ONE marker (orphan): emit verbatim error and
-#     return exit 5 — DO NOT modify the file.
+#   - Existing, exactly 1 OPEN + exactly 1 CLOSE: replace bytes
+#     between markers with normalized block content. Bytes OUTSIDE
+#     markers (including BOM at byte 0, original line endings) are
+#     preserved verbatim.
+#   - Existing, 0 OPEN + 0 CLOSE: append the marker-wrapped block
+#     to the file (preserving original ending).
+#   - Existing, exactly ONE marker but not both (orphan): emit
+#     verbatim error pointing at the actual line number of the
+#     present marker, and return exit 5 — DO NOT modify the file.
+#   - Existing, 2+ OPEN OR 2+ CLOSE: emit multi-pair error
+#     (user copy-pasted the block twice; only the first pair would
+#     be updated, second would silently rot) and return exit 5.
 #
 # Stdout on success: the hex SHA256 hash (no "sha256:" prefix), one
 # line. Caller is expected to prepend "sha256:" when recording into
@@ -452,8 +477,10 @@ bsp_pick_worktree_dir() {
 # Args: <target_file> <source_file>
 # Exit codes:
 #   0  success — hash printed to stdout
-#   1  bad args / source file unreadable / target write failure
-#   5  target has orphan marker (one but not both)
+#   1  bad args / source file unreadable / source missing fences /
+#      source has nested target markers / target write failure
+#   5  target has orphan marker (one but not both) OR multiple marker
+#      pairs (2+ open or 2+ close)
 
 bsp_inject_routing_block() {
     local target="${1:?usage: bsp_inject_routing_block <target_file> <source_file>}"
@@ -479,9 +506,11 @@ import tempfile
 target = os.environ["BSP_TARGET"]
 source = os.environ["BSP_SOURCE"]
 
-OPEN  = b"<!-- board-superpowers:routing -->"
-CLOSE = b"<!-- /board-superpowers:routing -->"
-BOM   = b"\xef\xbb\xbf"
+OPEN        = b"<!-- board-superpowers:routing -->"
+CLOSE       = b"<!-- /board-superpowers:routing -->"
+FENCE_OPEN  = b"<!-- routing-block:start -->"
+FENCE_CLOSE = b"<!-- routing-block:end -->"
+BOM         = b"\xef\xbb\xbf"
 
 def normalize(data: bytes) -> bytes:
     # Strip leading UTF-8 BOM if present.
@@ -491,7 +520,7 @@ def normalize(data: bytes) -> bytes:
     data = data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
     return data
 
-# Read + normalize source bytes.
+# Read source bytes.
 try:
     with open(source, "rb") as f:
         raw_source = f.read()
@@ -499,18 +528,129 @@ except OSError as e:
     sys.stderr.write(f"[bsp ERROR] cannot read source: {e}\n")
     sys.exit(1)
 
-block_content = normalize(raw_source)
-# Hash over the normalized bytes (which become exactly what we write
-# between markers). Trim a single trailing newline before hashing so
-# the recorded hash matches the bytes literally between markers.
-content_for_hash = block_content
-if content_for_hash.endswith(b"\n"):
-    content_for_hash = content_for_hash[:-1]
-block_hash = hashlib.sha256(content_for_hash).hexdigest()
+# Locate the fence sentinels in the source. Both must be present and
+# must appear on their own lines (start of line + end of line) so that
+# documentation prose mentioning the sentinel keywords (e.g. inside
+# backticks for explanatory purposes elsewhere in the source file)
+# does not accidentally satisfy the find. The "own line" rule is:
+#   - preceded by a newline OR start-of-file
+#   - followed by a newline OR end-of-file (with optional trailing
+#     whitespace before the newline)
+# We implement this by scanning line-by-line over normalized bytes.
+def find_standalone(buf: bytes, sentinel: bytes) -> int:
+    """Return absolute byte offset of `sentinel` on a line by itself,
+    or -1 if no such occurrence exists. Trailing whitespace on the
+    line is tolerated. Raw `buf` is expected to use LF line endings —
+    callers may normalize CRLF first if needed.
+    """
+    pos = 0
+    n = len(buf)
+    while pos < n:
+        nl = buf.find(b"\n", pos)
+        line_end = nl if nl != -1 else n
+        line = buf[pos:line_end].rstrip(b" \t\r")
+        if line == sentinel:
+            return pos
+        if nl == -1:
+            return -1
+        pos = nl + 1
+    return -1
 
-# The bytes that go between markers — no leading newline, exactly one
-# trailing newline so closing marker sits on its own line.
-between = content_for_hash + b"\n"
+# Normalize source line endings BEFORE the fence scan so a CRLF
+# source still matches the fence sentinels on standalone-line basis.
+normalized_source = raw_source.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+
+fence_open_idx  = find_standalone(normalized_source, FENCE_OPEN)
+fence_close_idx = find_standalone(normalized_source, FENCE_CLOSE)
+
+if fence_open_idx == -1 or fence_close_idx == -1:
+    sys.stderr.write(
+        "ERROR: F-B2 step 4 (routing block injection) cannot proceed.\n"
+        "\n"
+        f"Source-of-truth file at {source}\n"
+        "missing fence markers; expected\n"
+        f"  `{FENCE_OPEN.decode('utf-8')}` and\n"
+        f"  `{FENCE_CLOSE.decode('utf-8')}`\n"
+        "to bracket the routing block content (each on its own line).\n"
+        "The docstring header outside the fence is plugin-maintainer\n"
+        "documentation and is NOT injected; only fence-bounded bytes are.\n"
+        "\n"
+        "Fix the source file, then re-run F-B2.\n"
+    )
+    sys.exit(1)
+
+if fence_close_idx < fence_open_idx:
+    sys.stderr.write(
+        "ERROR: F-B2 step 4 (routing block injection) cannot proceed.\n"
+        "\n"
+        f"Source-of-truth file at {source}\n"
+        "has fence markers in the wrong order: closing fence\n"
+        f"  `{FENCE_CLOSE.decode('utf-8')}`\n"
+        "appears BEFORE opening fence\n"
+        f"  `{FENCE_OPEN.decode('utf-8')}`.\n"
+        "\n"
+        "Fix the source file, then re-run F-B2.\n"
+    )
+    sys.exit(1)
+
+# Extract bytes BETWEEN the fences (exclusive of fence markers).
+# Use the normalized source so the slice indices match the bytes we
+# analyzed. The fenced region runs from the byte after the opening
+# fence's newline to the byte before the closing fence.
+fence_open_line_end = normalized_source.find(b"\n", fence_open_idx)
+if fence_open_line_end == -1:
+    fence_open_line_end = fence_open_idx + len(FENCE_OPEN)
+fenced = normalized_source[fence_open_line_end + 1 : fence_close_idx]
+
+# Normalize: strip leading BOM (defensive), strip leading/trailing
+# newlines so the injected block is tight. Source already had CRLF→LF
+# normalization applied above before the fence scan.
+block_content = fenced
+if block_content.startswith(BOM):
+    block_content = block_content[len(BOM):]
+block_content = block_content.strip(b"\n")
+
+# Sanity: fence-bounded content MUST NOT contain literal target
+# markers — that would produce nested markers in the target file.
+def find_line(buf: bytes, needle: bytes) -> int:
+    """Return 1-based line number of needle in buf, or -1 if absent."""
+    idx = buf.find(needle)
+    if idx == -1:
+        return -1
+    return buf[:idx].count(b"\n") + 1
+
+target_open_in_src  = find_line(block_content, OPEN)
+target_close_in_src = find_line(block_content, CLOSE)
+if target_open_in_src != -1 or target_close_in_src != -1:
+    if target_open_in_src != -1:
+        bad_marker = OPEN.decode("utf-8")
+        bad_line   = target_open_in_src
+    else:
+        bad_marker = CLOSE.decode("utf-8")
+        bad_line   = target_close_in_src
+    sys.stderr.write(
+        "ERROR: F-B2 step 4 (routing block injection) cannot proceed.\n"
+        "\n"
+        f"Source-of-truth file at {source}\n"
+        f"has literal target-file marker `{bad_marker}`\n"
+        f"inside the fence at line {bad_line} of the fenced content.\n"
+        "Injecting it would produce nested markers in the target file.\n"
+        "\n"
+        "Remove the literal target marker from inside the fence, then\n"
+        "re-run F-B2. The fence sentinels (routing-block:start /\n"
+        "routing-block:end) are the source-side delimiters; the target\n"
+        "marker pair (board-superpowers:routing) wraps injected content\n"
+        "in the consumer repo's AGENTS.md / CLAUDE.md and must not\n"
+        "appear inside the source fence.\n"
+    )
+    sys.exit(1)
+
+# block_content is the canonical routing block bytes. Hash it as-is
+# (no trailing newline), then assemble the bytes that go between
+# target markers (with exactly one trailing newline so the closing
+# marker sits on its own line).
+block_hash = hashlib.sha256(block_content).hexdigest()
+between = block_content + b"\n"
 
 def atomic_write(path, payload):
     parent = os.path.dirname(path) or "."
@@ -553,38 +693,87 @@ if body.startswith(BOM):
     bom_prefix = BOM
     body = body[len(BOM):]
 
-open_idx  = body.find(OPEN)
-close_idx = body.find(CLOSE)
+# Count occurrences of OPEN and CLOSE in body (unique non-overlapping).
+def count_occurrences(buf: bytes, needle: bytes) -> int:
+    count = 0
+    start = 0
+    n = len(needle)
+    while True:
+        idx = buf.find(needle, start)
+        if idx == -1:
+            return count
+        count += 1
+        start = idx + n
 
-# Orphan detection.
-if (open_idx == -1) ^ (close_idx == -1):
-    # Determine line numbers (1-based) for the present marker — only
-    # for stderr explanatory text. Use original (with BOM) so the
-    # numbers match what `cat -n` would show the architect.
-    def line_of(buf, idx_no_bom):
-        if idx_no_bom == -1:
-            return -1
-        idx = idx_no_bom + len(bom_prefix)
-        return buf[:idx].count(b"\n") + 1
+open_count  = count_occurrences(body, OPEN)
+close_count = count_occurrences(body, CLOSE)
 
-    open_present = open_idx != -1
-    if open_present:
-        present_marker = OPEN.decode("utf-8")
-        absent_marker  = CLOSE.decode("utf-8")
-        line_no = line_of(original, open_idx)
+def line_of(buf: bytes, idx_no_bom: int) -> int:
+    """1-based line number, accounting for an optional preserved BOM."""
+    if idx_no_bom == -1:
+        return -1
+    idx = idx_no_bom + len(bom_prefix)
+    return buf[:idx].count(b"\n") + 1
+
+# Multi-pair detection: if either marker appears more than once, the
+# target is in an ambiguous state (e.g. user copy-pasted the routing
+# block twice). Refuse to silently update only the first occurrence.
+if open_count > 1 or close_count > 1:
+    sys.stderr.write(
+        "ERROR: F-B2 step 4 (routing block injection) cannot proceed.\n"
+        "\n"
+        f"Target file:    {target}\n"
+        f"Detected:       {open_count} opening markers and {close_count} closing markers\n"
+        f"                in {target}. Expected exactly 0 or 1 of each.\n"
+        "\n"
+        "This indicates either:\n"
+        "  (1) the routing block was copy-pasted into the target multiple\n"
+        "      times — only the first pair would be updated, leaving the\n"
+        "      others to silently drift\n"
+        "  (2) hand-edited duplication\n"
+        "  (3) a merge artifact left two stale blocks\n"
+        "\n"
+        "Recovery options (pick one, then re-run F-B2):\n"
+        "  (a) Strip the duplicate marker pairs — keep at most ONE\n"
+        "      `<!-- board-superpowers:routing -->` /\n"
+        "      `<!-- /board-superpowers:routing -->` block.\n"
+        "  (b) Delete the entire file — F-B2 will re-create it with just\n"
+        "      the routing block. Use only if AGENTS.md content was\n"
+        "      minimal.\n"
+        "  (c) Strip ALL marker pairs — F-B2 will then treat the file as\n"
+        "      case-C (no markers, will append a fresh block).\n"
+        "\n"
+        "F-B2 has NOT written state.yml. Repo state remains pre-bootstrap.\n"
+        "Re-run after fixing.\n"
+    )
+    sys.exit(5)
+
+open_idx  = body.find(OPEN)  if open_count  == 1 else -1
+close_idx = body.find(CLOSE) if close_count == 1 else -1
+
+# Orphan detection: exactly one of OPEN / CLOSE present, the other
+# absent.
+if (open_count == 1) ^ (close_count == 1):
+    if open_count == 1:
+        kind            = "opening"
+        present_marker  = OPEN.decode("utf-8")
+        other_kind      = "closing"
+        absent_marker   = CLOSE.decode("utf-8")
+        present_line    = line_of(original, open_idx)
     else:
-        present_marker = CLOSE.decode("utf-8")
-        absent_marker  = OPEN.decode("utf-8")
-        line_no = line_of(original, close_idx)
+        kind            = "closing"
+        present_marker  = CLOSE.decode("utf-8")
+        other_kind      = "opening"
+        absent_marker   = OPEN.decode("utf-8")
+        present_line    = line_of(original, close_idx)
 
     sys.stderr.write(
         "ERROR: F-B2 step 4 (routing block injection) cannot proceed.\n"
         "\n"
         f"Target file:    {target}\n"
-        f"Detected:       opening marker '{OPEN.decode('utf-8')}'\n"
-        f"                present at line {line_no if open_present else '?'}, but closing marker\n"
-        f"                '{CLOSE.decode('utf-8')}' is absent.\n"
-        "                (Or vice versa.)\n"
+        f"Detected:       {kind} marker '{present_marker}' present at line {present_line},\n"
+        f"                but matching {other_kind} marker '{absent_marker}'\n"
+        "                is absent.\n"
         "\n"
         "This indicates either:\n"
         "  (1) a partial or corrupted previous injection\n"
@@ -592,22 +781,20 @@ if (open_idx == -1) ^ (close_idx == -1):
         "  (3) a third party stripped one marker\n"
         "\n"
         "Recovery options (pick one, then re-run F-B2):\n"
-        "  (a) Restore both markers — add the closing marker AT or AFTER the\n"
+        "  (a) Restore both markers — add the missing marker AT or AFTER the\n"
         "      content you want preserved as plugin-managed.\n"
         "  (b) Delete the entire file — F-B2 will re-create it with just the\n"
         "      routing block. Use only if AGENTS.md content was minimal.\n"
-        "  (c) Strip the orphan marker — manually remove the lone opening\n"
-        "      marker. F-B2 will then treat the file as case-C (no markers,\n"
-        "      will append fresh block).\n"
+        "  (c) Strip the orphan marker — manually remove the lone marker.\n"
+        "      F-B2 will then treat the file as case-C (no markers, will\n"
+        "      append fresh block).\n"
         "\n"
         "F-B2 has NOT written state.yml. Repo state remains pre-bootstrap.\n"
         "Re-run after fixing.\n"
     )
-    # Dummy reads to keep flake8 happy if any are unused
-    _ = present_marker, absent_marker
     sys.exit(5)
 
-if open_idx == -1 and close_idx == -1:
+if open_count == 0 and close_count == 0:
     # Append marker-wrapped block. Preserve everything before; tack
     # on a leading newline if the file doesn't already end with one.
     suffix = b""
@@ -624,7 +811,8 @@ if open_idx == -1 and close_idx == -1:
     print(block_hash)
     sys.exit(0)
 
-# Both markers present — replace bytes between them.
+# Both markers present (exactly one of each) — replace bytes between
+# them.
 if open_idx > close_idx:
     sys.stderr.write(
         "ERROR: F-B2 step 4 (routing block injection) cannot proceed.\n"

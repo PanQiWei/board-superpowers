@@ -10,7 +10,7 @@
 # scripts/lib/common.sh + bootstrap-project.sh step 4 invocation +
 # state.yml routing_blocks[] population.
 #
-# Helper-level scenarios (1-10):
+# Helper-level scenarios (1-13):
 #   1. Fresh AGENTS.md (target absent): file created with marker-wrapped
 #      content, hash printed to stdout.
 #   2. Fresh CLAUDE.md too: both files created independently.
@@ -19,23 +19,30 @@
 #   4. AGENTS.md exists with BOTH markers: content between markers
 #      REPLACED, content outside markers preserved verbatim.
 #   5. AGENTS.md exists with OPENING marker but NO CLOSING: exit 5,
-#      verbatim error message printed to stderr (matches Card body),
-#      file unchanged.
+#      verbatim error message printed to stderr (with line number of
+#      the present marker), file unchanged.
 #   6. AGENTS.md exists with CLOSING marker but NO OPENING: exit 5,
-#      same orphan error, file unchanged.
-#   7. CRLF source-of-truth file: helper LF-normalizes for hashing AND
-#      for injection.
+#      same orphan error with the closing marker's actual line number
+#      printed (no `?` placeholder), file unchanged.
+#   7. CRLF source-of-truth file (with fence sentinels): helper
+#      LF-normalizes for hashing AND for injection.
 #   8. UTF-8 BOM at start of AGENTS.md: BOM preserved at byte 0 after
 #      injection; BOM NOT in the hashed region.
 #   9. Hash determinism: same source content → same hash across two
 #      independent target injections.
 #  10. Idempotent re-run: inject into AGENTS.md, then inject again
 #      with same source. Same hash; resulting bytes byte-identical.
+#  11. Source file MISSING fence markers: helper aborts with fatal
+#      error pointing at source file path (exit 1), no target written.
+#  12. Target file with TWO marker pairs: exit 5 with multi-pair error,
+#      file unchanged.
+#  13. Source file with literal target marker INSIDE the fence:
+#      helper aborts with fatal error pointing at source path (exit 1).
 #
-# End-to-end scenarios (11-12):
-#  11. Full F-B2 against tmp repo with no AGENTS.md / CLAUDE.md:
+# End-to-end scenarios (14-15):
+#  14. Full F-B2 against tmp repo with no AGENTS.md / CLAUDE.md:
 #      state.yml routing_blocks[] has 2 entries with correct hashes.
-#  12. Full F-B2 against tmp repo where AGENTS.md has orphan markers:
+#  15. Full F-B2 against tmp repo where AGENTS.md has orphan markers:
 #      F-B2 aborts non-zero; state.yml NOT written.
 #
 # Hermeticity: tmp dirs only; helper-level tests source common.sh
@@ -294,9 +301,9 @@ assert_eq 'orphan-open: file unchanged' "${ORIG}" "$(cat "${TARGET}")"
 rm -rf "${TMP}"
 
 # ---------------------------------------------------------------------------
-# Scenario 6: Orphan closing marker — exit 5
+# Scenario 6: Orphan closing marker — exit 5, error names actual line number
 # ---------------------------------------------------------------------------
-printf 'Scenario 6: Orphan closing marker — exit 5\n'
+printf 'Scenario 6: Orphan closing marker — exit 5 with line number\n'
 
 TMP="$(mktemp -d)"
 TARGET="${TMP}/AGENTS.md"
@@ -311,6 +318,9 @@ Some content with a stray closing marker only.
 End of file.
 EOF
 
+# The closing marker is on line 5 of the file above.
+EXPECTED_LINE=5
+
 ORIG="$(cat "${TARGET}")"
 
 set +e
@@ -321,6 +331,14 @@ set -e
 assert_eq 'orphan-close: exit 5' '5' "${RC}"
 check 'orphan-close: error mentions "F-B2 step 4"' \
     bash -c "printf '%s' \"\$1\" | grep -Fq 'F-B2 step 4'" _ "${ERR_OUT}"
+check 'orphan-close: error names "closing" as the present marker kind' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq \"closing marker '<!-- /board-superpowers:routing -->'\"" _ "${ERR_OUT}"
+# shellcheck disable=SC2016  # backticks here are markdown, not command substitution
+check 'orphan-close: error prints actual line number (no `?` placeholder)' \
+    bash -c "printf '%s' \"\$1\" | grep -Eq \"present at line ${EXPECTED_LINE}\"" _ "${ERR_OUT}"
+# shellcheck disable=SC2016  # backticks here are markdown, not command substitution
+check_not 'orphan-close: error does NOT contain a `?` placeholder for line number' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq 'present at line ?'" _ "${ERR_OUT}"
 assert_eq 'orphan-close: file unchanged' "${ORIG}" "$(cat "${TARGET}")"
 
 rm -rf "${TMP}"
@@ -336,21 +354,31 @@ SOURCE_CRLF="${TMP}/source-crlf.md"
 TARGET_LF="${TMP}/AGENTS-lf.md"
 TARGET_CRLF="${TMP}/AGENTS-crlf.md"
 
-# LF source.
-printf 'line one\nline two\nline three\n' > "${SOURCE_LF}"
-# Same content with CRLF endings.
-printf 'line one\r\nline two\r\nline three\r\n' > "${SOURCE_CRLF}"
+# LF source — fence-bounded routing block content.
+printf '# header docstring\n\n<!-- routing-block:start -->\nline one\nline two\nline three\n<!-- routing-block:end -->\n\nfooter notes\n' > "${SOURCE_LF}"
+# Same content with CRLF endings everywhere.
+printf '# header docstring\r\n\r\n<!-- routing-block:start -->\r\nline one\r\nline two\r\nline three\r\n<!-- routing-block:end -->\r\n\r\nfooter notes\r\n' > "${SOURCE_CRLF}"
 
 set +e
 H_LF="$(inject_in_subshell "${TARGET_LF}" "${SOURCE_LF}" 2>/dev/null)"
 H_CRLF="$(inject_in_subshell "${TARGET_CRLF}" "${SOURCE_CRLF}" 2>/dev/null)"
 set -e
 
+check 'CRLF normalize: target_lf created' test -f "${TARGET_LF}"
+check 'CRLF normalize: target_crlf created' test -f "${TARGET_CRLF}"
 assert_eq 'CRLF normalize: hashes equal (LF-only contract)' \
     "${H_LF}" "${H_CRLF}"
 # Resulting target file must contain NO CR byte (LF-only).
 check_not 'CRLF normalize: target contains no CR bytes' \
     bash -c "tr -dc '\r' < \"\$1\" | grep -q '.'" _ "${TARGET_CRLF}"
+# Injected content must be exactly the three fence-bounded lines, NOT
+# the docstring header or footer notes (those live outside the fence).
+check_not 'CRLF normalize: docstring header NOT injected' \
+    grep -Fq 'header docstring' "${TARGET_LF}"
+check_not 'CRLF normalize: footer notes NOT injected' \
+    grep -Fq 'footer notes' "${TARGET_LF}"
+check 'CRLF normalize: fence-bounded line one IS injected' \
+    grep -Fq 'line one' "${TARGET_LF}"
 
 rm -rf "${TMP}"
 
@@ -421,6 +449,134 @@ set -e
 assert_eq 'idempotent: same hash returned both times' "${HA}" "${HB}"
 assert_eq 'idempotent: file bytes byte-identical after second inject' \
     "${SHA_A}" "${SHA_B}"
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
+# Scenario 11: Source file MISSING fence markers — fatal error, exit 1
+# ---------------------------------------------------------------------------
+printf 'Scenario 11: Source missing fence markers — fatal error\n'
+
+TMP="$(mktemp -d)"
+SOURCE_NO_FENCE="${TMP}/no-fence.md"
+TARGET="${TMP}/AGENTS.md"
+
+# Source without any fence sentinels.
+cat > "${SOURCE_NO_FENCE}" <<'EOF'
+# Just a markdown file with no fence sentinels.
+
+Some routing-block-ish content but no fences anywhere.
+EOF
+
+set +e
+ERR_OUT="$(inject_in_subshell "${TARGET}" "${SOURCE_NO_FENCE}" 2>&1 1>/dev/null)"
+RC=$?
+set -e
+
+assert_eq 'no-fence: exit 1' '1' "${RC}"
+check 'no-fence: error mentions "missing fence markers"' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq 'missing fence markers'" _ "${ERR_OUT}"
+check 'no-fence: error names source file path' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq \"\$2\"" _ "${ERR_OUT}" "${SOURCE_NO_FENCE}"
+check 'no-fence: error mentions routing-block:start sentinel' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq 'routing-block:start'" _ "${ERR_OUT}"
+check 'no-fence: error mentions routing-block:end sentinel' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq 'routing-block:end'" _ "${ERR_OUT}"
+check_not 'no-fence: target file NOT created' test -f "${TARGET}"
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
+# Scenario 12: Target file with TWO marker pairs — multi-pair detection, exit 5
+# ---------------------------------------------------------------------------
+printf 'Scenario 12: Target with two marker pairs — multi-pair error\n'
+
+TMP="$(mktemp -d)"
+TARGET="${TMP}/AGENTS.md"
+
+cat > "${TARGET}" <<'EOF'
+# Existing AGENTS.md
+
+First copy of routing block:
+
+<!-- board-superpowers:routing -->
+Old content #1.
+<!-- /board-superpowers:routing -->
+
+Some intervening content.
+
+Second copy (oops, copy-paste duplication):
+
+<!-- board-superpowers:routing -->
+Old content #2.
+<!-- /board-superpowers:routing -->
+
+End of file.
+EOF
+
+ORIG="$(cat "${TARGET}")"
+
+set +e
+ERR_OUT="$(inject_in_subshell "${TARGET}" "${SOURCE_FILE_REAL}" 2>&1 1>/dev/null)"
+RC=$?
+set -e
+
+assert_eq 'multi-pair: exit 5' '5' "${RC}"
+check 'multi-pair: error mentions "F-B2 step 4"' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq 'F-B2 step 4'" _ "${ERR_OUT}"
+check 'multi-pair: error reports 2 opening markers' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq '2 opening markers'" _ "${ERR_OUT}"
+check 'multi-pair: error reports 2 closing markers' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq '2 closing markers'" _ "${ERR_OUT}"
+check 'multi-pair: error mentions "Expected exactly 0 or 1 of each"' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq 'Expected exactly 0 or 1 of each'" _ "${ERR_OUT}"
+check 'multi-pair: error mentions Recovery options' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq 'Recovery options'" _ "${ERR_OUT}"
+check 'multi-pair: error names the target file path' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq \"\$2\"" _ "${ERR_OUT}" "${TARGET}"
+assert_eq 'multi-pair: file unchanged' "${ORIG}" "$(cat "${TARGET}")"
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
+# Scenario 13: Source has literal target marker INSIDE the fence — abort
+# ---------------------------------------------------------------------------
+printf 'Scenario 13: Source has nested target marker inside fence — abort\n'
+
+TMP="$(mktemp -d)"
+SOURCE_NESTED="${TMP}/source-nested.md"
+TARGET="${TMP}/AGENTS.md"
+
+# Build source where the fenced content includes a literal target
+# marker — this would otherwise inject nested markers.
+cat > "${SOURCE_NESTED}" <<'EOF'
+# Source-of-truth with a maintainer mistake.
+
+<!-- routing-block:start -->
+Some routing content.
+
+Oops, a literal target marker leaked into the body:
+<!-- board-superpowers:routing -->
+
+More content.
+<!-- routing-block:end -->
+
+Maintainer notes.
+EOF
+
+set +e
+ERR_OUT="$(inject_in_subshell "${TARGET}" "${SOURCE_NESTED}" 2>&1 1>/dev/null)"
+RC=$?
+set -e
+
+assert_eq 'marker-in-source: exit 1' '1' "${RC}"
+check 'marker-in-source: error mentions "literal target-file marker"' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq 'literal target-file marker'" _ "${ERR_OUT}"
+check 'marker-in-source: error names source file path' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq \"\$2\"" _ "${ERR_OUT}" "${SOURCE_NESTED}"
+check 'marker-in-source: error mentions a line number' \
+    bash -c "printf '%s' \"\$1\" | grep -Eq 'at line [0-9]+'" _ "${ERR_OUT}"
+check_not 'marker-in-source: target file NOT created' test -f "${TARGET}"
 
 rm -rf "${TMP}"
 
@@ -587,9 +743,9 @@ normalized_state_dir() {
 }
 
 # ---------------------------------------------------------------------------
-# Scenario 11: Full F-B2 — state.yml routing_blocks[] populated for both files
+# Scenario 14: Full F-B2 — state.yml routing_blocks[] populated for both files
 # ---------------------------------------------------------------------------
-printf 'Scenario 11: end-to-end F-B2 routing injection populates state.yml\n'
+printf 'Scenario 14: end-to-end F-B2 routing injection populates state.yml\n'
 
 TMP="$(mktemp -d)"
 HOME_DIR="${TMP}/home"
@@ -662,9 +818,9 @@ check 'e2e: state.yml mentions CLAUDE.md target' \
 rm -rf "${TMP}"
 
 # ---------------------------------------------------------------------------
-# Scenario 12: Full F-B2 with orphan markers — abort, no state.yml written
+# Scenario 15: Full F-B2 with orphan markers — abort, no state.yml written
 # ---------------------------------------------------------------------------
-printf 'Scenario 12: end-to-end F-B2 with orphan markers — abort\n'
+printf 'Scenario 15: end-to-end F-B2 with orphan markers — abort\n'
 
 TMP="$(mktemp -d)"
 HOME_DIR="${TMP}/home"

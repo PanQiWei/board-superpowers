@@ -13,23 +13,42 @@ matcher).
 `docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md`
 § 1.5.2 step 4 + `scripts/lib/common.sh:bsp_inject_routing_block`):
 
-1. The injection helper reads THIS file, normalizes the bytes — strip
-   UTF-8 BOM if present, replace CRLF / CR with LF — and treats the
-   normalized bytes as the routing block content.
-2. SHA256 over the post-normalization bytes (with a single trailing
-   newline trimmed) yields the recorded hash.
-3. The helper writes the block between the marker pair into AGENTS.md
-   and CLAUDE.md and records one entry per file —
+1. The injection helper reads THIS file and locates the fence
+   sentinels — `<!-- routing-block:start -->` and
+   `<!-- routing-block:end -->` — to extract ONLY the bytes between
+   them. The docstring header above the fence (this prose) is NOT
+   injected. Anything outside the fence is treated as
+   maintainer-facing notes.
+2. The extracted bytes are normalized — strip UTF-8 BOM if present,
+   replace CRLF / CR with LF, strip leading + trailing whitespace
+   newlines so the injected block is tight.
+3. SHA256 over the normalized fence-bounded bytes (with a single
+   trailing newline trimmed) yields the recorded hash.
+4. The helper writes the block between the target's marker pair
+   (`<!-- board-superpowers:routing -->` /
+   `<!-- /board-superpowers:routing -->`) into AGENTS.md and CLAUDE.md
+   and records one entry per file —
    `{target_file, block_hash: "sha256:<hex>", injected_at: <iso8601>}`
    — into `~/.board-superpowers/repos/<normalized>/state.yml`'s
    `routing_blocks:` list.
-4. F-B4 (deferred to the `migrating-repo-version` skill) consumes
+5. F-B4 (deferred to the `migrating-repo-version` skill) consumes
    `state.yml:routing_blocks[]` hashes for tamper detection at plugin
    upgrade time.
 
 LF-only line endings. No BOM. Final line of the block ends with a
 single LF.
 
+**Why the fence sentinels differ from the target marker pair.** The
+fence keywords (`routing-block:start` / `routing-block:end`) are
+distinct from the target file marker keywords
+(`board-superpowers:routing` / `/board-superpowers:routing`) so a
+naive `find()` for the target marker pair against the source file
+returns nothing. This guards against the helper accidentally treating
+this docstring as a target file. A sanity check inside the helper
+also rejects source content with literal target markers nested inside
+the fence.
+
+<!-- routing-block:start -->
 This project uses the `board-superpowers` plugin (v0.2.0).
 Any Claude Code session in this project plays one of two roles:
 
@@ -123,3 +142,22 @@ a release process.
   `superpowers:test-driven-development`. An adjacent planning
   skill's "start coding" suggestion does not excuse skipping
   Red → Green → Refactor.
+<!-- routing-block:end -->
+
+## Maintainer notes (NOT injected)
+
+Anything below the closing fence sentinel is for plugin maintainers
+only and stays in this file — the helper extracts strictly between
+the fence sentinels and discards everything outside.
+
+When updating the routing block content above, remember:
+
+- The fence sentinels (`<!-- routing-block:start -->` and
+  `<!-- routing-block:end -->`) must remain on lines by themselves.
+- Do NOT place a literal `<!-- board-superpowers:routing -->` or
+  `<!-- /board-superpowers:routing -->` between the fence sentinels —
+  the helper's sanity check rejects nested target markers.
+- The hash recorded in user repos' `state.yml:routing_blocks[]`
+  changes whenever the bytes between the fences change. F-B4 tamper
+  detection treats a hash mismatch as plausible user edit; document
+  the change in the v0.x release notes.
