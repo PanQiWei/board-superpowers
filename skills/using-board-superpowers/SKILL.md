@@ -29,9 +29,11 @@ The hook is best-effort; this skill is the contract. Always run BOTH probes itse
    - `~/.board-superpowers/manifest.yml` — present or absent?
    - `~/.board-superpowers/repos/<normalized>/state.yml` — present or absent?
 
-   `<normalized>` is the repo's absolute path with leading `/` stripped and remaining `/` replaced by `-` (e.g. `/Users/foo/proj` → `Users-foo-proj`). Use `bsp_normalize_repo_path` from `scripts/lib/common.sh` if invoking helper bash; the hook duplicates the same rule inline (per the self-containment contract).
+   Resolve the repo root with `bsp_primary_repo_root "${PWD}"` from `scripts/lib/common.sh` — NEVER call `git rev-parse --show-toplevel` directly. From inside a `git worktree`, `--show-toplevel` returns the worktree path, which normalizes to a different `<normalized>` than the canonical primary repo. Probing under that path misses an already-written `state.yml` and falsely concludes the repo is unbootstrapped, which would make every worktree-launched session re-emit the bootstrap prompt. `bsp_primary_repo_root` uses `git rev-parse --git-common-dir` (which always points at the primary repo regardless of worktree vs primary), then takes `dirname` of that, then runs `pwd -P` to resolve symlinks. The same incantation is duplicated inline in `hooks/session-start.sh` as `primary_repo_root` (per the hook's self-containment contract) — keep the two in lockstep when changing the rule.
 
-   For worktrees consult `bsp_pick_worktree_dir` so the probe lands on the right repo root, not the worktree.
+   `<normalized>` is the resolved primary repo's absolute path with leading `/` stripped and remaining `/` replaced by `-` (e.g. `/Users/foo/proj` → `Users-foo-proj`). Use `bsp_normalize_repo_path` from `scripts/lib/common.sh` AFTER the primary-repo-root resolution.
+
+   For worktree-base path resolution (a different concern — where to PUT new worktrees, not where the primary repo IS) consult `bsp_pick_worktree_dir`. The two helpers do not interchange.
 
 ## Step 2 — consume `INVOKE: bootstrapping-repo` marker if present
 

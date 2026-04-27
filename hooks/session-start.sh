@@ -30,7 +30,10 @@
 # missing lib must never prevent session startup. The path
 # normalization helper bsp_normalize_repo_path (defined in
 # scripts/lib/common.sh) is duplicated INLINE below as
-# normalize_repo_path. Keep the two implementations in lockstep —
+# normalize_repo_path. The primary-repo-root resolver
+# bsp_primary_repo_root is duplicated inline as primary_repo_root.
+# The REASON-line sanitizer sanitize_reason_line is also duplicated
+# inline. Keep the implementations in lockstep —
 # DO NOT deduplicate by sourcing.
 
 set -euo pipefail
@@ -72,6 +75,61 @@ sanitize_dep_name() {
         *[a-zA-Z0-9]*) printf '%s' "${cleaned}" ;;
         *) return 1 ;;
     esac
+}
+
+# sanitize_reason_line — per 02-hook-contracts.md § "Intent-injection
+# markers" lines 213-216 grammar rule: REASON value is "plain ASCII,
+# ≤120 chars, punctuation only `. , ; : - ( )`. No newlines, no JSON,
+# no markup." Drop everything outside that whitelist; truncate to 200
+# chars (well over the spec's 120-char ceiling, leaves headroom for the
+# REASON: prefix accounting elsewhere).
+#
+# Note: sanitize_dep_name's 32-char truncation is too aggressive for a
+# REASON sentence; this helper exists separately. DUPLICATION NOTICE:
+# duplicated as bsp_sanitize_reason_line in scripts/lib/common.sh —
+# keep the two implementations in lockstep per the self-containment
+# contract.
+sanitize_reason_line() {
+    local raw="${1:-}"
+    LC_ALL=C printf '%s' "${raw}" \
+        | LC_ALL=C tr -cd 'a-zA-Z0-9 .,;:\-()' \
+        | head -c 200
+}
+
+# primary_repo_root — resolve PWD to the absolute path of the PRIMARY
+# repo root, NOT the worktree root. From inside a `git worktree`,
+# `git rev-parse --show-toplevel` returns the worktree path; that
+# path normalizes to a different `<normalized>` than the canonical
+# repo, so the hook's per-repo state.yml lookup misses and the hook
+# falsely emits INVOKE: bootstrapping-repo for an already-bootstrapped
+# repo. This helper uses `git rev-parse --git-common-dir` (which
+# always points at the primary repo's .git/ regardless of worktree
+# vs primary) and walks up one level to the primary working tree.
+#
+# Args: <cwd>
+# Stdout: absolute primary-repo-root path on success; nothing on failure.
+# Returns: 0 on success, 1 if not in a git repo (caller should fall
+#   back to `pwd -P`).
+#
+# DUPLICATION NOTICE: duplicated as bsp_primary_repo_root in
+# scripts/lib/common.sh — keep the two implementations in lockstep
+# per the self-containment contract (02-hook-contracts.md
+# § "Self-containment" lines 295-303).
+primary_repo_root() {
+    local cwd="${1:-${PWD}}"
+    command -v git >/dev/null 2>&1 || return 1
+    local common_dir
+    common_dir="$(git -C "${cwd}" rev-parse --git-common-dir 2>/dev/null || true)"
+    [ -n "${common_dir}" ] || return 1
+    # --git-common-dir may return absolute or relative; canonicalize.
+    case "${common_dir}" in
+        /*) ;;
+        *) common_dir="${cwd}/${common_dir}" ;;
+    esac
+    # `dirname` of the primary `.git/` directory is the primary
+    # working tree. Run through `pwd -P` to resolve symlinks (macOS
+    # /var → /private/var bites here otherwise).
+    (cd "$(dirname "${common_dir}")" 2>/dev/null && pwd -P) || return 1
 }
 
 # NOTE: 02-hook-contracts.md § "Sanitization expectation" cites a
@@ -130,9 +188,18 @@ fi
 # defensively — the hook only INVOKEs bootstrapping-repo when we are
 # certain a repo bootstrap is missing).
 
+# Resolve PWD to the PRIMARY repo root, not a worktree root.
+# `git rev-parse --show-toplevel` returns the worktree path when run
+# inside a worktree; the worktree's path normalizes to a different
+# `<normalized>` than the canonical repo, which would make the hook
+# falsely emit INVOKE: bootstrapping-repo for an already-bootstrapped
+# repo. Fall back to `pwd -P` of $PWD on non-git directories so the
+# hook degrades gracefully without crashing.
 REPO_ROOT=""
-if command -v git >/dev/null 2>&1; then
-    REPO_ROOT="$(git -C "${PWD}" rev-parse --show-toplevel 2>/dev/null || true)"
+if REPO_ROOT="$(primary_repo_root "${PWD}")" && [ -n "${REPO_ROOT}" ]; then
+    :
+else
+    REPO_ROOT=""
 fi
 
 MANIFEST_PRESENT="no"
@@ -190,14 +257,25 @@ fi
 # Intent-injection marker: at most one INVOKE: per payload (per
 # 02-hook-contracts.md line 218-222). manifest absent or state.yml
 # absent both route to bootstrapping-repo; pick a single REASON line.
+#
+# REASON grammar (02-hook-contracts.md lines 213-216):
+#   plain ASCII, ≤120 chars, punctuation only `. , ; : - ( )`.
+#   No newlines, no JSON, no markup.
+# The `~` and `/` characters previously used in path mentions are
+# OUTSIDE the whitelist; rephrase without paths and pass through
+# sanitize_reason_line as a defensive net.
 if [ "${MANIFEST_PRESENT}" = "no" ] || [ "${STATE_PRESENT}" = "no" ]; then
     LINES+=("")
     LINES+=("INVOKE: bootstrapping-repo")
-    if [ "${MANIFEST_PRESENT}" = "no" ]; then
-        LINES+=("REASON: ~/.board-superpowers/manifest.yml absent (host bootstrap pending).")
+    raw_reason=""
+    if [ "${MANIFEST_PRESENT}" = "no" ] && [ "${STATE_PRESENT}" = "no" ]; then
+        raw_reason="host bootstrap pending; both manifest and per-repo state files are absent."
+    elif [ "${MANIFEST_PRESENT}" = "no" ]; then
+        raw_reason="host bootstrap pending; manifest is absent."
     else
-        LINES+=("REASON: per-repo state.yml absent for this (host, repo) pair.")
+        raw_reason="per-repo bootstrap pending; state file is absent."
     fi
+    LINES+=("REASON: $(sanitize_reason_line "${raw_reason}")")
 fi
 
 # --- Emit JSON via Python (RFC 8259 quoting) ---------------------------

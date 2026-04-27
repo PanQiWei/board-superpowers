@@ -75,6 +75,73 @@ bsp_normalize_repo_path() {
     printf '%s\n' "${p//\//-}"
 }
 
+# bsp_primary_repo_root <cwd> — resolve a working directory to its
+# PRIMARY repo root (the original `git init`-ed working tree), NOT
+# the worktree root the caller may currently sit in. Required because
+# `git rev-parse --show-toplevel` returns the WORKTREE root from
+# inside a `git worktree`, and the worktree's absolute path normalizes
+# (via bsp_normalize_repo_path) to a different `<normalized>` than the
+# canonical repo. Any per-repo state lookup keyed by `<normalized>`
+# (host-local state.yml, audit-local.jsonl) MUST use this helper —
+# otherwise a worktree-launched session sees a fresh "no state.yml
+# yet" path and false-emits a bootstrap prompt.
+#
+# Mechanics: `git rev-parse --git-common-dir` always points at the
+# primary repo's `.git/` directory (regardless of worktree vs primary
+# linked checkout). dirname of that is the primary working tree.
+#
+# Args:   <cwd>
+# Stdout: absolute primary-repo-root path on success; nothing on failure.
+# Returns: 0 on success, 1 if not in a git repo (caller should fall
+#   back to whatever the surrounding context calls for).
+#
+# DUPLICATION NOTICE: this function is duplicated INLINE inside
+# hooks/session-start.sh as `primary_repo_root` because the hook is
+# contractually self-contained (per 02-hook-contracts.md
+# § "Self-containment" lines 295-303). DO NOT deduplicate by sourcing
+# common.sh from the hook. When the rule changes here it MUST also
+# change in the hook.
+
+bsp_primary_repo_root() {
+    local cwd="${1:?usage: bsp_primary_repo_root <cwd>}"
+    command -v git >/dev/null 2>&1 || return 1
+    local common_dir
+    common_dir="$(git -C "${cwd}" rev-parse --git-common-dir 2>/dev/null || true)"
+    [ -n "${common_dir}" ] || return 1
+    case "${common_dir}" in
+        /*) ;;
+        *) common_dir="${cwd}/${common_dir}" ;;
+    esac
+    # `dirname` of the primary `.git/` directory is the primary
+    # working tree. Run through `pwd -P` so symlinks (macOS
+    # /var → /private/var) don't bite.
+    (cd "$(dirname "${common_dir}")" 2>/dev/null && pwd -P) || return 1
+}
+
+# bsp_sanitize_reason_line <raw> — sanitize a string for use as the
+# value portion of a hook-injected `REASON:` marker. Per
+# 02-hook-contracts.md § "Intent-injection markers" lines 213-216:
+#   plain ASCII, ≤120 chars, punctuation only `. , ; : - ( )`.
+#   No newlines, no JSON, no markup.
+#
+# Drops any character outside the whitelist (alnum + space +
+# `. , ; : - ( )`); truncates to 200 chars (well over the spec's
+# 120-char ceiling, leaves headroom).
+#
+# Note: bsp_sanitize_dep_name's 32-char truncation is too aggressive
+# for a sentence-shaped REASON line; this helper exists separately.
+#
+# DUPLICATION NOTICE: duplicated INLINE inside hooks/session-start.sh
+# as `sanitize_reason_line`. Keep the implementations in lockstep
+# (per 02-hook-contracts.md § "Self-containment").
+
+bsp_sanitize_reason_line() {
+    local raw="${1:-}"
+    LC_ALL=C printf '%s' "${raw}" \
+        | LC_ALL=C tr -cd 'a-zA-Z0-9 .,;:\-()' \
+        | head -c 200
+}
+
 # --- Host-local + per-repo state paths ----------------------------------
 #
 # Per AGENTS.md Architecture-at-a-glance + 07-path-conventions.md

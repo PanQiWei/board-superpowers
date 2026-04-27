@@ -272,8 +272,13 @@ assert_valid_json 'JSON shape valid' "${PAYLOAD}"
 CONTEXT="$(extract_additional_context "${PAYLOAD}")"
 check 'INVOKE: bootstrapping-repo present' \
     bash -c 'printf "%s" "$1" | grep -qE "^INVOKE: bootstrapping-repo$"' _ "${CONTEXT}"
-check 'REASON mentions manifest.yml' \
-    bash -c 'printf "%s" "$1" | grep -qE "^REASON: .*manifest\\.yml"' _ "${CONTEXT}"
+# REASON content is whitelist-constrained (no `/`, no `~`); the new
+# wording is "host bootstrap pending; ..." — assert host-bootstrap
+# semantics rather than a literal path mention.
+check 'REASON declares host bootstrap pending' \
+    bash -c 'printf "%s" "$1" | grep -qE "^REASON: .*host bootstrap pending"' _ "${CONTEXT}"
+check 'REASON mentions manifest (no path chars)' \
+    bash -c 'printf "%s" "$1" | grep -qE "^REASON: .*manifest"' _ "${CONTEXT}"
 
 # At-most-one rule: only one INVOKE line in the payload.
 INVOKE_COUNT="$(printf '%s' "${CONTEXT}" | grep -cE "^INVOKE:" || true)"
@@ -312,8 +317,12 @@ assert_eq 'hook exit 0' '0' "$(printf '%d' "${RC}")"
 CONTEXT="$(extract_additional_context "${PAYLOAD}")"
 check 'INVOKE: bootstrapping-repo present' \
     bash -c 'printf "%s" "$1" | grep -qE "^INVOKE: bootstrapping-repo$"' _ "${CONTEXT}"
-check 'REASON mentions state.yml' \
-    bash -c 'printf "%s" "$1" | grep -qE "^REASON: .*state\\.yml"' _ "${CONTEXT}"
+# Whitelist-constrained REASON: per-repo path uses
+# "per-repo bootstrap pending; state file is absent."
+check 'REASON declares per-repo bootstrap pending' \
+    bash -c 'printf "%s" "$1" | grep -qE "^REASON: .*per-repo bootstrap pending"' _ "${CONTEXT}"
+check 'REASON mentions state file (no path chars)' \
+    bash -c 'printf "%s" "$1" | grep -qE "^REASON: .*state file"' _ "${CONTEXT}"
 
 rm -rf "${TMP}"
 
@@ -595,6 +604,204 @@ set -e
 assert_eq 'hook exit 0 with lib/ removed' '0' "$(printf '%d' "${RC}")"
 assert_valid_json 'JSON valid with lib/ removed' "${PAYLOAD}"
 
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
+# Scenario 11: worktree-launched session does NOT false-emit INVOKE
+#              when the canonical state.yml exists at the PRIMARY repo
+#              root's normalized path.
+# ---------------------------------------------------------------------------
+printf 'Scenario 11: worktree resolution (primary repo state.yml found)\n'
+
+TMP="$(mktemp -d)"
+HOME_DIR="${TMP}/home"
+PLUGIN_ROOT="${TMP}/plugin"
+PRIMARY_REPO="${TMP}/primary"
+WORKTREE_DIR="${TMP}/worktrees/feature-x"
+mkdir -p "${HOME_DIR}/.board-superpowers"
+make_plugin_root "${PLUGIN_ROOT}" "0.2.0"
+install_clean_check_deps "${PLUGIN_ROOT}"
+make_repo "${PRIMARY_REPO}"
+
+# Write the manifest (host bootstrapped) and the per-repo state.yml
+# at the CANONICAL path — i.e. derived from the PRIMARY repo's git
+# toplevel, not the worktree's.
+cat > "${HOME_DIR}/.board-superpowers/manifest.yml" <<EOF
+schema_version: 1
+host_bootstrapped_at: "2026-01-01T00:00:00Z"
+last_seen_version: "0.2.0"
+EOF
+
+CANONICAL_PRIMARY="$(cd "${PRIMARY_REPO}" && git rev-parse --show-toplevel)"
+CANONICAL_PRIMARY="$(cd "${CANONICAL_PRIMARY}" && pwd -P)"
+NORM="$(normalize_for_test "${CANONICAL_PRIMARY}")"
+mkdir -p "${HOME_DIR}/.board-superpowers/repos/${NORM}"
+cat > "${HOME_DIR}/.board-superpowers/repos/${NORM}/state.yml" <<EOF
+schema_version: 1
+repo_bootstrapped_at: "2026-01-01T00:00:00Z"
+last_seen_version_in_repo: "0.2.0"
+EOF
+
+# Cut a worktree from the primary onto a feature branch.
+(
+    cd "${PRIMARY_REPO}"
+    git worktree add -q -b feature-x "${WORKTREE_DIR}" >/dev/null 2>&1
+)
+
+# Sanity: confirm the worktree's git toplevel differs from primary's,
+# so the test would otherwise demonstrate the bug if the hook still
+# used --show-toplevel.
+WORKTREE_TOPLEVEL="$(cd "${WORKTREE_DIR}" && git rev-parse --show-toplevel)"
+WORKTREE_TOPLEVEL="$(cd "${WORKTREE_TOPLEVEL}" && pwd -P)"
+if [ "${WORKTREE_TOPLEVEL}" = "${CANONICAL_PRIMARY}" ]; then
+    printf '  SKIP — worktree toplevel equals primary toplevel; setup did not exercise worktree path\n'
+else
+    printf '  (worktree toplevel: %s)\n' "${WORKTREE_TOPLEVEL}"
+    printf '  (primary  toplevel: %s)\n' "${CANONICAL_PRIMARY}"
+fi
+
+set +e
+PAYLOAD="$(run_hook "${PLUGIN_ROOT}" "${HOME_DIR}" "${WORKTREE_DIR}")"
+RC=$?
+set -e
+
+assert_eq 'hook exit 0 from worktree' '0' "$(printf '%d' "${RC}")"
+assert_valid_json 'JSON valid from worktree' "${PAYLOAD}"
+
+CONTEXT="$(extract_additional_context "${PAYLOAD}")"
+check_not 'no INVOKE marker (canonical state.yml found via primary-repo-root resolution)' \
+    bash -c 'printf "%s" "$1" | grep -q "^INVOKE:"' _ "${CONTEXT}"
+check 'version banner still present' \
+    bash -c 'printf "%s" "$1" | grep -q "board-superpowers v0.2.0 loaded."' _ "${CONTEXT}"
+
+# Cleanup the worktree before rm -rf so git worktree's metadata is
+# consistent (otherwise rm leaves dangling pointers in primary's
+# .git/worktrees/, which is harmless but noisy in logs).
+(cd "${PRIMARY_REPO}" && git worktree remove -f "${WORKTREE_DIR}" >/dev/null 2>&1 || true)
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
+# Scenario 12: REASON line conforms to the spec whitelist
+#   plain ASCII, punctuation only `. , ; : - ( )` — no `~`, no `/`,
+#   no markup.
+# ---------------------------------------------------------------------------
+printf 'Scenario 12: REASON whitelist conformance\n'
+
+# Helper closure: run a fresh hermetic hook with given manifest /
+# state presence, capture the REASON line, return it on stdout.
+capture_reason_line() {
+    local manifest_present="$1"; local state_present="$2"
+    local tmp; tmp="$(mktemp -d)"
+    local home_dir="${tmp}/home"
+    local plugin_root="${tmp}/plugin"
+    local repo_dir="${tmp}/repo"
+    mkdir -p "${home_dir}/.board-superpowers"
+    make_plugin_root "${plugin_root}" "0.2.0"
+    install_clean_check_deps "${plugin_root}"
+    make_repo "${repo_dir}"
+
+    if [ "${manifest_present}" = "yes" ]; then
+        cat > "${home_dir}/.board-superpowers/manifest.yml" <<EOF
+schema_version: 1
+last_seen_version: "0.2.0"
+EOF
+    fi
+    if [ "${state_present}" = "yes" ]; then
+        local norm_repo norm
+        norm_repo="$(cd "${repo_dir}" && git rev-parse --show-toplevel)"
+        norm_repo="$(cd "${norm_repo}" && pwd -P)"
+        norm="$(normalize_for_test "${norm_repo}")"
+        mkdir -p "${home_dir}/.board-superpowers/repos/${norm}"
+        printf 'schema_version: 1\n' > "${home_dir}/.board-superpowers/repos/${norm}/state.yml"
+    fi
+
+    local payload context reason
+    payload="$(run_hook "${plugin_root}" "${home_dir}" "${repo_dir}")"
+    context="$(extract_additional_context "${payload}")"
+    reason="$(printf '%s\n' "${context}" | grep -E '^REASON:' | head -n 1 || true)"
+    rm -rf "${tmp}"
+    printf '%s' "${reason}"
+}
+
+assert_reason_whitelist() {
+    local label="$1"; local reason="$2"
+    # Strip the "REASON: " prefix; check that the value contains only
+    # whitelisted chars (a-zA-Z0-9 + space + . , ; : - ( )).
+    local value="${reason#REASON: }"
+    if [ -z "${value}" ] || [ "${value}" = "${reason}" ]; then
+        printf '  FAIL — %s (no REASON line captured: %q)\n' "${label}" "${reason}" >&2
+        FAIL=$((FAIL + 1))
+        return
+    fi
+    if printf '%s' "${value}" | LC_ALL=C grep -qE '[^a-zA-Z0-9 .,;:()-]'; then
+        printf '  FAIL — %s (out-of-whitelist char in: %q)\n' "${label}" "${value}" >&2
+        FAIL=$((FAIL + 1))
+        return
+    fi
+    if printf '%s' "${value}" | grep -qE '~|/|<|>'; then
+        printf '  FAIL — %s (forbidden char in: %q)\n' "${label}" "${value}" >&2
+        FAIL=$((FAIL + 1))
+        return
+    fi
+    if [ "${#value}" -gt 120 ]; then
+        printf '  FAIL — %s (length %d > 120: %q)\n' "${label}" "${#value}" "${value}" >&2
+        FAIL=$((FAIL + 1))
+        return
+    fi
+    printf '  PASS — %s\n' "${label}"
+    PASS=$((PASS + 1))
+}
+
+# Manifest absent (state also absent → "both absent" path).
+REASON_BOTH="$(capture_reason_line no no)"
+printf '  captured REASON (manifest=absent, state=absent): %s\n' "${REASON_BOTH}"
+assert_reason_whitelist 'both-absent REASON in whitelist' "${REASON_BOTH}"
+check 'both-absent REASON mentions both' \
+    bash -c 'printf "%s" "$1" | grep -qE "both manifest and per-repo state files"' _ "${REASON_BOTH}"
+
+# Manifest absent (state present is impossible without manifest in
+# practice, but the hook still classifies; we only test the OR-path
+# where manifest absent dominates).
+
+# Manifest present, state.yml absent — per-repo path.
+REASON_STATE="$(capture_reason_line yes no)"
+printf '  captured REASON (manifest=present, state=absent): %s\n' "${REASON_STATE}"
+assert_reason_whitelist 'state-absent REASON in whitelist' "${REASON_STATE}"
+check 'state-absent REASON mentions per-repo' \
+    bash -c 'printf "%s" "$1" | grep -qE "per-repo bootstrap"' _ "${REASON_STATE}"
+
+# Manifest absent, state present — manifest-absent path (state
+# presence is moot when manifest missing; the hook routes on manifest
+# first per spec ordering).
+# The capture helper as constructed leaves state absent when
+# manifest=no implies host-not-bootstrapped, so we recreate manually:
+TMP="$(mktemp -d)"
+HOME_DIR="${TMP}/home"
+PLUGIN_ROOT="${TMP}/plugin"
+REPO_DIR="${TMP}/repo"
+mkdir -p "${HOME_DIR}"
+make_plugin_root "${PLUGIN_ROOT}" "0.2.0"
+install_clean_check_deps "${PLUGIN_ROOT}"
+make_repo "${REPO_DIR}"
+NORM_REPO_DIR="$(cd "${REPO_DIR}" && git rev-parse --show-toplevel)"
+NORM_REPO_DIR="$(cd "${NORM_REPO_DIR}" && pwd -P)"
+NORM="$(normalize_for_test "${NORM_REPO_DIR}")"
+mkdir -p "${HOME_DIR}/.board-superpowers/repos/${NORM}"
+printf 'schema_version: 1\n' > "${HOME_DIR}/.board-superpowers/repos/${NORM}/state.yml"
+
+set +e
+PAYLOAD="$(run_hook "${PLUGIN_ROOT}" "${HOME_DIR}" "${REPO_DIR}")"
+set -e
+CONTEXT="$(extract_additional_context "${PAYLOAD}")"
+REASON_MANIFEST="$(printf '%s\n' "${CONTEXT}" | grep -E '^REASON:' | head -n 1 || true)"
+printf '  captured REASON (manifest=absent, state=present): %s\n' "${REASON_MANIFEST}"
+assert_reason_whitelist 'manifest-absent REASON in whitelist' "${REASON_MANIFEST}"
+check 'manifest-absent REASON mentions host bootstrap' \
+    bash -c 'printf "%s" "$1" | grep -qE "host bootstrap pending"' _ "${REASON_MANIFEST}"
+check 'manifest-absent REASON does NOT contain "~"' \
+    bash -c '! printf "%s" "$1" | grep -q "~"' _ "${REASON_MANIFEST}"
+check 'manifest-absent REASON does NOT contain "/"' \
+    bash -c '! printf "%s" "$1" | grep -q "/"' _ "${REASON_MANIFEST}"
 rm -rf "${TMP}"
 
 # ---------------------------------------------------------------------------
