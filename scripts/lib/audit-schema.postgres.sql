@@ -19,10 +19,13 @@ CREATE INDEX IF NOT EXISTS audit_session_idx           ON audit_log(session_id);
 CREATE INDEX IF NOT EXISTS audit_action_id_idx         ON audit_log(action_id);
 CREATE INDEX IF NOT EXISTS audit_approval_stage_idx    ON audit_log(approval_stage);
 
+-- Singleton table: only ever has one row, identified by id=1.
+-- The id PK + CHECK pin lets ON CONFLICT actually no-op on re-init.
 CREATE TABLE IF NOT EXISTS audit_schema_meta (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
     version     INTEGER NOT NULL,
     migrated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT INTO audit_schema_meta (version) VALUES (1)
-    ON CONFLICT DO NOTHING;
+INSERT INTO audit_schema_meta (id, version) VALUES (1, 1)
+    ON CONFLICT (id) DO NOTHING;

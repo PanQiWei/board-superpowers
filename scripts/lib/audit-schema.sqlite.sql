@@ -19,9 +19,12 @@ CREATE INDEX IF NOT EXISTS audit_session_idx           ON audit_log(session_id);
 CREATE INDEX IF NOT EXISTS audit_action_id_idx         ON audit_log(action_id);
 CREATE INDEX IF NOT EXISTS audit_approval_stage_idx    ON audit_log(approval_stage);
 
+-- Singleton table: only ever has one row, identified by id=1.
+-- The id PK + CHECK pin lets INSERT OR IGNORE actually no-op on re-init.
 CREATE TABLE IF NOT EXISTS audit_schema_meta (
+    id          INTEGER PRIMARY KEY CHECK (id = 1),
     version     INTEGER NOT NULL,
     migrated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
-INSERT OR IGNORE INTO audit_schema_meta (version) VALUES (1);
+INSERT OR IGNORE INTO audit_schema_meta (id, version) VALUES (1, 1);
