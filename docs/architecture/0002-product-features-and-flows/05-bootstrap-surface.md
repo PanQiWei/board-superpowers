@@ -118,17 +118,21 @@ YAML format chosen for `manifest.yml` and `state.yml` to match
 the existing `config.yml` (see TBD-Notes below for the YAML-vs-
 TOML rationale).
 
-**Initial v1 manifest / state shape** (deliberately minimal per
+**Initial manifest / state shape** (deliberately minimal per
 YAGNI / Stripe-style API-evolution discipline — fields not
 needed today are added via migration when needed; users seeing
 a placeholder field will ask "what's this for?" and that drag
 is worse than a future single-line migration):
 
 ```yaml
-# ~/.board-superpowers/manifest.yml
-schema_version: 1
+# ~/.board-superpowers/manifest.yml — schema_version: 2 (current,
+# shipped in v0.3.0 / Card #34). v1 manifests get an inline mini-
+# migration on bootstrap-host re-run until migrating-repo-version
+# skill ships.
+schema_version: 2
 host_bootstrapped_at: "2026-04-26T10:30:00Z"
-last_seen_version: "0.1.0"
+last_seen_version: "0.3.0"
+uv_version: "0.5.7"
 ```
 
 ```yaml
@@ -375,7 +379,11 @@ needs its config.
         `pyproject.toml` + `uv.lock` to `<repo>/.board-superpowers/`;
         run `uv sync` to create `<repo>/.board-superpowers/.venv/`.
         On failure, roll back step-6-created files only; preserve
-        credentials.yml.
+        credentials.yml. A pre-existing functional `.venv/`
+        (detected via `<repo>/.board-superpowers/.venv/bin/python3`)
+        is preserved on rollback; a non-functional `.venv/`
+        directory may be replaced by the `uv sync` retry path on
+        re-run.
      7. **audit DDL dispatch** — when `audit_db_url` is set, invoke
         `scripts/audit-init.sh` to apply schema. DDL failure does
         NOT abort bootstrap; architect can re-run after fixing DB

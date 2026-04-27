@@ -109,11 +109,11 @@ means for board-superpowers" #3 for the full rationale.
 ## Skill catalog
 
 > Per-skill `layer`, `type`, `mode`, `bounded-context` live in
-> `<skill-dir>/.skill-meta.yaml`. The catalog below uses a
-> `(v1-minimum)` / `(v1-complete, shipped v0.3.0)` /
-> `(deferred to v1-complete)` tag on each skill name to mark
-> v1 status. Tier 2 frontmatter recommendations are listed for
-> all shipped skills.
+> `<skill-dir>/.skill-meta.yaml`. The catalog below tags each
+> skill name as `(shipped vX)` once it has landed, or
+> `(deferred to v1-complete)` while still on the roadmap.
+> Tier 2 frontmatter recommendations are listed for every
+> shipped skill.
 
 ### Entry layer (1 skill)
 
@@ -135,7 +135,7 @@ means for board-superpowers" #3 for the full rationale.
 - **Tier 2 frontmatter**: `when_to_use` (extended trigger
   vocabulary outside the primary `description`).
 
-### Molecular layer (5 skills: 3 v1-minimum + 2 deferred)
+### Molecular layer (5 skills: 3 shipped + 2 deferred)
 
 #### `managing-board` (v1-minimum)
 
@@ -196,9 +196,10 @@ means for board-superpowers" #3 for the full rationale.
 #### `bootstrapping-repo` (v1-minimum, shipped v0.2.0)
 
 - **Role**: F-B1 (host bootstrap) + F-B2 (per-repo bootstrap with
-  5 sub-capabilities — standard labels, Status validation,
+  7 sub-capabilities — standard labels, Status validation,
   `config.yml` write, `.gitignore` entry, BYO-RDBMS credential
-  setup) + step 4 routing-block injection into `AGENTS.md` +
+  setup, per-repo venv via `uv`, audit DDL dispatch) + step 4
+  routing-block injection into `AGENTS.md` +
   `CLAUDE.md` + initial host-local `state.yml` write. Drives
   `scripts/bootstrap-host.sh` and `scripts/bootstrap-project.sh`
   end-to-end and orchestrates the architect's first-session UX.
@@ -239,7 +240,7 @@ means for board-superpowers" #3 for the full rationale.
   `plugin.json:version` (fast path), OR architect says
   "what's new in this version" (fallback path).
 
-### Atomic layer (4 skills: 2 v1-minimum + 2 shipped v0.3.0)
+### Atomic layer (4 skills, all shipped)
 
 #### `board-canon` (v1-minimum)
 

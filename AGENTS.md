@@ -6,11 +6,11 @@ user-facing overview.
 
 @SKILLS.md
 
-## Project status — v1-minimum self-hosting active
+## Project status — v1 catalog 8/10 shipped
 
-> **The plugin is now loadable at runtime.** `hooks/`,
+> **The plugin is loadable at runtime.** `hooks/`,
 > `scripts/`, and `skills/` directories exist at the repo root.
-> `SessionStart` fires. The 6 v1-minimum skills auto-match.
+> `SessionStart` fires. The 8 v1-catalog skills auto-match.
 > The plugin dogfoods itself for any new skill / script / hook.
 
 **v1 catalog = 8 of 10 skills shipped** (10 once `decomposing-into-milestones` + `migrating-repo-version` ship), per [`SKILLS.md`](./SKILLS.md):
@@ -25,17 +25,17 @@ user-facing overview.
 **Remaining degraded behavior**:
 
 - **No `migrating-repo-version` skill yet** — current plugin
-  version is `v0.2.0`; the schema-aware migration runner lands
-  starting from the v0.2.x → v0.3.x transition. The hook never
-  injects `INVOKE: migrating-repo-version` in v0.2.0.
+  version is `v0.3.0`; the schema-aware migration runner lands
+  starting from the v0.3.x → v0.4.x transition. The hook never
+  injects `INVOKE: migrating-repo-version` in v0.3.0.
 
 The single source of truth for v1 design remains
 [`docs/architecture/`](./docs/architecture/) — read
 `0001-positioning.md` first; the
 [`docs/architecture/README.md`](./docs/architecture/README.md)
-index lists everything else in canonical order. v1-minimum
-implementation is the **current state**, not the **target
-state** — v1-complete is the target.
+index lists everything else in canonical order. The 8 shipped
+skills are the operating substrate; the 2 deferred skills are
+roadmap items, not gates on day-to-day work.
 
 ## Required reading
 
@@ -111,10 +111,12 @@ it does four things:
    ([P4b](./docs/architecture/0001-positioning.md), ADR-0004);
    we never reimplement upstream disciplines.
 4. **Records** every mutating action to a BYO RDBMS audit log
-   (Postgres / MySQL only —
-   [ADR-0006 §5](./docs/architecture/adr/0006-producer-autonomy-boundary.md)).
-   When the DB is unavailable, every A-class action degrades to
-   R-class (architect prompt required).
+   (Postgres / MySQL / SQLite via the 6-scheme allowlist —
+   [ADR-0006 §5](./docs/architecture/adr/0006-producer-autonomy-boundary.md)
+   + [ADR-0009](./docs/architecture/adr/0009-allow-sqlite-as-byo-audit-db.md)).
+   When the DB is unavailable, audit-log-write.sh degrades to
+   a local jsonl trace and the entry's `mode` field records the
+   degradation cause (see spec 06 § "jsonl fallback mode-field").
 
 ### Skills system — the v1 catalog (10 skills, 3 layers)
 
@@ -567,7 +569,7 @@ ls docs/architecture/adr/                      # what's decided
 <!-- board-superpowers:routing -->
 ## board-superpowers session routing
 
-This project uses the `board-superpowers` plugin (v0.2.0).
+This project uses the `board-superpowers` plugin (v0.3.0).
 Any Claude Code session in this project plays one of two roles:
 
 - **Board Consumer** — if the first message contains `[board-card:#N]`,
