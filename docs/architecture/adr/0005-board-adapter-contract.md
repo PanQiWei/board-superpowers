@@ -1,6 +1,6 @@
 # ADR 0005: v1 BoardAdapter contract surface
 
-**Status:** accepted
+**Status:** accepted; § Consequences amended by ADR-0010
 **Date:** 2026-04-25
 **Deciders:** PanQiWei (maintainer)
 
@@ -318,21 +318,26 @@ supersession, not a silent contract amendment.
   not in shape. Refactoring to a single
   `lib/adapters/github.sh` (or equivalent) implementing this
   contract is a separate PR. Sized M-L.
-  - **Hard deadline:** wrapper port lands within 60 days of this
-    ADR's acceptance (i.e., by **2026-06-24**), or P2a is
-    downgraded from "present commitment" to "aspirational" via a
-    0001-positioning.md amendment.
+  - **Hard deadline:** wrapper port lands **before v1 GA**, or
+    P2a is downgraded from "present commitment" to
+    "aspirational" via a 0001-positioning.md amendment.
+    *Anchor re-shaped from a 60-day calendar offset to a
+    v1-GA-relative event by ADR-0010.*
   - Bootstrap-CLI side note: when the wrapper port lands, also
     resolve whether `bootstrap-project.sh`'s `OWNER/NUMBER` arg
     becomes `--adapter github --project-ref OWNER/NUMBER`
     (generic) or stays adapter-specific (each adapter ships its
     own bootstrap script).
-- **6-month falsification check.** If no second adapter has been
-  seriously attempted by **2026-10-25**, file a retro card
-  reconsidering whether P2a + P4a are honest commitments or
-  aspiration. Mechanism: a `chore` Backlog card titled `P2a/P4a
-  falsification check (2026-10-25)` is filed in the same Backlog
-  the day this ADR's PR merges.
+- **Falsification check (v1 GA + 1 week, AI cadence).** If no
+  second adapter has been seriously attempted by **v1 GA +
+  1 week**, file a retro card reconsidering whether P2a + P4a
+  are honest commitments or aspiration. Mechanism: a `chore`
+  Backlog card titled `P2a/P4a falsification check (v1 GA +
+  1w)` is filed in the same Backlog the day this ADR's PR
+  merges; the title is **edited to** `P2a/P4a falsification
+  check (YYYY-MM-DD)` once v1 GA is declared and the absolute
+  date becomes computable. *Anchor re-shaped from a 6-month
+  calendar offset to a v1-GA-relative event by ADR-0010.*
 
 **What this rules out:**
 
@@ -381,10 +386,12 @@ implementation. Closing it now is the whole point of this ADR.
   call sites use it yet" is the price of doing this in the
   right order: spec → port → second-adapter, instead of
   spec-and-port-and-second-adapter-all-at-once.
-- The 60-day wrapper-port deadline and the 6-month
-  P2a/P4a-falsification check are both real commitments. If they
-  slip, 0001-positioning.md P2a should be amended honestly rather
-  than quietly carried.
+- The wrapper-port deadline ("before v1 GA") and the
+  P2a/P4a-falsification check ("v1 GA + 1 week (AI cadence)")
+  are both real commitments. If they slip,
+  0001-positioning.md P2a should be amended honestly rather
+  than quietly carried. *Original anchor sizes (60-day /
+  6-month calendar offsets) re-shaped by ADR-0010.*
 - Future ADR supersessions of this contract should record the
   `before` and `after` contract surface so decision history
   stays traceable.

@@ -76,13 +76,14 @@ second-adapter-implementable detail. The reference implementation
 is currently spread across the existing `gh`-bound scripts
 (`claim-card.sh`, `create-card.sh`, `transition-card.sh`); the
 GitHubProjectAdapter wrapper port that consolidates them behind
-the contract is a follow-up PR with a 60-day deadline (see
-ADR-0005 Consequences). So P2a is **"contract committed,
-implementation port queued."**
+the contract is a follow-up PR scheduled to land before v1 GA
+(see ADR-0005 Consequences as amended by ADR-0010). So P2a is
+**"contract committed, implementation port queued."**
 
-*Falsification:* if 6 months pass (by 2026-10-25) and no second
-adapter has been seriously attempted (by us or a contributor),
-P2a was aspiration dressed as commitment.
+*Falsification:* if v1 GA + 1 week (AI cadence) passes and no
+second adapter has been seriously attempted (by us or a
+contributor), P2a was aspiration dressed as commitment. (Anchor
+re-shaped from a 6-month calendar offset by ADR-0010.)
 
 ### P2b — Methodology embedded as code
 
