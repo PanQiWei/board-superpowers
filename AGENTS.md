@@ -10,19 +10,18 @@ user-facing overview.
 
 > **The plugin is now loadable at runtime.** `hooks/`,
 > `scripts/`, and `skills/` directories exist at the repo root.
-> `SessionStart` fires. The 5 v1-minimum skills auto-match.
+> `SessionStart` fires. The 6 v1-minimum skills auto-match.
 > The plugin dogfoods itself for any new skill / script / hook.
 
-**v1-minimum = 5 of 10 skills shipped** (per
+**v1-minimum = 6 of 10 skills shipped** (per
 [`SKILLS.md`](./SKILLS.md) § "v1 minimum vs v1 complete"):
 
 - **Shipped**: `using-board-superpowers` (entry),
-  `managing-board` + `consuming-card` (molecular),
-  `board-canon` + `enforcing-pr-contract` (atomic).
+  `managing-board` + `consuming-card` + `bootstrapping-repo`
+  (molecular), `board-canon` + `enforcing-pr-contract` (atomic).
 - **Deferred to v1-complete**: `decomposing-into-milestones`,
-  `bootstrapping-repo`, `migrating-repo-version`,
-  `classifying-actions`, `auditing-actions`. Reasons live in
-  the SKILLS.md table.
+  `migrating-repo-version`, `classifying-actions`,
+  `auditing-actions`. Reasons live in the SKILLS.md table.
 
 **v1-minimum degraded behaviors** (designed-in, removed when
 deferred atomics ship):
@@ -34,14 +33,10 @@ deferred atomics ship):
 - All audit entries write to a **local jsonl trace file** at
   `~/.board-superpowers/repos/<normalized>/audit-local.jsonl`. The
   full BYO RDBMS schema from `auditing-actions` is deferred.
-- **No `bootstrapping-repo` skill yet** — the plugin assumes
-  the repo's GitHub Project + standard labels are already set
-  up manually. The hook never injects `INVOKE: bootstrapping-repo`
-  in v1-minimum.
 - **No `migrating-repo-version` skill yet** — current plugin
-  version is `v0.1.1`; nothing to migrate from. The
-  hook never injects `INVOKE: migrating-repo-version` in
-  v1-minimum.
+  version is `v0.2.0`; the schema-aware migration runner lands
+  starting from the v0.2.x → v0.3.x transition. The hook never
+  injects `INVOKE: migrating-repo-version` in v0.2.0.
 
 The single source of truth for v1 design remains
 [`docs/architecture/`](./docs/architecture/) — read
@@ -526,7 +521,7 @@ The v1-minimum plugin is loadable. The operational checklist:
 - `scripts/verify-skill-frontmatter.sh` — Tier 1 + Tier 2 +
   no-Tier-3 compliance per SKILL.md.
 - `shellcheck -x scripts/**/*.sh hooks/*.sh` — full pass.
-- Manual smoke: open a fresh CC session, type each of the 5
+- Manual smoke: open a fresh CC session, type each of the 6
   v1-minimum skills' trigger phrases, verify auto-trigger.
 
 ### Release flow
@@ -555,7 +550,7 @@ ls docs/architecture/adr/                      # what's decided
 <!-- board-superpowers:routing -->
 ## board-superpowers session routing
 
-This project uses the `board-superpowers` plugin (v0.1.1).
+This project uses the `board-superpowers` plugin (v0.2.0).
 Any Claude Code session in this project plays one of two roles:
 
 - **Board Consumer** — if the first message contains `[board-card:#N]`,

@@ -221,8 +221,9 @@ check_routing_block() {
     # Asymmetric rule (per 05-bootstrap-surface.md):
     #   - no AGENTS.md AND no CLAUDE.md → skipped (silent, ROUTING_STATE=yes)
     #   - either file present without the heading → ROUTING_STATE=no
-    # Detection is heading-presence only. Card 2 will tighten this to a
-    # SHA-hash protocol; for v0.1.1 a literal heading match suffices.
+    # Detection is heading-presence only. The SHA-hash protocol lives
+    # in F-B2 step 4 (state.yml:routing_blocks[]); for v0.2.0 the dep
+    # check uses a literal heading match as a fast first-line signal.
     local agents="${toplevel}/AGENTS.md"
     local claude="${toplevel}/CLAUDE.md"
     local heading='## board-superpowers session routing'
@@ -310,5 +311,5 @@ if [ "${RUNTIME_FAILURES}" -gt 0 ]; then
     exit 3
 fi
 
-printf '\nAll dependencies satisfied (board-superpowers v0.1.1).\n'
+printf '\nAll dependencies satisfied (board-superpowers v0.2.0).\n'
 exit 0
