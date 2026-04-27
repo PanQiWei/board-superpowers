@@ -78,7 +78,8 @@ if [ -z "${VENV_PYTHON}" ]; then
         *) MODE="degraded-venv-unknown"; bsp_warn "venv unavailable (rc=${VENV_RC}); degrading to jsonl" ;;
     esac
     bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
-        "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD} mode=${MODE}"
+        "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
+        "${MODE}"
     exit 0
 fi
 
@@ -87,15 +88,28 @@ AUDIT_DB_URL="$(bsp_resolve_audit_db_url)"
 if [ -z "${AUDIT_DB_URL}" ]; then
     bsp_warn "audit_db_url unset; degrading to jsonl mode=no-db"
     bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
-        "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD} mode=no-db"
+        "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
+        "no-db"
     exit 0
 fi
+
+# Resolve project identifier as `OWNER/NUMBER` per the BoardAdapter
+# contract (spec 06 § Core schema). Read from <repo>/.board-superpowers/
+# config.yml; fall back to repo basename only when the config.yml is
+# missing or has no project: field (e.g., bootstrap not yet run on a
+# fresh repo, or non-BoardAdapter context).
+# `|| true` suppresses pipefail when grep finds no match (no config.yml,
+# or no project: line).
+PROJECT_FROM_CONFIG="$( { grep -E '^project[[:space:]]*:' "${REPO_ROOT}/.board-superpowers/config.yml" 2>/dev/null \
+        | head -n1 \
+        | sed -E 's/^project[[:space:]]*:[[:space:]]*//; s/^"//; s/"$//'; } || true)"
+PROJECT_NAME="${PROJECT_FROM_CONFIG:-$(basename "${REPO_ROOT}")}"
 
 # --- INSERT via venv-python -----------------------------------------------
 INSERT_RC=0
 BSP_REPO_ROOT="${REPO_ROOT}" \
 BSP_AUDIT_DB_URL="${AUDIT_DB_URL}" \
-BSP_PROJECT="$(basename "${REPO_ROOT}")" \
+BSP_PROJECT="${PROJECT_NAME}" \
 BSP_SESSION_ID="${CLAUDE_SESSION_ID:-${PWD//\//-}}" \
 BSP_ACTOR_ROLE="$( [ "${SKILL}" = "consuming-card" ] && echo consumer || echo producer )" \
 BSP_ACTION_ID="${ACTION_ID}" \
@@ -180,7 +194,8 @@ PY
 if [ ${INSERT_RC} -ne 0 ]; then
     bsp_warn "DB insert failed (rc=${INSERT_RC}); degrading to jsonl mode=degraded-db-unavailable"
     bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
-        "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD} mode=degraded-db-unavailable"
+        "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
+        "degraded-db-unavailable"
     exit 0
 fi
 

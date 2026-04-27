@@ -321,11 +321,17 @@ sys.exit(1)
 #   On no match: no migration; just create the new path and append.
 
 bsp_audit_local_write() {
-    local repo_root="${1:?usage: bsp_audit_local_write <repo_root> <action_id> <class> <skill> <summary>}"
+    local repo_root="${1:?usage: bsp_audit_local_write <repo_root> <action_id> <class> <skill> <summary> [<mode>]}"
     local action_id="${2:?}"
     local decision="${3:?}"
     local skill="${4:?}"
     local summary="${5:?}"
+    # Optional mode field (6th arg). Defaults to legacy 'v1-minimum-degraded'
+    # for back-compat with callers (e.g., bootstrap scripts) that haven't
+    # been updated to pass an explicit mode. New callers (audit-log-write.sh)
+    # pass one of the v0.3.0 enum values: no-db / degraded-db-unavailable /
+    # degraded-uv-missing / degraded-venv-create-failed.
+    local mode="${6:-v1-minimum-degraded}"
 
     # Re-derive PATH defensively. Caller may have a stripped PATH; we need
     # dirname / mkdir / python3 / git regardless. Append caller PATH so
@@ -463,11 +469,11 @@ entry = {
     'decision_class': sys.argv[3],
     'skill': sys.argv[4],
     'summary': sys.argv[5],
-    'mode': 'v1-minimum-degraded',
+    'mode': sys.argv[6],
 }
-with open(sys.argv[6], 'a') as f:
+with open(sys.argv[7], 'a') as f:
     f.write(json.dumps(entry) + '\n')
-" "${repo_root}" "${action_id}" "${decision}" "${skill}" "${summary}" "${path}"
+" "${repo_root}" "${action_id}" "${decision}" "${skill}" "${summary}" "${mode}" "${path}"
 
     bsp_log "audit-local: ${decision}-class action ${action_id} (${skill}) → ${path}"
 }
