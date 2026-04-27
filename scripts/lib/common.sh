@@ -52,6 +52,14 @@ bsp_plugin_root() {
 #
 # Input MUST be absolute (start with "/"); relative input is a usage
 # error that exits non-zero.
+#
+# DUPLICATION NOTICE: this function is duplicated INLINE inside
+# hooks/session-start.sh as `normalize_repo_path` because the hook
+# is contractually self-contained (per
+# docs/architecture/0005-contracts/02-hook-contracts.md
+# § "Self-containment" line 297-298). DO NOT deduplicate by sourcing
+# common.sh from the hook — a broken lib must never block session
+# start. When the rule changes here it MUST also change in the hook.
 
 bsp_normalize_repo_path() {
     local p="${1:?usage: bsp_normalize_repo_path <abs-repo-root>}"
