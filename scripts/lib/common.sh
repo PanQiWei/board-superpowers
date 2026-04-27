@@ -1108,3 +1108,84 @@ bsp_resolve_audit_db_url() {
     fi
     return 0
 }
+
+# --- autonomy class resolution ------------------------------------------
+#
+# Resolve the effective A/R/N class for an action_id by layering:
+#   1. ADR-0006 §3 matrix defaults (hardcoded below)
+#   2. ~/.board-superpowers/overrides.yml autonomy_overrides[]   (user layer)
+#   3. <repo>/.board-superpowers/config.local.yml autonomy_overrides[]  (project layer; wins)
+#
+# Args:   <action_id> [<repo_root>]
+# Stdout: A | R | N
+# Returns: 0 on success, non-zero on usage error
+#
+# Implementation: invokes venv-python with PyYAML (per design doc § 6.1).
+# Falls back to ADR-0006 default when venv unavailable.
+
+bsp_resolve_autonomy_class() {
+    local action_id="${1:?usage: bsp_resolve_autonomy_class <action_id> [<repo_root>]}"
+    local repo_root="${2:-${PWD}}"
+
+    # ADR-0006 §3 matrix defaults (Producer rows 1-14 + Consumer 100-111).
+    # 'A' default rows: 1, 2, 5, 9, 11, 13, 14, 100, 102, 104, 105, 106, 107, 108, 109, 110, 111
+    # 'R' default rows: 3, 4, 6, 7, 8, 10, 12, 101, 103
+    local default_class
+    case "${action_id}" in
+        1|2|5|9|11|13|14|100|102|104|105|106|107|108|109|110|111) default_class="A" ;;
+        3|4|6|7|8|10|12|101|103) default_class="R" ;;
+        *) printf '%s\n' "A"; return 0 ;;  # unknown rows fall through to A per ADR-0006 triage rule step 5
+    esac
+
+    # Try venv-python for yaml-aware override merge. Falls back to default.
+    local venv_python
+    if venv_python="$(bsp_ensure_venv "${repo_root}" 2>/dev/null)"; then
+        local override_class
+        override_class="$(BSP_REPO_ROOT="${repo_root}" \
+                          BSP_ACTION_ID="${action_id}" \
+                          "${venv_python}" - <<'PY'
+import os, sys
+try:
+    import yaml
+except ImportError:
+    sys.exit(0)  # PyYAML not in venv — silent fallback to default
+
+repo_root = os.environ['BSP_REPO_ROOT']
+action_id = int(os.environ['BSP_ACTION_ID'])
+home = os.path.expanduser('~')
+
+def load_overrides(path):
+    if not os.path.isfile(path):
+        return []
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+        return data.get('autonomy_overrides', []) or []
+    except Exception:
+        return []
+
+user_overrides = load_overrides(os.path.join(home, '.board-superpowers', 'overrides.yml'))
+project_overrides = load_overrides(os.path.join(repo_root, '.board-superpowers', 'config.local.yml'))
+
+# Project layer wins on conflict per spec 03 § Merge semantics.
+chosen = None
+for entry in user_overrides:
+    if entry.get('action_id') == action_id:
+        chosen = entry.get('class')
+for entry in project_overrides:
+    if entry.get('action_id') == action_id:
+        chosen = entry.get('class')
+
+if chosen in ('A', 'R', 'N'):
+    print(chosen)
+PY
+)"
+        if [ -n "${override_class}" ]; then
+            printf '%s\n' "${override_class}"
+            return 0
+        fi
+    fi
+
+    printf '%s\n' "${default_class}"
+    return 0
+}
