@@ -238,10 +238,13 @@ Owned by the **RepoConfig aggregate** (0003 § 3.3.7) plus the
 **ConsumerLogical aggregate** at the claim-marker layer (0003
 § 3.3.3). Lives inside the repo; mode inherits the repo's umask.
 The split between tracked and untracked is load-bearing:
-`config.yml` is tracked (team-shared intent), and the per-session
-`claims/` subdirectory is gitignored locally — but individual claim
-markers are force-added onto their own claim branch (per ADR-0002
-+ I-13).
+`config.yml` holds the **team-shared** subset of project config
+and is tracked; `config.local.yml` holds the **per-user**
+subset (host-/architect-specific overrides like `wip_limit`)
+and is gitignored via the project-wide `*.local.*` pattern; the
+per-session `claims/` subdirectory is gitignored locally — but
+individual claim markers are force-added onto their own claim
+branch (per ADR-0002 + I-13).
 
 Note: per-repo plugin state (`state.yml`) does **not** live here.
 It lives at `~/.board-superpowers/repos/<normalized-repo-path>/state.yml`
@@ -252,7 +255,8 @@ state.
 | Path | Tracked in git? | Owner | Purpose |
 |------|-----------------|-------|---------|
 | `<repo>/.board-superpowers/` | yes (directory) | RepoConfig | Per-repo plugin config root |
-| `<repo>/.board-superpowers/config.yml` | **yes** | RepoConfig | User-editable project config (per [`03-config-schemas.md`](./03-config-schemas.md)) |
+| `<repo>/.board-superpowers/config.yml` | **yes** | RepoConfig | User-editable team-shared project config (per [`03-config-schemas.md`](./03-config-schemas.md) § "config.yml") |
+| `<repo>/.board-superpowers/config.local.yml` | **no** (gitignored via `*.local.*` pattern) | RepoConfig (per-user layer) | Per-user override of team-shared config — `wip_limit`, `autonomy_overrides`, etc. (per [`03-config-schemas.md`](./03-config-schemas.md) § "config.local.yml") |
 | `<repo>/.board-superpowers/claims/` | **no** (gitignored locally) | ConsumerLogical | Per-session claim markers; force-committed to claim branch only |
 | `<repo>/.board-superpowers/claims/<N>.claim` | gitignored locally; **force-added on the claim branch** | ConsumerLogical | One marker per claimed card; YAML payload per [`05-github-artifact-schemas.md`](./05-github-artifact-schemas.md) |
 
@@ -277,7 +281,22 @@ Manager during triage). Per
 
 `config.yml` is tracked because a collaborator joining the repo
 MUST see it in their clone — without `config.yml` the routing
-block has no project to point at. Per I-13 + 0003 § 3.3.7.
+block has no project to point at. It carries only the
+**team-shared** subset of project config (today: `project`;
+future: `base_branch`, `default_execution_skill`). Per I-13 +
+0003 § 3.3.7.
+
+`config.local.yml` is **not** tracked because it carries the
+**per-user** subset (today: `wip_limit`; future:
+`autonomy_overrides`). These fields are personal-capacity or
+personal-risk-tolerance choices, not team-coordination decisions
+— Alice's parallel-session capacity has no contractual claim on
+Bob's. Tracking `wip_limit` would silently force one architect's
+preference onto every collaborator's clone. The `*.local.*`
+gitignore pattern is project-wide, generalizing the convention
+beyond just `config.local.yml`: any future per-user file in any
+directory that follows `<name>.local.<ext>` naming is automatically
+gitignored. Per I-13 + 0003 § 3.3.7 (per-user layer).
 
 `state.yml` is **not** here at all — it lives at
 `~/.board-superpowers/repos/<normalized>/state.yml`, host-local.
@@ -419,23 +438,42 @@ reads them. Format breaks land in `MULTI_AGENT_DEVELOPMENT.md`'s
 during F-B2 setup. The exact form, verbatim from the script:
 
 ```gitignore
+# Per-user local override files — convention: <name>.local.<ext>
+# Any file matching this pattern is gitignored. Use for per-user
+# config / state that shadows team-shared tracked files (e.g.,
+# config.local.yml shadows config.yml's per-user fields).
+*.local.*
+
 # board-superpowers local state (claim markers are per-session)
 .board-superpowers/claims/
 ```
+
+Two distinct entries land:
+
+1. The project-wide `*.local.*` pattern — any file whose name
+   matches `<name>.local.<ext>` is gitignored regardless of
+   directory. This is the canonical per-user override
+   convention (see § "Per-repo layout" Tracked-vs-untracked
+   rationale).
+2. The board-superpowers-specific `.board-superpowers/claims/`
+   rule — claim markers are per-session and must never appear
+   on `main`.
 
 ### Write semantics
 
 | Scenario | Behavior |
 |----------|----------|
-| `.gitignore` does not exist | Created with the block above as its only content |
-| `.gitignore` exists, `entry already present` (exact match `.board-superpowers/claims/`) | Idempotent no-op; logs `✓ already present` |
-| `.gitignore` exists, entry missing | Ensures trailing newline on the existing file, prepends one blank line for visual separation, then appends the comment header + entry |
+| `.gitignore` does not exist | Created with both entries above as its initial content |
+| `.gitignore` exists, both entries already present (exact line match for each) | Idempotent no-op; logs `✓ already present` |
+| `.gitignore` exists, one or both entries missing | Ensures trailing newline on the existing file, prepends one blank line for visual separation, then appends only the missing entries with their respective comment headers |
 
 The "exact match" check uses `grep -Fxq` — a fixed-string,
-whole-line, quiet match. Trailing-slash differences (`.board-superpowers/claims`
-without trailing `/`) are NOT considered duplicates and would result
-in a second appended block. Per the inline implementation in
-`bootstrap-project.sh` lines 211–237.
+whole-line, quiet match. Trailing-slash differences
+(`.board-superpowers/claims` without trailing `/`) are NOT
+considered duplicates and would result in a second appended
+entry. Same logic for `*.local.*` — any whitespace or trailing
+characters break the dedup. Per the inline implementation in
+`bootstrap-project.sh`.
 
 ### Future-extension placeholder
 

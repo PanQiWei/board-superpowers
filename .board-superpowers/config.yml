@@ -1,15 +1,15 @@
 # board-superpowers per-repo config — committed to git, shared by team.
 # Edited by hand (no auto-bootstrap skill in this version).
-# Schema: skills/using-board-superpowers/references/first-time-user-guide.md.
+# Schema: docs/architecture/0005-contracts/03-config-schemas.md.
+#
+# Per-user fields (wip_limit, autonomy_overrides) live in
+# config.local.yml, which is gitignored via the *.local.*
+# pattern in .gitignore. See 03-config-schemas.md § "config.local.yml".
 
 # Project coordinates. Format: <owner>/<number>. The agent splits on '/'
 # when calling scripts/{read-board,claim-card,submit-pr}.sh.
 project: PanQiWei/4
 
-# Per-Consumer WIP cap (hard rejection from claim-card.sh when exceeded).
-wip_cap_per_consumer: 1
-
-# Future fields (not yet consumed by any v1-minimum script):
+# Future team-shared fields (not yet consumed by any v1-minimum script):
 #   base_branch: main
 #   default_execution_skill: superpowers:subagent-driven-development
-#   autonomy_overrides: {}   # mutating-action override map

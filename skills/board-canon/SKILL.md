@@ -125,7 +125,7 @@ WIP_count(consumer) =
 
 Cards in `Blocked` are **excluded** from the count — being blocked is not active work; the Consumer should be picking up something else while waiting.
 
-The default cap is 1 per Consumer. Override per-repo by writing `wip_cap_per_consumer: <N>` in `.board-superpowers/config.yml`. A Consumer attempting to claim a second card while at the cap gets a hard rejection from `claim-card.sh`.
+The default cap is 5 per Consumer (per spec). Each architect overrides per-repo by writing `wip_limit: <N>` in `.board-superpowers/config.local.yml` — this file is **per-user** (gitignored via the project-wide `*.local.*` pattern), so Alice running 5 parallel sessions and Bob running 1 do not impose their preferences on each other. A Consumer attempting to claim a card past their `wip_limit` gets a hard rejection at the agent layer (this skill enforces it before invoking `claim-card.sh`).
 
 `references/wip-counting.md` documents corner cases (suspended cards, abandoned worktrees, post-merge accounting lag, override mechanism).
 

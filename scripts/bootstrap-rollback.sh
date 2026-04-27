@@ -131,18 +131,28 @@ fi
 
 bsp_log "rollback starting for ${REPO_ROOT}"
 
-# --- Step 1 (reverse): rm <repo>/.board-superpowers/config.yml ----------
+# --- Step 1 (reverse): rm <repo>/.board-superpowers/{config,config.local}.yml ----
 
 CONFIG_FILE="${REPO_ROOT}/.board-superpowers/config.yml"
+LOCAL_CONFIG_FILE="${REPO_ROOT}/.board-superpowers/config.local.yml"
+
 if [ -f "${CONFIG_FILE}" ]; then
     rm -f "${CONFIG_FILE}"
     bsp_log "removed ${CONFIG_FILE}"
-    # Best-effort: if .board-superpowers/ is now empty (no claims/, no
-    # other files), remove it. rmdir fails silently when non-empty.
-    rmdir "${REPO_ROOT}/.board-superpowers" 2>/dev/null || true
 else
     bsp_log "config.yml absent — skip"
 fi
+
+if [ -f "${LOCAL_CONFIG_FILE}" ]; then
+    rm -f "${LOCAL_CONFIG_FILE}"
+    bsp_log "removed ${LOCAL_CONFIG_FILE}"
+else
+    bsp_log "config.local.yml absent — skip"
+fi
+
+# Best-effort: if .board-superpowers/ is now empty (no claims/, no
+# other files), remove it. rmdir fails silently when non-empty.
+rmdir "${REPO_ROOT}/.board-superpowers" 2>/dev/null || true
 
 # --- Step 2 (reverse): remove bootstrap entry from <repo>/.gitignore ----
 

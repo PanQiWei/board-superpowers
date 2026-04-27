@@ -13,7 +13,7 @@ Every transition writes one entry to the audit log at `~/.board-superpowers/repo
 
 ## Ready → In Progress
 
-- [ ] Consumer's current WIP_count + 1 ≤ wip_cap_per_consumer
+- [ ] Consumer's current WIP_count + 1 ≤ `wip_limit` (read from `.board-superpowers/config.local.yml`)
 - [ ] No other Consumer has an open `claim/N-...` branch for this card
 - [ ] All hard `depends-on` cards are in Done
 

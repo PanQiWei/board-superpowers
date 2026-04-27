@@ -31,8 +31,14 @@ venv/
 .claude/logs/
 .claude/tmp/
 
-# board-superpowers local state
-.board-superpowers/
+# Per-user local override files — convention: <name>.local.<ext>
+# Any file matching this pattern is gitignored. Use for per-user
+# config / state that shadows team-shared tracked files (e.g.,
+# config.local.yml shadows config.yml's per-user fields).
+*.local.*
+
+# board-superpowers local state (claim markers are per-session)
+.board-superpowers/claims/
 
 # board-superpowers Consumer session plan briefs — scratch input that
 # the Consumer hands to subagent-driven-development. Not a durable

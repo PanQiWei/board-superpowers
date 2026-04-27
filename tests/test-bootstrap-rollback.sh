@@ -526,6 +526,8 @@ stub_gh "${STUBS_DIR}"
 mkdir -p "${REPO_ROOT}/.board-superpowers"
 cat > "${REPO_ROOT}/.board-superpowers/config.yml" <<EOF
 project: "foo/1"
+EOF
+cat > "${REPO_ROOT}/.board-superpowers/config.local.yml" <<EOF
 wip_limit: 5
 EOF
 cat > "${REPO_ROOT}/.gitignore" <<EOF

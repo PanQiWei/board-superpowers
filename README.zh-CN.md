@@ -155,7 +155,10 @@ bash ~/.claude/plugins/board-superpowers/scripts/register-codex-hooks.sh --insta
 3. **在 repo 根目录创建 `.board-superpowers/config.yml` 并提交**：
    ```yaml
    project: <owner>/<number>      # 例如 PanQiWei/4
-   wip_cap_per_consumer: 1
+   ```
+   再创建 `.board-superpowers/config.local.yml`（不提交，per-user）：
+   ```yaml
+   wip_limit: 5                   # 个人并行 capacity；soft cap，默认 5
    ```
 4. **验证**：
    ```bash

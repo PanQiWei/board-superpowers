@@ -337,18 +337,30 @@ with open(sys.argv[1]) as f:
 " "${STUBS_DIR}/labels.json")"
 assert_eq 'cold start: 13 labels created' '13' "${LABEL_COUNT}"
 
-# config.yml: written with project: "foo/1" + wip_limit: 5
+# config.yml: written with project: "foo/1" (team-shared only)
 CONFIG="${REPO_ROOT}/.board-superpowers/config.yml"
 check 'config.yml exists' test -f "${CONFIG}"
 check 'config.yml has project: "foo/1"' \
     grep -Fxq 'project: "foo/1"' "${CONFIG}"
-check 'config.yml has wip_limit: 5' \
-    grep -Fxq 'wip_limit: 5' "${CONFIG}"
+# shellcheck disable=SC2016  # $1 is intentional bash -c positional, not parent expansion
+check 'config.yml does NOT carry per-user wip_limit' \
+    bash -c '! grep -Eq "^wip_limit:" "$1"' _ "${CONFIG}"
 
-# .gitignore: created with the canonical entries
+# config.local.yml: written with wip_limit: 5 (per-user, gitignored)
+LOCAL_CONFIG="${REPO_ROOT}/.board-superpowers/config.local.yml"
+check 'config.local.yml exists' test -f "${LOCAL_CONFIG}"
+check 'config.local.yml has wip_limit: 5' \
+    grep -Fxq 'wip_limit: 5' "${LOCAL_CONFIG}"
+
+# .gitignore: created with the canonical entries (both blocks)
 GITIGNORE="${REPO_ROOT}/.gitignore"
 check '.gitignore exists' test -f "${GITIGNORE}"
-check '.gitignore has comment header' \
+check '.gitignore has *.local.* pattern header' \
+    grep -Fxq '# Per-user local override files — convention: <name>.local.<ext>' \
+        "${GITIGNORE}"
+check '.gitignore has *.local.* entry' \
+    grep -Fxq '*.local.*' "${GITIGNORE}"
+check '.gitignore has claims/ comment header' \
     grep -Fxq '# board-superpowers local state (claim markers are per-session)' \
         "${GITIGNORE}"
 check '.gitignore has claims/ entry' \
@@ -492,11 +504,14 @@ stub_gh "${STUBS_DIR}"
 printf '%s\n' "${CANONICAL_STATUS}" > "${STUBS_DIR}/status_opts"
 printf '[]\n' > "${STUBS_DIR}/labels.json"
 
-# Pre-existing config.yml with hand-edited wip_limit: 7
+# Pre-existing config.yml + config.local.yml with hand-edited wip_limit: 7
 mkdir -p "${REPO_ROOT}/.board-superpowers"
 cat > "${REPO_ROOT}/.board-superpowers/config.yml" <<'EOF'
 # hand-edited
 project: "foo/1"
+EOF
+cat > "${REPO_ROOT}/.board-superpowers/config.local.yml" <<'EOF'
+# hand-edited (per-user)
 wip_limit: 7
 EOF
 
@@ -507,11 +522,11 @@ RC=$?
 set -e
 
 assert_eq '--force exit 0' '0' "${RC}"
-CONFIG="${REPO_ROOT}/.board-superpowers/config.yml"
-check '--force regenerated config.yml: wip_limit: 5' \
-    grep -Fxq 'wip_limit: 5' "${CONFIG}"
+LOCAL_CONFIG="${REPO_ROOT}/.board-superpowers/config.local.yml"
+check '--force regenerated config.local.yml: wip_limit: 5' \
+    grep -Fxq 'wip_limit: 5' "${LOCAL_CONFIG}"
 check_not '--force erased hand-edited wip_limit: 7' \
-    grep -Fxq 'wip_limit: 7' "${CONFIG}"
+    grep -Fxq 'wip_limit: 7' "${LOCAL_CONFIG}"
 
 rm -rf "${TMP}"
 
@@ -537,6 +552,9 @@ printf '[]\n' > "${STUBS_DIR}/labels.json"
 cat > "${REPO_ROOT}/.gitignore" <<'EOF'
 # user existing rule
 node_modules/
+
+# Per-user local override files — convention: <name>.local.<ext>
+*.local.*
 
 # board-superpowers local state (claim markers are per-session)
 .board-superpowers/claims/

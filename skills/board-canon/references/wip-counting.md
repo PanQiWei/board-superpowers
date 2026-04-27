@@ -33,7 +33,7 @@ A Consumer working on multiple repos has independent WIP counts per repo. The ca
 
 ### WIP cap = 0
 
-Setting `wip_cap_per_consumer: 0` in `.board-superpowers/config.yml` means "no claims allowed without explicit architect override". Useful for read-only Producer sessions or audit-only modes.
+Setting `wip_limit: 0` in `.board-superpowers/config.local.yml` means "no claims allowed without explicit architect override". Useful for read-only Producer sessions or audit-only modes.
 
 ## Why Blocked is excluded
 
