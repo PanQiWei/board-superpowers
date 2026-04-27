@@ -140,7 +140,7 @@ routing_blocks:
 | `repo_bootstrapped_at` | string (ISO 8601, UTC) | yes | Set once at F-B2 firing on this host |
 | `last_seen_version_in_repo` | string (semver) | yes | Updated by F-B4 at every per-host repo version transition |
 | `features_enabled` | list of strings | yes | Feature IDs in dotted form (`bootstrap.host`, `bootstrap.per_repo`, …). At v1 a list (on/off only); future migration converts list → map of `feature_id` → config blob |
-| `routing_blocks` | list of objects | yes | One element per file the plugin tracks: at minimum `CLAUDE.md` and `AGENTS.md`. List form (not map keyed by filename) so adding a new target file is an append, not a schema change |
+| `routing_blocks` | list of objects | yes | One element per file the plugin successfully injected into. F-B2 attempts both `CLAUDE.md` and `AGENTS.md`; either may be a stub-redirect target (≤ 30 lines + contains a `^@<file>.md$` line) in which case it is skipped silently and DOES NOT appear in the list. Empty list `[]` is permitted only when both files are stub-redirect (degenerate; would also leave the routing block uninjected anywhere — flagged elsewhere). List form (not map keyed by filename) so adding a new target file is an append, not a schema change |
 | `routing_blocks[].target_file` | string (repo-relative path) | yes | E.g. `CLAUDE.md`, `AGENTS.md`, future `.cursorrules` |
 | `routing_blocks[].block_hash` | string `sha256:<64 hex>` | yes | SHA256 (lowercase hex) of bytes between the marker pair, **excluding** the markers themselves |
 | `routing_blocks[].injected_at` | string (ISO 8601, UTC) | yes | Updated each time F-B4 re-injects this entry |

@@ -98,6 +98,8 @@ The block content is plugin-owned within the marker pair, user-owned outside. Th
 
 Do not edit anything **between** the markers by hand — your edits will be overwritten by the next auto-update. If you need to customize the routing, edit content **outside** the markers (CLAUDE.md / AGENTS.md are otherwise yours).
 
+**Stub-redirect targets are skipped.** If your `CLAUDE.md` or `AGENTS.md` is a *stub redirect* (≤ 30 lines AND contains a Claude Code `@-include` line of shape `^@<file>.md$`, e.g. `@AGENTS.md`), F-B2 leaves it byte-identical and DOES NOT add a `routing_blocks[]` entry for it in `state.yml`. The other (non-stub) file still receives the routing block and the architect's session lands cleanly via the redirect. You can sanity-check this by `grep -c 'board-superpowers:routing' state.yml` — a stub-redirect setup shows fewer than two markers across the two files (typically one in AGENTS.md only).
+
 ## When to invoke each skill
 
 This skill (`bootstrapping-repo`) does NOT fire again unless one of the state files goes missing. From here on:
@@ -122,8 +124,9 @@ ls ~/.board-superpowers/repos/
 # Project config in the repo is committed.
 cat .board-superpowers/config.yml
 
-# Routing block injected into CLAUDE.md.
-grep -A1 'board-superpowers:routing' CLAUDE.md | head -5
+# Routing block injected into AGENTS.md (and CLAUDE.md unless it is
+# a stub redirect — in that case grep AGENTS.md only).
+grep -A1 'board-superpowers:routing' AGENTS.md | head -5
 
 # Dependency check passes (the same check that runs on every session start).
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/check-deps.sh"

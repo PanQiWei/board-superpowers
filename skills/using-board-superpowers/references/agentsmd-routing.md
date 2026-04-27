@@ -49,6 +49,8 @@ also rejects source content with literal target markers nested inside
 the fence.
 
 <!-- routing-block:start -->
+## board-superpowers session routing
+
 This project uses the `board-superpowers` plugin (v0.2.0).
 Any Claude Code session in this project plays one of two roles:
 
@@ -161,3 +163,16 @@ When updating the routing block content above, remember:
   changes whenever the bytes between the fences change. F-B4 tamper
   detection treats a hash mismatch as plausible user edit; document
   the change in the v0.x release notes.
+- The block intentionally opens with a `## board-superpowers session
+  routing` H2 heading so consumer repos' AGENTS.md / CLAUDE.md get a
+  visible section title where the block lands. Removing the heading
+  changes the hash and breaks visual structure in long target files.
+- The injection helper recognises *stub-redirect* target files (≤ 30
+  lines AND containing `^@<file>.md$`, e.g. `@AGENTS.md`) and skips
+  them silently — `routing_blocks[]` for that target is omitted. This
+  is what lets the "AGENTS.md is the SoT, CLAUDE.md is `@AGENTS.md`"
+  pattern coexist with dual-file injection. See
+  `scripts/lib/common.sh:bsp_inject_routing_block` (Stub-redirect
+  early-out section) and
+  `docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md`
+  § 1.5.2 step 4 "Stub-redirect target".
