@@ -148,6 +148,8 @@ morning-ritual flow (§2.4) composes B-group features 02–05
 
 ###### F-03. Blocked sessions inspection
 
+**Status:** deferred-to-v1.x — see ADR-0011
+
 - **Capability**: identify all Consumer sessions in the
   `blocked-on-architect` state — distinguishing `running` (CC
   worker active, architect not needed) from
@@ -174,6 +176,8 @@ morning-ritual flow (§2.4) composes B-group features 02–05
 - **Autonomy**: N/A (read-only).
 
 ###### F-04. Today's dispatch recommendation
+
+**Status:** deferred-to-v1.x — see ADR-0011
 
 - **Capability**: given current board state, WIP utilization,
   blocking situation, and Thread priority, **recommend** which
@@ -203,6 +207,8 @@ morning-ritual flow (§2.4) composes B-group features 02–05
 
 ###### F-05. Board health snapshot
 
+**Status:** deferred-to-v1.x — see ADR-0011
+
 - **Capability**: emit kanban-flow health metrics — WIP
   utilization, blocked ratio, stale-card count, cycle-time
   trend, recent ship rate. **Distinct from DORA** (which
@@ -229,6 +235,8 @@ morning-ritual flow (§2.4) composes B-group features 02–05
   own thresholds) once a project has lived data.
 
 ###### F-06. Context briefing on switch-back
+
+**Status:** deferred-to-v1.x — see ADR-0011
 
 - **Capability**: when the architect switches focus back to a
   specific card / Thread, Producer surfaces a **fast context
@@ -263,6 +271,8 @@ D-AUTONOMY-1 matrix rows; the audit-log requirement (ADR-0006
 §5) applies to every action below.
 
 ###### F-07. End-of-day overnight batch dispatch
+
+**Status:** deferred-to-v1.x — see ADR-0011
 
 - **Capability**: end-of-day, the architect tells Producer "I'm
   leaving — kick off X, Y, Z to run overnight." Producer queues
@@ -357,6 +367,8 @@ D-AUTONOMY-1 matrix rows; the audit-log requirement (ADR-0006
 
 ###### F-10. Triage with remediation ladder
 
+**Status:** deferred-to-v1.x — see ADR-0011
+
 - **Capability**: detect anomalous cards (stale / oversized /
   blocked too long / orphan claim) and apply a **fixed
   remediation ladder**: unblock (autonomous), split (escalate
@@ -388,6 +400,8 @@ run via the preflight piggyback idiom (ADR-0007).
 
 ###### F-11. Stale session detection (lazy)
 
+**Status:** deferred-to-v1.x — see ADR-0011
+
 - **Capability**: in the preflight piggyback, detect stale
   Consumer sessions. The judgment uses GitHub-observable
   timestamps (last commit, last comment, last claim push) —
@@ -410,6 +424,8 @@ run via the preflight piggyback idiom (ADR-0007).
   handled by F-10).
 
 ###### F-12. Retro routine
+
+**Status:** deferred-to-v1.x — see ADR-0011
 
 - **Capability**: periodic structured reflection — what
   worked, what didn't, what to change. **Event-driven
@@ -440,6 +456,8 @@ run via the preflight piggyback idiom (ADR-0007).
   Audit log for both.
 
 ###### F-13. Weekly aggregated report
+
+**Status:** deferred-to-v1.x — see ADR-0011
 
 - **Capability**: weekly aggregate report combining two
   audiences in one document: (a) **quality trend** — data from
@@ -478,6 +496,8 @@ specific configuration emerges from the conversation.
 
 ###### F-14. Harness setup & evolution conversation
 
+**Status:** deferred-to-v1.x — see ADR-0011
+
 - **Capability**: through conversation, **help the architect
   establish and evolve** continuous-quality-enforcement
   infrastructure for their own project — golden principles
@@ -510,6 +530,8 @@ specific configuration emerges from the conversation.
   modifies SoT, so each landing requires architect approval).
 
 ###### F-15. Kanban hygiene & maintenance ops
+
+**Status:** deferred-to-v1.x — see ADR-0011
 
 - **Capability**: maintenance of the kanban board itself —
   stale-card cleanup, orphan claim branches, outdated labels,

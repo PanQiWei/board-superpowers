@@ -17,7 +17,7 @@ These rules apply to every script under `scripts/`:
   sources `scripts/lib/common.sh` immediately after — except
   `check-deps.sh`, which is **deliberately self-contained** (no
   source) so a broken lib cannot derail dep detection. Per
-  `AGENTS.md` "Two files are deliberately self-contained."
+  `scripts/AGENTS.md` "Self-contained scripts".
 - **Header comment is the help text.** `bsp_show_help` (from
   `lib/common.sh`) prints the leading `# ...` block as `--help`
   output. Every script supports `-h` / `--help`.
@@ -45,7 +45,7 @@ These rules apply to every script under `scripts/`:
     not consolidate without an ADR-0002 supersession.
 
   New exit codes require updating every caller plus every branching
-  skill. See `AGENTS.md` change-impact matrix.
+  skill. See `docs/architecture/AGENTS.md` change-impact matrix.
 
 - **Strict input parsing.** Owner / number / repo arguments go
   through `bsp_parse_owner_number` or `bsp_parse_owner_repo` in
@@ -94,7 +94,7 @@ No flag arg vector beyond optional `--machine` mode toggle.
 
 **`--machine` keys are protocol** — `MISSING`, `ROUTING_INJECTED`,
 `PROJECT`. Renaming any of them breaks `hooks/session-start.sh`'s
-parser (per `AGENTS.md` change-impact matrix).
+parser (per `docs/architecture/AGENTS.md` change-impact matrix).
 
 ### Exit codes
 
@@ -115,8 +115,9 @@ root's `CLAUDE.md` (if present).
 
 - `0002-product-features-and-flows/05-bootstrap-surface.md` §1.5.0
   (the dep-check shared primitive).
-- `AGENTS.md` "Two files are deliberately self-contained" + change-
-  impact matrix entry for the `--machine` keys.
+- `scripts/AGENTS.md` "Self-contained scripts" +
+  `docs/architecture/AGENTS.md` change-impact matrix entry for
+  the `--machine` keys.
 - ADR-0007 C-PLUGIN-2 (no daemon — preflight check is the
   no-daemon-friendly readiness probe).
 
@@ -438,7 +439,7 @@ injection vector (H1/L3) is closed.
 ## `scripts/lib/common.sh`
 
 Shared library; not directly executable. Caller MUST `set -euo
-pipefail` before sourcing. Per `AGENTS.md` "Maintaining scripts."
+pipefail` before sourcing. Per `scripts/AGENTS.md`.
 
 ### Exported functions
 
@@ -472,13 +473,13 @@ pipefail` before sourcing. Per `AGENTS.md` "Maintaining scripts."
 Function signatures are part of the public contract for any script
 under `scripts/` that sources `common.sh`. Renaming a function or
 changing its arg order requires updating every caller in the same
-PR (per `AGENTS.md` change-impact matrix row 3).
+PR (per `docs/architecture/AGENTS.md` change-impact matrix row 3).
 
 ---
 
 ## Shell-style discipline
 
-Per `AGENTS.md` "Maintaining scripts":
+Per `scripts/AGENTS.md`:
 
 - `shellcheck -x ./*.sh` from the `scripts/` directory before
   committing. SC1091 typically means wrong cwd, not a real bug.

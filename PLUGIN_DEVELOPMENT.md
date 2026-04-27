@@ -479,18 +479,25 @@ accordingly when designing plugin code:
 - When a contract from this doc changes (new hook event, frontmatter
   field renamed, schema breaking change), update both the section
   here AND the dependent code in board-superpowers in the same PR.
-- This doc is referenced from `CLAUDE.md`'s "Required reading"
-  section and is therefore implicitly loaded into every
-  plugin-maintainer session via the `@PLUGIN_DEVELOPMENT.md`
-  syntax. Keep it digestible — agents read it cold.
+- This doc is referenced **by name** from `AGENTS.md`'s
+  "Cross-cutting reference docs" table — not loaded with
+  `@`-prefix — so it does not ride into every session's
+  context. The `hooks/AGENTS.md` and `scripts/AGENTS.md`
+  per-directory contracts send agents here on demand when
+  those subdirectories are touched. Keep it digestible —
+  agents read it cold.
 
 ---
 
 ## See also
 
-- `CLAUDE.md` — board-superpowers developer guide (architecture,
-  change-impact matrix, scripts/skills/hooks-specific maintenance
-  rules)
+- `AGENTS.md` (root) — board-superpowers developer guide
+  (architecture, subdirectory-contract router, working-tree
+  discipline, role routing).
+- `docs/architecture/AGENTS.md` — spec governance + the Spec
+  change-impact matrix that this doc is cross-referenced from.
+- `hooks/AGENTS.md` and `scripts/AGENTS.md` — per-directory
+  operational checklists that send agents to this doc.
 - `README.md` — end-user overview
 - `docs/architecture/0001-positioning.md` — project positioning, premises,
   non-goals

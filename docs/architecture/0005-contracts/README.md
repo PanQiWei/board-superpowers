@@ -19,7 +19,7 @@
 0005 supersedes the "Protocol invariants" section that previously
 lived in `CLAUDE.md`; that section now points here.
 
-When `CLAUDE.md`'s change-impact matrix names a coupling, the schema
+When `docs/architecture/AGENTS.md`'s change-impact matrix names a coupling, the schema
 on each side of the coupling is pinned in 0005. When 0002 / 0003 / an
 ADR explains *why* a contract exists, 0005 just says *what its exact
 shape is* and links back. **0005 pins shape; rationale lives in the
@@ -133,8 +133,8 @@ Three rules apply across every contract pinned here:
   but not duplicated), ADR-0006 (audit-log + autonomy_overrides),
   ADR-0007 (preflight piggyback constraints), ADR-0008 (SKILL
   invocation as the cross-plugin contract).
-- `CLAUDE.md` (root) — change-impact matrix; absorbed into 0005's
-  per-section entries.
+- `docs/architecture/AGENTS.md` — change-impact matrix; absorbed
+  into 0005's per-section entries.
 - `PLUGIN_DEVELOPMENT.md` — CC + Codex plugin contract surfaces;
   04-skill-contracts cites this for portable-frontmatter rules.
 - `MULTI_AGENT_DEVELOPMENT.md` — Mode-1 vs Mode-2 contracts;

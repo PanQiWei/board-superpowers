@@ -86,7 +86,7 @@ and ship in follow-up PRs once each is unblocked.
 | Skill | Layer | v1 status | Why this scoping |
 |-------|-------|-----------|-------------------|
 | `using-board-superpowers` | Entry | **v1-minimum** | Required for routing every session into the right role. |
-| `managing-board` | Molecular | **v1-minimum** | Producer surface — required for "what should I work on" / Review Queue / intake on this repo. |
+| `managing-board` | Molecular | **v1-minimum** | Producer surface — required for "what should I work on" / Review Queue / intake on this repo. v1 ships F-01 + F-02 + F-08 only; F-03..F-07 + F-10..F-15 deferred to v1.x per ADR-0011 (pending demand pull). |
 | `consuming-card` | Molecular | **v1-minimum** | Consumer surface — required for the F-C0..F-C14 lifecycle that delivers each card's PR. |
 | `decomposing-into-milestones` | Molecular | deferred to v1-complete | Initial cards on this repo's board are hand-crafted by the architect; automatic decomposition is a v1-complete enhancement. |
 | `bootstrapping-repo` | Molecular | **v1-minimum** (shipped in v0.2.0) | F-B1 (host bootstrap) + F-B2 (per-repo bootstrap, including step 4 routing-block injection) — the entry-skill state probe routes here on first session. |

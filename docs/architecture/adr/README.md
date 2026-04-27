@@ -77,3 +77,4 @@ Omit if no such notes apply.
 | [0008](./0008-plugin-to-plugin-skill-invocation.md) | Plugin-to-plugin composition via SKILL invocation (vs subagent spawn / MCP / direct import) | accepted |
 | [0009](./0009-allow-sqlite-as-byo-audit-db.md) | Allow SQLite as a BYO audit DB scheme (supersedes ADR-0006 §5 partial) | accepted |
 | [0010](./0010-re-anchor-deadlines-ai-cadence.md) | Re-anchor ADR-0005 Consequences deadlines to v1 GA + project-wide AI cadence 100x convention (supersedes ADR-0005 § Consequences partial) | accepted |
+| [0011](./0011-defer-producer-routines-to-v1x.md) | Defer Producer routines F-03..F-07 + F-10..F-15 to v1.x pending demand pull | accepted |

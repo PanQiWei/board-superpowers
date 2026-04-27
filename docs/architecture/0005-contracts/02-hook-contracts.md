@@ -281,22 +281,24 @@ pure-bash RFC 8259 §7 string escaper:
 | Any other non-zero | Non-blocking error | Hook output ignored; session continues |
 
 **board-superpowers' invariant: hook failures MUST NEVER block
-session start.** Per `AGENTS.md` "Maintaining hooks": silent no-op
-on error is the correct failure mode at this layer; the SKILL
-preflight (Layer 2) is the real safety net.
+session start.** Per `hooks/AGENTS.md` Invariant 3 ("Never
+block"): silent no-op on error is the correct failure mode at
+this layer; the SKILL preflight (Layer 2) is the real safety
+net.
 
 ### Timeout
 
-Declared `10` seconds in `hooks.json`. Per `AGENTS.md`: "Keep new
-work well under it." If `check-deps.sh --machine` ever exceeds 10s
-in practice, the dep-detection algorithm (not the timeout) is the
-thing to fix.
+Declared `10` seconds in `hooks.json`. Per `hooks/AGENTS.md`
+Invariant 4 ("10-second budget"): "Keep new work well under
+it." If `check-deps.sh --machine` ever exceeds 10s in practice,
+the dep-detection algorithm (not the timeout) is the thing to
+fix.
 
 ### Self-containment
 
 `hooks/session-start.sh` MUST NOT source `scripts/lib/common.sh`.
 A broken or missing lib must never prevent Claude Code startup.
-Per `AGENTS.md` "Two files are deliberately self-contained."
+Per `hooks/AGENTS.md` Invariant 1 ("Self-contained").
 
 The script's only dependency-resolution step at v1 is locating
 `${CLAUDE_PLUGIN_ROOT}/scripts/check-deps.sh` and exec-ing it via
@@ -304,7 +306,7 @@ The script's only dependency-resolution step at v1 is locating
 
 ### Cited rationale
 
-- `AGENTS.md` "Maintaining hooks" — invariants 1–4 (self-contained,
+- `hooks/AGENTS.md` — invariants 1–4 (self-contained,
   sanitize, never block, 10s budget).
 - `0002-product-features-and-flows/05-bootstrap-surface.md` §1.5
   three-layer alert strategy — Layer 1 is this hook.
@@ -373,5 +375,5 @@ recommended convention; see [`08-environment-variables.md`](./08-environment-var
   `CLAUDE_PLUGIN_ROOT`, `CLAUDE_PROJECT_DIR`, `BOARD_SP_DEBUG`.
 - ADR-0007 — derivation of why hooks must be best-effort.
 - `PLUGIN_DEVELOPMENT.md` — upstream hook contracts (CC + Codex).
-- `AGENTS.md` "Maintaining hooks" — operational checklist for
+- `hooks/AGENTS.md` — operational checklist for
   changes to this surface.

@@ -1031,7 +1031,7 @@ content, where does each piece live?"
 
 This keeps the body scannable while concentrating maintenance in
 files that can be tested and shellchecked independently. See the
-project-wide rule in `AGENTS.md` § Maintaining scripts: every
+project-wide rule in `scripts/AGENTS.md`: every
 script gets a header comment, strict mode, and `shellcheck -x`.
 
 ### `scripts/` is for AI-callable tools, not user CLIs
@@ -1497,7 +1497,7 @@ each is a known unknown to re-check periodically.
   renamed, a directory convention shifted, the spec at
   agentskills.io updated), update both the section here AND any
   dependent skills in board-superpowers in the same PR.
-- This doc is referenced from `AGENTS.md`'s "Maintaining skills"
+- This doc is referenced from `skills/AGENTS.md`
   section. Keep it digestible — agents read it cold.
 - When promoting an "Honest gap" to a documented contract (e.g.,
   a body-length cap finally documented upstream), move the entry
@@ -1515,9 +1515,10 @@ each is a known unknown to re-check periodically.
 - `MULTI_AGENT_DEVELOPMENT.md` — multi-agent / subagent /
   orchestration contracts. Required reading before designing a
   skill that spawns subagents (Skeleton C / pipeline skills).
-- `AGENTS.md` — board-superpowers developer guide.
-  "Maintaining skills" section is the operational checklist that
-  complements this doc.
+- `AGENTS.md` — board-superpowers developer guide. The root
+  `AGENTS.md` "Cross-cutting reference docs" table sends agents
+  here on demand. The `skills/AGENTS.md` per-directory contract
+  is the operational checklist that complements this doc.
 - `README.md` — end-user overview.
 - Reference implementations read in full while drafting:
   - `anthropics/skills` (`skill-creator`, `docx`, `claude-api`)
