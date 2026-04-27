@@ -1,6 +1,6 @@
 {
   "name": "board-superpowers",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Agile scheduling layer for Codex CLI: turn GitHub Projects into the central dispatcher, one session = one PR. Depends on superpowers and gstack.",
   "author": "board-superpowers contributors",
   "license": "MIT",
