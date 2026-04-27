@@ -13,26 +13,17 @@ user-facing overview.
 > `SessionStart` fires. The 6 v1-minimum skills auto-match.
 > The plugin dogfoods itself for any new skill / script / hook.
 
-**v1-minimum = 6 of 10 skills shipped** (per
-[`SKILLS.md`](./SKILLS.md) § "v1 minimum vs v1 complete"):
+**v1 catalog = 8 of 10 skills shipped** (10 once `decomposing-into-milestones` + `migrating-repo-version` ship), per [`SKILLS.md`](./SKILLS.md):
 
 - **Shipped**: `using-board-superpowers` (entry),
   `managing-board` + `consuming-card` + `bootstrapping-repo`
-  (molecular), `board-canon` + `enforcing-pr-contract` (atomic).
+  (molecular), `board-canon` + `enforcing-pr-contract` +
+  **`classifying-actions` + `auditing-actions`** (atomic).
 - **Deferred to v1-complete**: `decomposing-into-milestones`,
-  `migrating-repo-version`, `classifying-actions`,
-  `auditing-actions`. Reasons live in the SKILLS.md table.
+  `migrating-repo-version`. Reasons live in the SKILLS.md table.
 
-**v1-minimum degraded behaviors** (designed-in, removed when
-deferred atomics ship):
+**Remaining degraded behavior**:
 
-- All mutating actions run as **R-class default** (propose →
-  ask architect → ack → act). The full D-AUTONOMY-1 matrix
-  triage from `classifying-actions` is inlined as one block per
-  v1-minimum molecular SKILL.md.
-- All audit entries write to a **local jsonl trace file** at
-  `~/.board-superpowers/repos/<normalized>/audit-local.jsonl`. The
-  full BYO RDBMS schema from `auditing-actions` is deferred.
 - **No `migrating-repo-version` skill yet** — current plugin
   version is `v0.2.0`; the schema-aware migration runner lands
   starting from the v0.2.x → v0.3.x transition. The hook never
@@ -73,6 +64,7 @@ multiple rows match, read all matched docs.
 | Creating or modifying a `<skill-dir>/.skill-meta.yaml` (the version + 4-dim metadata file) | `SKILL_DEVELOPMENT.md` § "board-superpowers metadata convention" | Defines the schema: `version` (semver) + `layer` (entry/molecular/atomic) + `type` (technique/pattern/reference/discipline) + `mode` (claude-code-only/codex-only/both) + `bounded-context` (board/session/bootstrap/audit/spec). CI gate `scripts/verify-skill-metadata.sh` enforces consistency between yaml and `SKILLS.md` catalog. Drift here causes silent topology rot. |
 | **Adding, removing, renaming, or re-layering any skill** (anything that changes the topology of `skills/` or the cross-plugin edges board-superpowers depends on) | `SKILLS.md` (already always-loaded) — **edit it BEFORE editing `skills/`**, then both halves land in the same PR. Per `SKILLS.md` "Source-of-truth contract", a `skills/` change without a `SKILLS.md` change is incomplete and unmergeable. | `SKILLS.md` is the source of truth for the skills system topology. Bypassing it lets the catalog drift silently; SPOT (single-point-of-truth) consolidations decay; cross-plugin Mode-2 compatibility loses its checklist. |
 | Editing any file under `docs/architecture/` | All three docs that match the affected surface | The spec leads the implementation. A spec change that violates a platform / multi-agent / skill contract is worse than a code change that does, because every future implementer trusts the spec. |
+| Anything touching audit / autonomy / classifying / auditing surfaces | `docs/architecture/0005-contracts/06-audit-log-schema.md` + `docs/architecture/adr/0006-producer-autonomy-boundary.md` + `docs/architecture/adr/0009-allow-sqlite-as-byo-audit-db.md` | These three together define the audit governance contract end-to-end (matrix + schema + DB scheme allowlist). |
 | Anything that **clearly** falls in two or three categories above | All matched docs | These docs are designed to compose. Their cross-references assume each is read when its scope is touched. |
 
 ### Doctrine
@@ -204,6 +196,12 @@ v1 wires only `SessionStart`.
 
 - **bash 3.2+** with strict mode for `scripts/`. Callers
   `set -euo pipefail` before sourcing `scripts/lib/common.sh`.
+- **uv** (host-level globally installed; install via `brew install uv`
+  or `curl -LsSf https://astral.sh/uv/install.sh | sh`) — manages the
+  per-repo Python venv at `<repo>/.board-superpowers/.venv/` for
+  plugin's own runtime deps (`pyyaml + pymysql` at v0.3.0). The plugin
+  ships `pyproject.toml` + `uv.lock` templates; bootstrap-project.sh
+  copies them per repo. See "Why per-repo venv" below.
 - **gh CLI** with `project` scope (plus `issue` / `pr`
   implicitly).
 - **python3** for JSON parsing (gh output → field / option IDs).
@@ -220,6 +218,24 @@ v1 wires only `SessionStart`.
   same `SKILL.md` shape.
 - No runtime dependencies beyond the above. No node, no go, no
   compiled artifacts.
+
+### Why per-repo venv (not host-local)
+
+board-superpowers's Python deps live in `<repo>/.board-superpowers/.venv/` per repo, not at host-level `~/.board-superpowers/.venv/`. Trade-off:
+
+| Dimension | host-local | **per-repo (chosen)** |
+|-----------|------------|------------------------|
+| Disk | 1 venv (~10 MB) | N venvs (~10 MB × N) |
+| Plugin upgrade | one upgrade affects all repos at once | each repo upgrades independently on bootstrap re-run |
+| Plugin version mix | impossible (one venv → one deps set) | possible (different repos pin different plugin versions via different `uv.lock`) |
+| Multi-architect on shared host | shared deps version | each architect's per-repo isolation |
+
+Per-repo wins because:
+
+1. **Plugin version isolation**. Architect A upgrading the plugin in repo X does not break repo Y's audit governance behavior. With host-local venv, a plugin upgrade would silently change deps versions for every repo simultaneously.
+2. **`uv.lock` reproducibility**. Each repo's committed `uv.lock` is the source of truth for that repo's audit governance behavior. Host-shared venv would require host-level lock coordination, breaking the "repo is the unit of coordination" principle that the rest of board-superpowers follows.
+3. **Disk cost is acceptable**. ~10 MB × N repos is small relative to typical repo size + modern host disk; SSDs make the per-repo overhead negligible.
+4. **Co-location with other plugin-managed scaffolding**. The venv lives next to `config.yml`, `config.local.yml`, `pyproject.toml`, `uv.lock` — all per-repo plugin-managed files.
 
 ## Directory layout
 
@@ -442,6 +458,7 @@ preparation:
 | Skill catalog (add / rename / split / merge any of the 10 v1 skills) | **`SKILLS.md` FIRST** (per its Source-of-truth contract — do not touch `skills/` until SKILLS.md is updated); then `0004-component-architecture.md` Decision 2 (capability → slot table); `0005-contracts/04-skill-contracts.md` (sibling-skill classification; v1 catalog table); the trigger row above; `README.md` and `README.zh-CN.md` if user-facing trigger phrases change. |
 | Hook intent-injection marker grammar (`INVOKE:` / `REASON:`) | `0004-component-architecture.md` § "Hook intent injection pattern"; `0005-contracts/02-hook-contracts.md` § "Intent-injection markers"; `using-board-superpowers` entry-skill spec. |
 | `~/.board-superpowers/` path layout (host-local state) | `0002-product-features-and-flows/05-bootstrap-surface.md`; `0003-domain-model/02-bounded-contexts.md` § 3.2.3; `0005-contracts/03-config-schemas.md` + `07-path-conventions.md`; `0002-product-features-and-flows/07-cross-cutting-invariants.md` I-13. |
+| mode-field enum (jsonl fallback) | `bsp_audit_local_write` in `scripts/lib/common.sh`; `audit-log-write.sh`; `auditing-actions/references/degradation-mode.md`; spec 06 § "jsonl fallback mode-field" |
 
 When v1 implementation lands, this matrix grows additional rows
 mapping spec → code (e.g., "if `0005-contracts/04-skill-contracts.md`
