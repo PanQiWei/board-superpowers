@@ -163,13 +163,19 @@ means for board-superpowers" #3 for the full rationale.
 - **Role**: Consumer session main skill. Full F-C0..F-C14
   lifecycle from
   [`docs/architecture/0002-product-features-and-flows/04-consumer-surface.md`](./docs/architecture/0002-product-features-and-flows/04-consumer-surface.md).
-- **Body target**: 350-450 lines.
+  Consumer subactions span action_id 100-113 (100-111 review
+  cycle + 112 PR-submit pre-flight card body sync + 113
+  post-merge cleanup).
+- **Body target**: ≤ 300 lines (current 229).
 - **References folder**:
   `references/{handoff-to-superpowers,pr-template,surface-protocol,permission-boundary}.md`.
 - **Composes (atomic)**: `board-canon`,
-  `enforcing-pr-contract` (F-C12 PR submit),
-  `classifying-actions` + `auditing-actions` (every
-  mutating action).
+  `board-superpowers:enforcing-pr-contract` (Step 9.5
+  card body sync + Step 10 PR submit; action_ids 112 and 113
+  also audit via this path),
+  `board-superpowers:classifying-actions` +
+  `board-superpowers:auditing-actions` (every
+  mutating action, action_ids 100-113).
 - **Composes (cross-plugin)**: see § "Cross-plugin edges" below.
 - **Constraint**: under Mode-2 it runs as a CC subagent —
   `max_depth=1` means it CANNOT spawn further subagents; every
@@ -260,39 +266,48 @@ means for board-superpowers" #3 for the full rationale.
 
 #### `enforcing-pr-contract` (v1-minimum)
 
-- **Role**: PR three-section contract enforcement —
-  `## Automated Verification` (required), `## Human
-  Verification TODO` (optional, must not be filler),
-  `## Retro Notes` (required when reusable lessons exist).
-  Provides both injection templates (Consumer side, F-C12) and
-  validation rules (Producer side, F-02 Review Queue).
-- **Body target**: 200-250 lines.
+- **Role**: Two-contract enforcement — **Contract A** (PR body
+  three-section shape: `## Automated Verification` required,
+  `## Human Verification TODO` optional but must not be filler,
+  `## Retro Notes` required when reusable lessons exist) +
+  **Contract B** (card body acceptance-criteria sync: every AC
+  must be `[x]` or `[!]` with a reason at PR-submit time;
+  bare `[ ]` is forbidden). Provides injection templates for
+  the Consumer (Step 10 PR submit) and validation rules for
+  the Producer (F-02 Review Queue). Both contracts are checked
+  by `scripts/submit-pr.sh` and by the Producer's review-queue
+  routine.
+- **Body target**: ≤ 200 lines (current 151).
 - **References folder**:
   `references/{section-templates,validation-rules,filler-detection}.md`.
-- **Called by**: `consuming-card` (F-C12 PR submit),
-  `managing-board` (F-02 Review Queue contract-violation
-  flagging).
+- **Called by**: `consuming-card` (Step 9.5 card body sync +
+  Step 10 PR submit), `managing-board` (F-02 Review Queue
+  contract-violation flagging).
 - **Calls**: nothing.
-- **SPOT consolidates**: PR three-section schema would
-  otherwise be inlined in both Consumer and Producer skills.
+- **SPOT consolidates**: Contract A (PR three-section shape)
+  and Contract B (AC terminal-state rule) would otherwise be
+  inlined separately in both Consumer and Producer skills —
+  this skill is the single source of truth for both.
 - **Tier 2 frontmatter**: `user-invocable: false` (atomic
   reflex, never user-driven directly).
 
 #### `classifying-actions` (v1-complete, shipped v0.3.0)
 
-- **Role**: D-AUTONOMY-1 14-row matrix + Consumer subaction
-  catalog (`action_id` 100-111) + 5-step triage rule +
+- **Role**: D-AUTONOMY-1 14-row Producer matrix + Consumer
+  subaction catalog (`action_id` 100-113: 100-111 review-cycle
+  actions, 112 PR-submit pre-flight card body sync, 113
+  post-merge cleanup) + 5-step triage rule +
   `autonomy_overrides:` parsing (project + user layers via
   `bsp_resolve_autonomy_class`). The caller hands in an
   action_id; this skill returns the A / R / N decision.
-- **Body target**: ≤ 200 lines (frequently-loaded atomic; current 80).
+- **Body target**: ≤ 200 lines (frequently-loaded atomic; current 81).
 - **References folder**:
   `references/{matrix,triage-rule,override-parsing,action-id-catalog}.md`.
 - **Called by**: every mutating skill (5 of them).
 - **Calls**: nothing.
 - **SPOT consolidates**: ADR-0006 matrix would otherwise be
-  inlined 5 times — 14 rows × 5 = 70 lines of duplicated rule
-  encoding drifting independently.
+  inlined 5 times — Producer 14 rows + Consumer 14 rows × 5 =
+  140 lines of duplicated rule encoding drifting independently.
 - **Tier 2 frontmatter**: `user-invocable: false` (atomic
   reflex, never user-driven directly).
 

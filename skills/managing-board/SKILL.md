@@ -20,6 +20,25 @@ If the user invokes via `/board-superpowers:managing-board <routine>`, the routi
 
 **Required sub-skills**: `board-superpowers:board-canon` (read schema before any transition decision), `board-superpowers:enforcing-pr-contract` (review-queue contract validation).
 
+## Flow at a glance
+
+```mermaid
+flowchart TD
+    Start["Producer session"] --> R{"Routine"}
+    R -- "'what should I work on' /\n'morning briefing'" --> Daily["Daily routine"]
+    R -- "'review the PRs' /\n'In Review queue'" --> RevQ["Review-queue routine"]
+    R -- "'new requirement' /\n'intake this idea'" --> In["Intake routine"]
+    R -- "'what's blocked' /\n'triage'" --> Tr["Triage routine"]
+    Daily --> Mut{"Mutating action?"}
+    RevQ --> Mut
+    In --> Mut
+    Tr --> Mut
+    Mut -- "yes" --> Gov["5-step governance:\nboard-superpowers:classifying-actions\nthen board-superpowers:auditing-actions"]
+    Mut -- "no, read-only" --> Read["board-superpowers:auditing-actions\ndirect (no classify step)"]
+    Gov --> End(["End"])
+    Read --> End
+```
+
 ## Daily routine
 
 Goal: produce a one-screen briefing of the board's current state that helps the Producer decide what to do next.

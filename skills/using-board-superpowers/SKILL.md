@@ -10,6 +10,21 @@ This is the entry skill — first touch when a board-superpowers session starts.
 
 The skill operates in three steps. Steps 1-3 are the **Layer 2 reliable gate** of the bootstrap surface (the SessionStart hook is Layer 1, advisory). Per [`docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md`](../../docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md) § "three-layer alert + intent-injection strategy", Layer 2 always re-runs the same dep + state check Layer 1 ran, so routing works even when CC `SessionStart` delivery silently drops the hook output.
 
+## Decision tree at a glance
+
+```mermaid
+flowchart TD
+    A["Session message arrives"] --> B{"Hook injected\nINVOKE marker?"}
+    B -- yes --> C["Route per marker"]
+    B -- no --> D{"State probe:\nmanifest.yml or\nper-repo state.yml\nabsent?"}
+    D -- yes --> E["Route to\nboard-superpowers:bootstrapping-repo"]
+    D -- no --> F{"Message signal?"}
+    F -- "[board-card:#N] /\n'claim card N' /\n'work on card N'" --> G["Route to\nboard-superpowers:consuming-card"]
+    F -- "'what should I work on' /\n'review the PRs' /\n'new requirement' /\n'triage'" --> H["Route to\nboard-superpowers:managing-board"]
+    F -- "'what does this plugin do'" --> I["Inline answer from\nreferences/first-time-user-guide.md"]
+    F -- "no clear signal" --> J["Ask user to disambiguate"]
+```
+
 ## Step 1 — re-run dep + state check (Layer 2 reliable gate)
 
 The hook is best-effort; this skill is the contract. Always run BOTH probes itself, even if the hook fired correctly.

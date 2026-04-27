@@ -1,4 +1,4 @@
-# Decision matrix — Producer rows 1-14 + Consumer rows 100-111
+# Decision matrix — Producer rows 1-14 + Consumer rows 100-113
 
 This is the canonical decision table for the skill. Every mutating action
 maps to one row; the row's `default class` is the starting point for
@@ -25,7 +25,7 @@ overrides that may promote Reserved to Auto).
 | 13 | Dispatch Consumer session | A | unlocks overnight batch |
 | 14 | Auto-trigger retro / weekly report (cadence-driven) | A | preflight piggyback |
 
-## Consumer rows (100-111)
+## Consumer rows (100-113)
 
 | `action_id` | Action | Default class |
 |-------------|--------|---------------|
@@ -41,6 +41,8 @@ overrides that may promote Reserved to Auto).
 | 109 | Review-cycle response — QA pass | A |
 | 110 | Review-cycle response — security audit | A |
 | 111 | Review-cycle response — cycle completion | A |
+| 112 | PR-submit pre-flight — card body sync (toggle ACs to `[x]`, write implementation summary) | A |
+| 113 | Post-merge cleanup — remove worktree + delete local claim branch + write close audit row | A |
 
 ## Reused Producer rows on the Consumer side
 

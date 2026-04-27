@@ -13,6 +13,19 @@ This is the molecular skill that drives **first-time setup** of board-superpower
 
 The skill is a thin orchestration layer over two scripts: `scripts/bootstrap-host.sh` (host bootstrap) and `scripts/bootstrap-project.sh` (per-repo bootstrap). Both scripts are idempotent — re-running this skill on an already-bootstrapped repo is a no-op.
 
+## Flow at a glance
+
+```mermaid
+flowchart TD
+    Start["Skill invoked"] --> S1["Step 1: host bootstrap\nbootstrap-host.sh"]
+    S1 --> Pre["Step 2: preflight\nOWNER/PROJECT_NUMBER\n+ Status field validate"]
+    Pre --> S3["Step 3: per-repo bootstrap\nsub-steps 2a through 2g\n+ routing injection\n+ state.yml write"]
+    S3 -- "every mutating sub-step" --> Mut["5-step governance\nboard-superpowers:classifying-actions\nthen board-superpowers:auditing-actions"]
+    Mut --> S3
+    S3 --> Post["Step 4: post-bootstrap orientation\nreferences/first-time-user-guide.md"]
+    Post --> End(["Done"])
+```
+
 ## When this skill fires
 
 Two paths deliver the architect into this skill:
@@ -139,7 +152,7 @@ The script handles the per-repo sub-steps internally:
 |----------|----------------------------------|
 | 2a — labels | `setup-labels.sh` — creates the 9 standard labels (`type:feature`, `type:bug`, `type:chore`, `type:refactor`, `type:epic`, `size:XS`, `size:S`, `size:M`, `size:L`). Idempotent — pre-existing labels skipped. |
 | 2b — Status field validation | Reads the project's Status field via `gh project field-list`; aborts with exit 2 if the 6 options are missing or out of order. |
-| 2c — config.yml + config.local.yml write | Renders `<repo>/.board-superpowers/config.yml` (team-shared, committed) and `config.local.yml` (per-user, gitignored) with sensible defaults. Skipped when present unless `--force`. |
+| 2c — config.yml + config.local.yml write | Renders `<repo>/.board-superpowers/config.yml` (team-shared, committed) and `config.local.yml` (per-user, gitignored) with sensible defaults. Skipped when present unless `--force`. The generated `config.yml` includes a fully-commented-out `post_merge_cleanup` block (the OS-level cron opt-in for automated post-merge worktree cleanup). The architect uncomments the block and sets `auto_cron: true` to enable it; until that edit is made the feature is off. |
 | 2d — .gitignore append | Appends an idempotent block ignoring `.board-superpowers/claims/` and `.board-superpowers/.venv/`. |
 | 2e — credentials.yml | Walks BYO-RDBMS DSN setup. Accepts the 6-scheme allowlist (`postgresql://`, `postgres://`, `mysql://`, `mysql+pymysql://`, `sqlite://`, `sqlite3://`). Architect can decline → all actions requiring audit-DB write degrade to jsonl trace until they reconfigure. |
 | 2f — uv sync | Creates the per-repo Python venv at `<repo>/.board-superpowers/.venv/` via `uv sync` using the committed `pyproject.toml` + `uv.lock`. |

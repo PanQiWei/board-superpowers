@@ -22,7 +22,7 @@ This skill is the decision-table authority for every mutating action a
 board-superpowers SKILL performs. It answers "does this action proceed
 automatically or wait for architect approval?" using:
 
-1. A 14-row Producer matrix + 12-row Consumer catalog (see
+1. A 14-row Producer matrix + 14-row Consumer catalog (see
    `references/matrix.md` + `references/action-id-catalog.md`).
 2. A 5-step short-circuit triage rule that escalates Auto-class actions
    to Reserved-class when they touch architect-reserved powers, source
@@ -31,6 +31,22 @@ automatically or wait for architect approval?" using:
 3. A two-layer override system — user-level `~/.board-superpowers/overrides.yml`
    and project-level `<repo>/.board-superpowers/config.local.yml` —
    where project layer wins on conflict (see `references/override-parsing.md`).
+
+## Decision tree at a glance
+
+```mermaid
+flowchart TD
+    Start["Caller: action_id + repo_root"] --> M["Look up default class\nin references/matrix.md"]
+    M --> D["Default class: A, R, or N"]
+    D --> T{"5-step triage:\nany short-circuit\nmatches?"}
+    T -- "yes, default was A" --> Esc["Escalate to R"]
+    T -- "yes, default was R" --> KeepR["Already R; no change"]
+    T -- no --> Keep["Use matrix default"]
+    Esc --> O["bsp_resolve_autonomy_class:\nmerge user + project\nautonomyoverrides\n(project layer wins)"]
+    KeepR --> O
+    Keep --> O
+    O --> Final(["Return final A, R, or N"])
+```
 
 ## How to apply this skill
 

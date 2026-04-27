@@ -21,6 +21,24 @@ the plugin performs leaves a trail of one or two rows in the audit log,
 recording what was decided, who approved (if anyone), and what
 happened when the action ran.
 
+## Flow at a glance
+
+```mermaid
+flowchart TD
+    Caller["Caller: A or R decision + payload"] --> C{"Decision class"}
+    C -- A --> A1["1 row\napproval-stage=auto"]
+    C -- R --> R1["Row 1: propose\napproval-stage=propose"]
+    R1 --> Wait["Surface to architect"]
+    Wait -- approve --> R2A["Row 2: approved\nact then audit result"]
+    Wait -- decline --> R2D["Row 2: rejected\naudit decline; abort"]
+    A1 --> W["audit-log-write.sh"]
+    R2A --> W
+    R2D --> W
+    W -- "DB reachable" --> DBOk(["Row in audit_log table"])
+    W -- "DB unreachable" --> JSONL["Degrade to jsonl\nwith mode field\nidentifying cause"]
+    JSONL --> JE(["Row in audit-local.jsonl"])
+```
+
 ## How to apply this skill
 
 The caller has just received an A/R decision from
