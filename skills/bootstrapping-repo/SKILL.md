@@ -45,10 +45,11 @@ matrix default is conservative; overrides relax it.
 
 For every mutating action this skill performs, follow the 5-step governance sequence:
 
-1. Resolve the action's action_id (from
-   `board-superpowers:classifying-actions/references/action-id-catalog.md`).
+1. Resolve the action's action_id (from the `action-id-catalog.md`
+   file inside the `board-superpowers:classifying-actions` skill's
+   `references/`).
 2. Invoke `board-superpowers:classifying-actions` with that action_id;
-   receive a decision: A (auto) or R (requires approval).
+   receive a decision: A (auto), R (requires approval), or N (forbidden).
 3. If A: act → invoke `board-superpowers:auditing-actions` to record
    one entry.
 4. If R:
@@ -60,6 +61,8 @@ For every mutating action this skill performs, follow the 5-step governance sequ
       to record the approval-and-result.
    e. on decline: invoke `board-superpowers:auditing-actions` to
       record the decline; abort.
+5. If N: refuse the action and surface the block reason; no audit
+   entry at N.
 
 Bootstrap is mostly R-class (see "Why bootstrap is mostly R-class" above). Architects can promote specific rows to A via `autonomy_overrides:`.
 
@@ -79,8 +82,9 @@ bootstrap-project-4     — routing block injection (CLAUDE.md + AGENTS.md;
 bootstrap-project-3     — state.yml write (host-local per-repo)
 ```
 
-For the full default class (A/R) of each action_id, consult
-`board-superpowers:classifying-actions/references/action-id-catalog.md`.
+For the full default class (A/R) of each action_id, consult the
+`action-id-catalog.md` file inside the
+`board-superpowers:classifying-actions` skill's `references/`.
 
 ## Procedure
 
@@ -151,7 +155,7 @@ Apply the governance sequence for each sub-step that writes a file (see "Action 
 - Status field validation result at 2b (PASS / drift detected — print the specific mismatched options).
 - File paths of `config.yml` + `config.local.yml` at 2c.
 - Lines appended to `.gitignore` at 2d (or "already present" on idempotent skip).
-- BYO-RDBMS scheme accepted (or declined with degradation notice) at 2e.
+- BYO-RDBMS scheme accepted (or declined with jsonl-fallback notice) at 2e.
 - Venv creation result at 2f.
 - Audit-init result at 2g (or "skipped — no DB URL configured").
 - Files routing-injected (CLAUDE.md / AGENTS.md / both / neither).

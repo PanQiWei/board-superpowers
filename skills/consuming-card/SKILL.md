@@ -87,9 +87,7 @@ This skill does NOT re-implement TDD or planning — those are the canonical dis
 If the card hits a blocker mid-flight:
 
 1. Comment on the card naming the blocker.
-2. Invoke `board-superpowers:classifying-actions` with action_id 6 (Status transition to Blocked); receive A / R / N.
-3. If R: record the proposal via `board-superpowers:auditing-actions`, surface to the architect, wait for acknowledgement. On approve: run `gh project item-edit ... Status=Blocked` and invoke `board-superpowers:auditing-actions` to record the result. On decline: invoke `board-superpowers:auditing-actions` to record the decline and abort.
-4. If A: run the Status flip immediately, then invoke `board-superpowers:auditing-actions` to record the action.
+2. The Status transition to `Blocked` is a mutating action with action_id 6 — apply the 5-step sequence from "How mutating actions are handled" below. The Status flip itself happens in step 3 (A) or step 4d (R approve).
 
 Otherwise leave the card in `In Progress` for the duration of the implementation. Do NOT churn the Status field on every commit — Status reflects the gross state of the work, not its internal progress.
 
@@ -170,18 +168,30 @@ acceptance criteria evolve (action_id 2), opening the PR (action_id
 
 For every mutating action this skill performs:
 
-1. Resolve the action's action_id (from
-   `board-superpowers:classifying-actions/references/action-id-catalog.md`).
-2. Invoke `board-superpowers:classifying-actions` with the action_id;
-   receive A / R / N.
-3. If A: act immediately, then invoke `board-superpowers:auditing-actions`
-   to record one audit entry.
-4. If R: invoke `board-superpowers:auditing-actions` to record the
-   proposal; surface to the architect; wait for acknowledgement. On
-   approve: act, then invoke `board-superpowers:auditing-actions` to
-   record the approval-and-result. On decline: invoke
-   `board-superpowers:auditing-actions` to record the decline; abort.
+1. Resolve the action's action_id (from the `action-id-catalog.md`
+   file inside the `board-superpowers:classifying-actions` skill's
+   `references/`).
+2. Invoke `board-superpowers:classifying-actions` with that action_id;
+   receive a decision: A (auto), R (requires approval), or N (forbidden).
+3. If A: act → invoke `board-superpowers:auditing-actions` to record
+   one entry.
+4. If R:
+   a. invoke `board-superpowers:auditing-actions` to record the
+      proposal.
+   b. surface the proposal to the architect.
+   c. wait for the architect's reply (approve / decline).
+   d. on approve: act → invoke `board-superpowers:auditing-actions`
+      to record the approval-and-result.
+   e. on decline: invoke `board-superpowers:auditing-actions` to
+      record the decline; abort.
 5. If N: refuse and surface the block reason; no audit entry at N.
+
+Read-only events (e.g., post-merge close handled by GitHub's webhook,
+where this skill only observes the transition) may invoke
+`board-superpowers:auditing-actions` directly without a classification
+step — the audit row records that the event ran, not a decision.
+Use this shortcut ONLY for non-mutating observations; never for
+mutating actions.
 
 The two atomic skills handle the matrix lookup, override merging,
 schema enforcement, and audit row writing. This skill describes the

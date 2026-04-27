@@ -69,7 +69,7 @@ Goal: validate every open PR linked to a card against the three-section PR contr
 
 3. **For each violation**:
    - Comment on the PR pointing at the failing section + the fix template from the `board-superpowers:enforcing-pr-contract` skill's references.
-   - The card Status transition back to `In Progress` is a mutating action. Apply the 5-step sequence from "How mutating actions are handled" below.
+   - The card Status transition back to `In Progress` is a mutating action with action_id 6 (Status flip on an in-flight claim). Apply the 5-step sequence from "How mutating actions are handled" below.
 
 4. **For each compliant PR**: no action — leave the card in `In Review` for human merge approval.
 
@@ -102,7 +102,7 @@ Goal: scan Blocked cards + stale claims; recommend either unblocking actions or 
 
 2. **Read stale claims**: list `claim/N-...` branches; check commit count beyond the initial empty claim marker; flag any > 72h with no progress.
 
-3. **Recommend release** for stale claims older than 7 days with the original Consumer notified — releasing a claim is a mutating action; apply the 5-step sequence from "How mutating actions are handled" below.
+3. **Recommend release** for stale claims older than 7 days with the original Consumer notified — releasing a claim is a mutating action with action_id 8 (cancel claim). Apply the 5-step sequence from "How mutating actions are handled" below.
 
 `references/triage.md` covers blocker classification (external-dependency / decision-pending / stale-block), the release procedure, suspended-card review, and what's intentionally NOT in this routine (estimate calibration, velocity tracking — those are out of scope).
 
@@ -111,10 +111,11 @@ Goal: scan Blocked cards + stale claims; recommend either unblocking actions or 
 Every mutating action this skill performs (Status flips, card body writes, PR comments, branch deletes) follows this 5-step sequence:
 
 At each mutating action point in this routine:
-1. Resolve the action's action_id (from
-   `board-superpowers:classifying-actions/references/action-id-catalog.md`).
+1. Resolve the action's action_id (from the `action-id-catalog.md`
+   file inside the `board-superpowers:classifying-actions` skill's
+   `references/`).
 2. Invoke `board-superpowers:classifying-actions` with that action_id;
-   receive a decision: A (auto) or R (requires approval).
+   receive a decision: A (auto), R (requires approval), or N (forbidden).
 3. If A: act → invoke `board-superpowers:auditing-actions` to record
    one entry.
 4. If R:
@@ -126,5 +127,13 @@ At each mutating action point in this routine:
       to record the approval-and-result.
    e. on decline: invoke `board-superpowers:auditing-actions` to
       record the decline; abort.
+5. If N: refuse the action and surface the block reason; no audit
+   entry at N.
 
-The two atomic skills handle matrix lookup, override merging, schema enforcement, and audit row writing. Per-repo and per-user override rules in `config.local.yml` determine which actions are A-class vs R-class; defaults are conservative.
+Read-only routines (e.g., the daily-read marker at step 5 of the
+daily routine) may invoke `board-superpowers:auditing-actions`
+directly without a classification step — the audit row records that
+the routine ran, not a mutating decision. Use this shortcut ONLY
+for non-mutating observations; never for mutating actions.
+
+The two atomic skills handle matrix lookup, override merging, schema enforcement, and audit row writing. Per-repo and per-user override rules in `config.local.yml` determine which actions are A-class vs R-class; tighten the defaults via `autonomy_overrides:` when the architect wants more rows promoted to A.
