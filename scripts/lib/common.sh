@@ -1058,24 +1058,51 @@ bsp_ensure_venv() {
 
     command -v uv >/dev/null 2>&1 || return 5
 
-    local target_pyproject="${repo_root}/.board-superpowers/pyproject.toml"
     local plugin_root
     plugin_root="$(bsp_plugin_root)"
     local template_pyproject="${plugin_root}/scripts/templates/pyproject.toml"
     local template_lock="${plugin_root}/scripts/templates/uv.lock"
+    [ -f "${template_pyproject}" ] || return 6
 
+    # Acquire mkdir-based lock to serialize parallel callers against the
+    # same repo (e.g., two SKILL invocations triggering venv create
+    # simultaneously). mkdir is atomic on POSIX. Best-effort 60s timeout;
+    # on timeout treat as create-fail so caller falls back to
+    # jsonl mode=degraded-venv-create-failed.
+    local lockdir="${repo_root}/.board-superpowers/.venv-create.lock"
+    mkdir -p "${repo_root}/.board-superpowers" 2>/dev/null || true
+    local elapsed=0
+    while ! mkdir "${lockdir}" 2>/dev/null; do
+        sleep 1
+        elapsed=$((elapsed + 1))
+        if [ "${elapsed}" -ge 60 ]; then
+            return 7
+        fi
+    done
+
+    # Re-check after acquiring lock — another caller may have already
+    # created the venv between our first check and lock acquisition.
+    if [ -x "${venv_python}" ]; then
+        rmdir "${lockdir}" 2>/dev/null || true
+        printf '%s\n' "${venv_python}"
+        return 0
+    fi
+
+    local target_pyproject="${repo_root}/.board-superpowers/pyproject.toml"
     if [ ! -f "${target_pyproject}" ]; then
-        [ -f "${template_pyproject}" ] || return 6
         cp "${template_pyproject}" "${target_pyproject}"
         # uv.lock is best-effort — its absence is not fatal (uv sync can
         # regenerate). Plugin should always ship it though.
         cp "${template_lock}" "${repo_root}/.board-superpowers/uv.lock" 2>/dev/null || true
     fi
 
-    (cd "${repo_root}/.board-superpowers/" && uv sync 2>&1) >&2 || return 7
-
-    printf '%s\n' "${venv_python}"
-    return 0
+    if (cd "${repo_root}/.board-superpowers/" && uv sync 2>&1) >&2; then
+        rmdir "${lockdir}" 2>/dev/null || true
+        printf '%s\n' "${venv_python}"
+        return 0
+    fi
+    rmdir "${lockdir}" 2>/dev/null || true
+    return 7
 }
 
 # --- audit DB URL resolution --------------------------------------------
@@ -1148,7 +1175,12 @@ import os, sys
 try:
     import yaml
 except ImportError:
-    sys.exit(0)  # PyYAML not in venv — silent fallback to default
+    sys.stderr.write(
+        '[bsp WARN] PyYAML missing in venv; autonomy_overrides not applied '
+        '(falling back to ADR-0006 matrix default). Run uv sync in '
+        '<repo>/.board-superpowers/ to install.\n'
+    )
+    sys.exit(0)
 
 repo_root = os.environ['BSP_REPO_ROOT']
 action_id = int(os.environ['BSP_ACTION_ID'])
@@ -1167,16 +1199,25 @@ def load_overrides(path):
 user_overrides = load_overrides(os.path.join(home, '.board-superpowers', 'overrides.yml'))
 project_overrides = load_overrides(os.path.join(repo_root, '.board-superpowers', 'config.local.yml'))
 
-# Project layer wins on conflict per spec 03 § Merge semantics.
+# Project layer wins on conflict per spec 03 § Merge semantics. Validate
+# class enum BEFORE assignment so a malformed entry (missing or bad
+# `class`) does NOT silently overwrite a valid earlier entry.
+VALID_CLASSES = ('A', 'R', 'N')
 chosen = None
-for entry in user_overrides:
-    if entry.get('action_id') == action_id:
-        chosen = entry.get('class')
-for entry in project_overrides:
-    if entry.get('action_id') == action_id:
-        chosen = entry.get('class')
+for layer_name, entries in (('user', user_overrides), ('project', project_overrides)):
+    for entry in entries:
+        if entry.get('action_id') != action_id:
+            continue
+        klass = entry.get('class')
+        if klass in VALID_CLASSES:
+            chosen = klass
+        else:
+            sys.stderr.write(
+                f'[bsp WARN] {layer_name}-layer override entry for '
+                f'action_id={action_id} has invalid class {klass!r}; ignoring.\n'
+            )
 
-if chosen in ('A', 'R', 'N'):
+if chosen in VALID_CLASSES:
     print(chosen)
 PY
 )"
