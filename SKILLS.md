@@ -202,26 +202,40 @@ means for board-superpowers" #3 for the full rationale.
   `classifying-actions`, `auditing-actions`.
 - **Composes (cross-plugin)**: see § "Cross-plugin edges" below.
 
-#### `bootstrapping-repo` (deferred to v1-complete)
+#### `bootstrapping-repo` (landing in v0.2.0)
 
-- **Role**: §1.5.0 dep check + F-B1 (host bootstrap) + F-B2
-  (per-repo bootstrap, with 5 sub-capabilities: standard
-  labels, Status validation, `config.yml` write, `.gitignore`
-  entry, BYO-RDBMS credential setup).
-- **Body target**: 300-400 lines.
-- **References folder**:
-  `references/{intro,first-time-user-guide,byo-rdbms-setup,project-creation-walkthrough}.md`.
-- **Composes (atomic)**: `board-canon` (read schema invariants
-  for Status validation), `auditing-actions`.
+> **Status**: skill body + references shipped in v0.2.0 (this PR's
+> Card 2). Slice 7 of that card promotes this entry to v1-minimum
+> (5 of 10 → 6 of 10) and refines the catalog text. The minimal
+> "landing in v0.2.0" wording here lets `verify-skill-metadata.sh`
+> recognize the skill ahead of slice 7's full SKILLS.md restructure.
+
+- **Role**: F-B1 (host bootstrap) + F-B2 (per-repo bootstrap, with
+  5 sub-capabilities: standard labels, Status validation,
+  `config.yml` write, `.gitignore` entry, BYO-RDBMS credential
+  setup) + step 4 routing-block injection into `CLAUDE.md` +
+  `AGENTS.md` + initial host-local `state.yml` write.
+- **Body target**: 250-450 lines (molecular budget).
+- **References folder**: `references/{intro,first-time-user-guide}.md`
+  + `references/changelog/v0.2.0.md`. (Additional reference files —
+  `byo-rdbms-setup`, `project-creation-walkthrough` — land in slice
+  7's polish pass per the card body's slice 7 scope.)
+- **Composes (atomic)**: `board-canon` (read schema invariants for
+  Status validation; static reference at v1-minimum). The deferred
+  atomic `auditing-actions` is inlined as the v1-minimum-degraded
+  jsonl audit trace via `bsp_audit_local_write`.
 - **Composes (cross-plugin)**: none (bootstrap is
   board-superpowers-internal).
-- **Trigger model**: `INVOKE: bootstrapping-repo` marker
-  injected by the `SessionStart` hook when `manifest.yml` or
-  `state.yml` is absent (fast path), OR architect explicitly
-  says "set up board-superpowers" (fallback path). Per the hook
-  intent injection pattern in
-  [`docs/architecture/0004-component-architecture.md`](./docs/architecture/0004-component-architecture.md)
+- **Trigger model**: `INVOKE: bootstrapping-repo` marker injected
+  by the `SessionStart` hook when `manifest.yml` or per-repo
+  `state.yml` is absent (fast path), OR architect explicitly says
+  "set up board-superpowers" / "first time on this repo" /
+  "bootstrap this repo" (fallback path). Per the hook intent
+  injection pattern in [`docs/architecture/0004-component-architecture.md`](./docs/architecture/0004-component-architecture.md)
   § "Hook intent injection pattern".
+- **Tier 2 frontmatter**: `when_to_use` (extended trigger
+  vocabulary covering the architect-spoken fallback phrases plus
+  the entry-skill state-probe trigger).
 
 #### `migrating-repo-version` (deferred to v1-complete)
 
