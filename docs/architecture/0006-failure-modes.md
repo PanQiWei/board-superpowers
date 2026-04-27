@@ -37,6 +37,13 @@ Each failure mode below carries four mandatory fields:
   `0005-contracts/06-audit-log-schema.md` § "Core schema — 8 columns".
   When the audit log itself is unavailable (Scenario B), the shape
   describes the v1-minimum-degraded local jsonl entry instead.
+  Additive failure-payload keys used below (`payload.error_class`,
+  `payload.retry_after_seconds`, `payload.winner_branch_sha`,
+  `payload.target_path`, etc.) are local conventions established by
+  this doc within `payload`'s per-`action_id` JSONB envelope; they
+  are NOT pre-declared in `06-audit-log-schema.md`'s schema tables,
+  which leave `payload` shape per-`action_id`. Keeping them documented
+  here lets future tooling discover them from one place.
 - **Recovery path.** The concrete steps that restore healthy operation,
   separated by who acts (architect / Consumer / plugin code) and whether
   the recovery is automatic, opt-in, or manual.
