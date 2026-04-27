@@ -12,8 +12,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
 source "${SCRIPT_DIR}/lib/common.sh"
 
-REPO_ROOT="$(bsp_primary_repo_root "${PWD}")"
-cd "${REPO_ROOT}"
+# Resolve plugin root from SCRIPT_DIR rather than bsp_primary_repo_root.
+# bsp_primary_repo_root follows .git/common-dir, which from a worktree
+# resolves to the main repo's working tree — wrong for a CI gate that
+# wants to scan the *current* working tree (which may have unpushed
+# tests / verify-* scripts the main repo lacks).
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${PLUGIN_ROOT}"
 
 OVERALL_RC=0
 
