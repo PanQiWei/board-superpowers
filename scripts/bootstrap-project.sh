@@ -740,7 +740,6 @@ elif [ -n "${BOARD_SP_AUDIT_DB_URL:-}" ]; then
 elif [ "${BSP_AUDIT_DECLINED:-0}" != "1" ] && [ -f "${CREDENTIALS_FILE}" ]; then
     RESOLVED_DB_URL="$(credentials_yml_dsn "${CREDENTIALS_FILE}")"
 fi
-: "${RESOLVED_DB_URL}"  # suppress SC2034 — consumed by step 2g below
 
 # --- Step 2f — uv sync per-repo venv ------------------------------------
 #
@@ -781,6 +780,34 @@ else
     [ "${COPIED_LOCK}" = "1" ] && rm -f "${TARGET_LOCK}"
     rm -rf "${REPO_ROOT}/.board-superpowers/.venv"
     bsp_die "step 2f: venv setup failed; investigate uv (network / proxy / lock conflict / disk full); credentials.yml from step 2e preserved; re-run bootstrap-project.sh after fix"
+fi
+
+# --- Step 2g — apply audit DDL (when audit_db_url set) ------------------
+#
+# Invokes audit-init.sh inline to create the 8-column audit_log table.
+# On DDL failure (exit 1 or 3): warns and continues — architect can
+# re-run audit-init.sh manually after fixing the DB. credentials.yml
+# is preserved regardless.
+# On exit 2 (script bug): bootstrap-project exits 1 (hard failure).
+
+if [ -n "${RESOLVED_DB_URL}" ]; then
+    bsp_log "step 2g: applying audit DDL via audit-init.sh"
+    AUDIT_INIT_RC=0
+    BOARD_SP_AUDIT_DB_URL="${RESOLVED_DB_URL}" \
+        bash "$(bsp_plugin_root)/scripts/audit-init.sh" || AUDIT_INIT_RC=$?
+    case "${AUDIT_INIT_RC}" in
+        0)
+            bsp_log "step 2g: audit DB initialized"
+            ;;
+        2)
+            bsp_die "step 2g: audit-init.sh exited 2 (script bug); inspect scripts/audit-init.sh"
+            ;;
+        *)
+            bsp_warn "step 2g: audit DDL apply failed (exit ${AUDIT_INIT_RC}); audit DB not usable until fixed (run 'bash scripts/audit-init.sh' manually after resolving)"
+            # Do NOT roll back credentials.yml — architect can reattempt.
+            # Bootstrap as a whole still succeeds.
+            ;;
+    esac
 fi
 
 # --- Step 4 — dual-file routing block injection --------------------------
@@ -944,5 +971,5 @@ else
     bsp_log "wrote ${STATE_FILE}"
 fi
 
-bsp_log "F-B2 slice 4 complete (steps 2a-2e + step 4 routing block injection + state.yml with routing_blocks)."
+bsp_log "F-B2 slice 4 complete (steps 2a-2g + step 4 routing block injection + state.yml with routing_blocks)."
 exit 0
