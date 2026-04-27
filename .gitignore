@@ -31,8 +31,8 @@ venv/
 .claude/logs/
 .claude/tmp/
 
-# board-superpowers local state (claim markers are per-session)
-.board-superpowers/claims/
+# board-superpowers local state
+.board-superpowers/
 
 # board-superpowers Consumer session plan briefs — scratch input that
 # the Consumer hands to subagent-driven-development. Not a durable
