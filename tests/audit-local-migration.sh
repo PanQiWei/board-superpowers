@@ -496,6 +496,63 @@ check '2-level regression: legacy entry preserved' \
 rm -rf "${TMP}"
 
 # ---------------------------------------------------------------------------
+# Scenario 7: idempotent — second invocation does NOT re-emit migration log line
+# ---------------------------------------------------------------------------
+# Per PR #30 Human Verification TODO: confirm `bsp_log` migration line
+# lands in stderr exactly ONCE. The first invocation discovers + moves
+# the legacy file; the second invocation sees the new path exists and
+# never enters the migration block, so no migration log line is emitted.
+printf 'Scenario 7: migration log line emits exactly once (idempotent stderr)\n'
+
+TMP="$(mktemp -d)"
+HOME_DIR="${TMP}/home"
+REPO_ROOT="${TMP}/checkout/board-superpowers"
+mkdir -p "${HOME_DIR}/.board-superpowers/somehost/board-superpowers"
+mkdir -p "${REPO_ROOT}"
+LEGACY_FILE="${HOME_DIR}/.board-superpowers/somehost/board-superpowers/audit-local.jsonl"
+printf '{"ts":"legacy"}\n' > "${LEGACY_FILE}"
+
+NORMALIZED="$(normalize_path "${REPO_ROOT}")"
+NEW_FILE="${HOME_DIR}/.board-superpowers/repos/${NORMALIZED}/audit-local.jsonl"
+
+# First invocation — captures stderr, expects "migrated legacy file" line.
+ERR1="$(bash -c "
+    set -euo pipefail
+    export HOME='${HOME_DIR}'
+    source '${COMMON_SH}'
+    bsp_audit_local_write '${REPO_ROOT}' '300' 'R' 'managing-board' 'first-emits-migration'
+" 2>&1 1>/dev/null)"
+
+check 'idempotent log: first invocation emits migration line' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq 'migrated legacy file'" -- "${ERR1}"
+check 'idempotent log: legacy file moved after first invocation' \
+    test ! -f "${LEGACY_FILE}"
+check 'idempotent log: new file exists after first invocation' \
+    test -f "${NEW_FILE}"
+
+# Second invocation — no legacy left to migrate; stderr must NOT
+# contain the migration log line.
+ERR2="$(bash -c "
+    set -euo pipefail
+    export HOME='${HOME_DIR}'
+    source '${COMMON_SH}'
+    bsp_audit_local_write '${REPO_ROOT}' '301' 'R' 'managing-board' 'second-no-migration'
+" 2>&1 1>/dev/null)"
+
+check_not 'idempotent log: second invocation does NOT emit migration line' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq 'migrated legacy file'" -- "${ERR2}"
+check_not 'idempotent log: second invocation does NOT emit "completed by another process" line' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq 'completed by another process'" -- "${ERR2}"
+check_not 'idempotent log: second invocation does NOT emit "migration mv failed" warn' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq 'migration mv failed'" -- "${ERR2}"
+
+# Also verify the new file grew by one line (the second append landed).
+check 'idempotent log: new file has 3 lines (legacy + first + second)' \
+    count_eq "${NEW_FILE}" 3
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 printf '\nResults: %d passed, %d failed\n' "${PASS}" "${FAIL}"
