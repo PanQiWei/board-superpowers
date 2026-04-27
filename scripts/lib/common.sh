@@ -1032,3 +1032,48 @@ bsp_slugify() {
         | sed 's/^-//;s/-$//' \
         | cut -c1-40
 }
+
+# --- venv self-healing ---------------------------------------------------
+#
+# Ensure the per-repo venv at <repo>/.board-superpowers/.venv/ exists and
+# return its python3 absolute path on stdout. Self-healing: if missing,
+# copies plugin-shipped pyproject.toml + uv.lock and runs `uv sync`.
+#
+# Args:   <repo_root>
+# Stdout: absolute path to venv-python on success
+# Returns:
+#   0 - venv ready (path on stdout)
+#   5 - uv missing on PATH (architect must run bootstrap-host.sh)
+#   6 - plugin template corruption (templates/pyproject.toml absent)
+#   7 - uv sync failed (network / proxy / lock conflict / disk full)
+
+bsp_ensure_venv() {
+    local repo_root="${1:?usage: bsp_ensure_venv <repo_root>}"
+    local venv_python="${repo_root}/.board-superpowers/.venv/bin/python3"
+
+    if [ -x "${venv_python}" ]; then
+        printf '%s\n' "${venv_python}"
+        return 0
+    fi
+
+    command -v uv >/dev/null 2>&1 || return 5
+
+    local target_pyproject="${repo_root}/.board-superpowers/pyproject.toml"
+    local plugin_root
+    plugin_root="$(bsp_plugin_root)"
+    local template_pyproject="${plugin_root}/scripts/templates/pyproject.toml"
+    local template_lock="${plugin_root}/scripts/templates/uv.lock"
+
+    if [ ! -f "${target_pyproject}" ]; then
+        [ -f "${template_pyproject}" ] || return 6
+        cp "${template_pyproject}" "${target_pyproject}"
+        # uv.lock is best-effort — its absence is not fatal (uv sync can
+        # regenerate). Plugin should always ship it though.
+        cp "${template_lock}" "${repo_root}/.board-superpowers/uv.lock" 2>/dev/null || true
+    fi
+
+    (cd "${repo_root}/.board-superpowers/" && uv sync 2>&1) >&2 || return 7
+
+    printf '%s\n' "${venv_python}"
+    return 0
+}
