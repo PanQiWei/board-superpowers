@@ -1077,3 +1077,34 @@ bsp_ensure_venv() {
     printf '%s\n' "${venv_python}"
     return 0
 }
+
+# --- audit DB URL resolution --------------------------------------------
+#
+# Per docs/architecture/0005-contracts/03-config-schemas.md § credentials.yml:
+#   1. BOARD_SP_AUDIT_DB_URL env var (highest precedence)
+#   2. ~/.board-superpowers/credentials.yml:audit_db_url
+#   3. (none) → caller falls back to jsonl mode=no-db
+#
+# Stdout: the URL on success; empty string when neither source has a value.
+# Returns: 0 always (absence is a legitimate state, not an error).
+
+bsp_resolve_audit_db_url() {
+    if [ -n "${BOARD_SP_AUDIT_DB_URL:-}" ]; then
+        printf '%s\n' "${BOARD_SP_AUDIT_DB_URL}"
+        return 0
+    fi
+    local creds="${HOME}/.board-superpowers/credentials.yml"
+    if [ -f "${creds}" ]; then
+        # yaml_get is defined in bootstrap-host.sh + bootstrap-project.sh.
+        # Inline the same grep+sed shape here to avoid a cross-file dep.
+        local url
+        url="$(grep -E '^audit_db_url[[:space:]]*:' "${creds}" 2>/dev/null \
+                | head -n1 \
+                | sed -E 's/^audit_db_url[[:space:]]*:[[:space:]]*//; s/^"//; s/"$//')"
+        if [ -n "${url}" ]; then
+            printf '%s\n' "${url}"
+            return 0
+        fi
+    fi
+    return 0
+}
