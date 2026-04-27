@@ -44,7 +44,13 @@ ALLOWED = TIER_1_FIELDS | TIER_2_FIELDS
 YAML_SPECIAL_CHARS = set(":,*&!|>'\"[]{}#%@`")
 
 def extract_frontmatter(path):
-    """Return frontmatter dict + raw text. Returns (None, None) if absent."""
+    """Return frontmatter dict + raw text. Returns (None, None) if absent.
+
+    Handles `key: |` and `key: >` block scalars: indented continuation
+    lines after them are treated as the value, NOT as new key-value
+    pairs (so a description containing `board-superpowers:foo` does not
+    trip the Tier 3 parser).
+    """
     with open(path) as f:
         text = f.read()
     m = re.match(r'^---\s*\n(.*?)\n---\s*\n', text, re.DOTALL)
@@ -52,14 +58,62 @@ def extract_frontmatter(path):
         return None, None
     raw = m.group(1)
     fm = {}
+    in_block = False
+    block_key = None
+    block_lines = []
+    block_indent = None  # the indent at which the block's content lives
+
+    def flush_block():
+        if block_key is not None:
+            fm[block_key] = '\n'.join(block_lines).strip()
+
     for line in raw.split('\n'):
+        if in_block:
+            stripped = line.lstrip(' ')
+            indent = len(line) - len(stripped)
+            # An empty line stays inside the block.
+            if not stripped:
+                block_lines.append('')
+                continue
+            # First content line establishes the block's indent.
+            if block_indent is None:
+                block_indent = indent
+            # Lines indented at or beyond the block's indent stay inside.
+            if indent >= block_indent:
+                block_lines.append(stripped)
+                continue
+            # Otherwise: end of block. Flush and re-process current line
+            # as a normal frontmatter line below.
+            flush_block()
+            in_block = False
+            block_key = None
+            block_lines = []
+            block_indent = None
+
         line_stripped = line.strip()
         if not line_stripped or line_stripped.startswith('#'):
+            continue
+        # Top-level keys live at indent 0; indented lines without an
+        # active block scalar are mapping continuations we ignore.
+        if line.startswith(' '):
             continue
         if ':' not in line:
             continue
         k, v = line.split(':', 1)
-        fm[k.strip()] = v.strip()
+        k = k.strip()
+        v = v.strip()
+        # Block scalar indicator (`|`, `>`, plus optional chomping `+`/`-`).
+        if v in ('|', '>') or re.match(r'^[|>][+-]?\d*$', v):
+            in_block = True
+            block_key = k
+            block_lines = []
+            block_indent = None
+        else:
+            fm[k] = v
+
+    if in_block:
+        flush_block()
+
     return fm, raw
 
 for entry in sorted(os.listdir(skills_dir)):
