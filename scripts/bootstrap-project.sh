@@ -896,8 +896,16 @@ fi
 if [ -n "${RESOLVED_DB_URL}" ]; then
     bsp_log "step 2g: applying audit DDL via audit-init.sh"
     AUDIT_INIT_RC=0
-    BOARD_SP_AUDIT_DB_URL="${RESOLVED_DB_URL}" \
-        bash "$(bsp_plugin_root)/scripts/audit-init.sh" || AUDIT_INIT_RC=$?
+    # cd to REPO_ROOT before invoking audit-init.sh so its PWD-based
+    # bsp_primary_repo_root() call resolves the correct repo and finds
+    # the venv created by step 2f at <REPO_ROOT>/.board-superpowers/.venv.
+    # Without this, running bootstrap-project.sh from a non-repo cwd
+    # (e.g. the architect's home dir) would leave audit-init.sh unable
+    # to locate the venv. Per Codex MAJOR #5.
+    (cd "${REPO_ROOT}" && \
+        BOARD_SP_AUDIT_DB_URL="${RESOLVED_DB_URL}" \
+        bash "${PLUGIN_ROOT}/scripts/audit-init.sh") \
+        || AUDIT_INIT_RC=$?
     case "${AUDIT_INIT_RC}" in
         0)
             bsp_log "step 2g: audit DB initialized"
