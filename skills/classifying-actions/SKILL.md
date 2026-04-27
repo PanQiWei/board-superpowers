@@ -11,7 +11,8 @@ description: |
   bootstrapping-repo). Apply even when the action looks obviously safe;
   the decision table is the source of truth, not intuition. Do NOT use
   for read-only actions or for queries that surface information without
-  changing state.
+  changing state. Do NOT invoke for the audit-row write step that
+  follows the decision — that is `board-superpowers:auditing-actions`.
 user-invocable: false
 ---
 
@@ -68,8 +69,8 @@ without a working venv).
 
 ## What this skill does NOT cover
 
-- **Writing the audit row** — that's `auditing-actions`. This skill
-  decides; the other records.
+- **Writing the audit row** — that's `board-superpowers:auditing-actions`.
+  This skill decides; the other records.
 - **Surfacing the proposal to the architect** — that's the molecular
   caller's UX responsibility (managing-board / consuming-card /
   bootstrapping-repo).

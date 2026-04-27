@@ -1,14 +1,16 @@
 ---
 name: auditing-actions
 description: |
-  Use right after classifying-actions returns a decision, every time a
-  board-superpowers skill is recording what it is about to do or what
-  it just did. For actions that proceed automatically, apply once after
-  the action lands. For actions that wait for architect approval, apply
-  once when first proposing the action and again after the architect
-  approves or declines. Apply even when the action seems too small to
-  log — every mutating action gets a row, no exceptions. Do NOT use for
-  read-only actions; reads are not audited.
+  Use right after `board-superpowers:classifying-actions` returns a
+  decision, every time a board-superpowers skill is recording what it
+  is about to do or what it just did. For actions that proceed
+  automatically, apply once after the action lands. For actions that
+  wait for architect approval, apply once when first proposing the
+  action and again after the architect approves or declines. Apply
+  even when the action seems too small to log — every mutating action
+  gets a row, no exceptions. Do NOT use for read-only actions; reads
+  are not audited. Do NOT invoke to determine the A/R/N decision —
+  that is `board-superpowers:classifying-actions`.
 user-invocable: false
 ---
 
@@ -21,14 +23,18 @@ happened when the action ran.
 
 ## How to apply this skill
 
-The caller has just received an A/R decision from `classifying-actions`.
-Now the caller calls `audit-log-write.sh` once (for A) or twice (for R)
-with structured args.
+The caller has just received an A/R decision from
+`board-superpowers:classifying-actions`. Now the caller invokes
+`scripts/audit-log-write.sh` (located inside the board-superpowers
+plugin) once for A-class actions or twice for R-class actions, with
+structured args. Examples below assume the caller has resolved the
+plugin root path; `scripts/lib/common.sh` ships a `bsp_plugin_root`
+helper that does this cross-platform.
 
 For A-class actions:
 
 ```bash
-bash $(bsp_plugin_root)/scripts/audit-log-write.sh \
+bash <plugin-root>/scripts/audit-log-write.sh \
   --action-id <int> \
   --decision A \
   --skill <calling-skill-name> \
@@ -41,13 +47,13 @@ For R-class actions, two invocations — propose, then resolve:
 
 ```bash
 # Step 1: propose entry (before architect ack)
-bash $(bsp_plugin_root)/scripts/audit-log-write.sh \
+bash <plugin-root>/scripts/audit-log-write.sh \
   --action-id <int> --decision R --skill <name> \
   --approval-stage propose --outcome success \
   --payload '<proposal-json>'
 
 # Step 2: resolve entry (after architect approves OR declines)
-bash $(bsp_plugin_root)/scripts/audit-log-write.sh \
+bash <plugin-root>/scripts/audit-log-write.sh \
   --action-id <int> --decision R --skill <name> \
   --approval-stage approved \         # OR rejected
   --outcome <success|failure> \       # OR success (for rejected)
@@ -57,7 +63,7 @@ bash $(bsp_plugin_root)/scripts/audit-log-write.sh \
 The script returns exit 0 when the row was written somewhere — to the
 configured RDBMS (preferred) or to a host-local jsonl file (fallback).
 The caller does NOT need to handle DB errors specially; the script
-self-heals via `bsp_ensure_venv` and degrades gracefully.
+self-heals (recreating the venv if needed) and degrades gracefully.
 
 ## Quick reference
 
@@ -73,8 +79,8 @@ self-heals via `bsp_ensure_venv` and degrades gracefully.
 
 ## What this skill does NOT cover
 
-- **Deciding A vs R vs N** — that's `classifying-actions`. This skill
-  records what was decided.
+- **Deciding A vs R vs N** — that's `board-superpowers:classifying-actions`.
+  This skill records what was decided.
 - **Drafting the proposal text** — that's the molecular caller's UX
   responsibility. This skill writes the text into the `payload` field.
 - **Surfacing degraded-mode warnings to the architect** — the script

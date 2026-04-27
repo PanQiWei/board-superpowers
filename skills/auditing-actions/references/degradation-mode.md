@@ -21,13 +21,13 @@ These are the values that `audit-log-write.sh` writes for new entries.
 
 ## Legacy mode field value
 
-This value appears in jsonl files written by older plugin versions
-(v0.2.x). Readers MUST handle it for forward-compat; writers MUST NOT
-emit new entries with this value.
+This value appears in jsonl files written by older plugin versions.
+Readers MUST handle it for forward-compat; writers MUST NOT emit new
+entries with this value.
 
 | Value | Origin |
 |-------|--------|
-| `v1-minimum-degraded` | Written by plugin v0.2.x before audit governance shipped. All audit rows landed in jsonl regardless of DB configuration; the mode value identified that state. |
+| `v1-minimum-degraded` | Written by older plugin versions where every audit row landed in jsonl regardless of DB configuration. Readers encounter this on hosts upgraded from those versions. |
 
 ## Reader convention
 

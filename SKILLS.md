@@ -285,7 +285,7 @@ means for board-superpowers" #3 for the full rationale.
   `autonomy_overrides:` parsing (project + user layers via
   `bsp_resolve_autonomy_class`). The caller hands in an
   action_id; this skill returns the A / R / N decision.
-- **Body target**: 200-250 lines.
+- **Body target**: ≤ 200 lines (frequently-loaded atomic; current 80).
 - **References folder**:
   `references/{matrix,triage-rule,override-parsing,action-id-catalog}.md`.
 - **Called by**: every mutating skill (5 of them).
@@ -303,7 +303,7 @@ means for board-superpowers" #3 for the full rationale.
   conventions + degradation mode (when DB unavailable, A-class
   degrades to R-class with jsonl fallback, explicit mode-field
   enum).
-- **Body target**: 200-300 lines.
+- **Body target**: ≤ 200 lines (frequently-loaded atomic; current 84).
 - **References folder**:
   `references/{schema,two-entry-rule,db-write-conventions,degradation-mode}.md`.
 - **Called by**: every mutating skill (5 of them) — invoked

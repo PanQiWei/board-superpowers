@@ -1,6 +1,6 @@
 # Decision matrix — Producer rows 1-14 + Consumer rows 100-111
 
-This is the SPOT for the D-AUTONOMY-1 decision table. Every mutating action
+This is the canonical decision table for the skill. Every mutating action
 maps to one row; the row's `default class` is the starting point for
 classification (see `triage-rule.md` for the short-circuit rule that may
 escalate Auto to Reserved, and `override-parsing.md` for the layered
@@ -56,6 +56,6 @@ the audit entry:
 ## Unknown action_id rule
 
 If the caller passes an `action_id` not listed above, the algorithm
-returns A (default fall-through per ADR-0006 §2 step 5). This is
-deliberate — new mutating actions that haven't yet been classified
-default to safe-on-execution rather than block-on-unknown.
+returns A (default fall-through). This is deliberate — new mutating
+actions that haven't yet been classified default to safe-on-execution
+rather than block-on-unknown.
