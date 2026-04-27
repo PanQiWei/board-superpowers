@@ -56,25 +56,38 @@ case "${SCHEME}" in
             sqlite:////*|sqlite3:////*) DB_PATH="/$(printf '%s' "${AUDIT_DB_URL}" | sed -E 's|^sqlite[3]?:////||')" ;;
         esac
         mkdir -p "$(dirname "${DB_PATH}")"
-        "${VENV_PYTHON}" - <<PY
-import sqlite3, sys
-conn = sqlite3.connect("${DB_PATH}")
-with open("${SCHEMA_DIR}/audit-schema.sqlite.sql") as f:
+        BSP_DB_PATH="${DB_PATH}" \
+        BSP_SCHEMA_FILE="${SCHEMA_DIR}/audit-schema.sqlite.sql" \
+        "${VENV_PYTHON}" - <<'PY'
+import os, sqlite3
+conn = sqlite3.connect(os.environ['BSP_DB_PATH'])
+with open(os.environ['BSP_SCHEMA_FILE']) as f:
     conn.executescript(f.read())
 conn.commit()
 conn.close()
 PY
         ;;
     postgresql|postgres)
-        bsp_require_cmd psql "install via 'brew install libpq && brew link libpq --force' on macOS"
+        # Explicit psql client check returns exit 3 (script docstring contract);
+        # bsp_require_cmd would have exited 1 instead.
+        if ! command -v psql >/dev/null 2>&1; then
+            bsp_warn "psql client not on PATH — install via 'brew install libpq && brew link libpq --force' on macOS, or apt-get install postgresql-client on Linux"
+            exit 3
+        fi
         psql "${AUDIT_DB_URL}" -f "${SCHEMA_DIR}/audit-schema.postgres.sql" >&2
         ;;
     mysql|mysql+pymysql)
         # Use venv-python pymysql for executescript-equivalent.
-        "${VENV_PYTHON}" - <<PY
-import pymysql, sys
+        # Pass values via env vars so unusual chars in DSN/path can't break
+        # the Python source (heredoc is quoted to disable shell interpolation).
+        BSP_AUDIT_DB_URL="${AUDIT_DB_URL}" \
+        BSP_SCHEMA_FILE="${SCHEMA_DIR}/audit-schema.mysql.sql" \
+        "${VENV_PYTHON}" - <<'PY'
+import os
+import pymysql
 from urllib.parse import urlparse
-url = urlparse("${AUDIT_DB_URL}".replace("mysql+pymysql://", "mysql://"))
+url_str = os.environ['BSP_AUDIT_DB_URL'].replace('mysql+pymysql://', 'mysql://')
+url = urlparse(url_str)
 conn = pymysql.connect(
     host=url.hostname or 'localhost',
     port=url.port or 3306,
@@ -82,7 +95,7 @@ conn = pymysql.connect(
     password=url.password,
     database=url.path.lstrip('/'),
 )
-with open("${SCHEMA_DIR}/audit-schema.mysql.sql") as f:
+with open(os.environ['BSP_SCHEMA_FILE']) as f:
     sql = f.read()
 with conn.cursor() as cur:
     for stmt in sql.split(';'):
@@ -104,11 +117,19 @@ case "${SCHEME}" in
         VER=$(psql "${AUDIT_DB_URL}" -tA -c "SELECT version FROM audit_schema_meta LIMIT 1")
         ;;
     mysql|mysql+pymysql)
-        VER=$("${VENV_PYTHON}" - <<PY
+        VER=$(BSP_AUDIT_DB_URL="${AUDIT_DB_URL}" "${VENV_PYTHON}" - <<'PY'
+import os
 import pymysql
 from urllib.parse import urlparse
-url = urlparse("${AUDIT_DB_URL}".replace("mysql+pymysql://", "mysql://"))
-conn = pymysql.connect(host=url.hostname, port=url.port or 3306, user=url.username, password=url.password, database=url.path.lstrip('/'))
+url_str = os.environ['BSP_AUDIT_DB_URL'].replace('mysql+pymysql://', 'mysql://')
+url = urlparse(url_str)
+conn = pymysql.connect(
+    host=url.hostname,
+    port=url.port or 3306,
+    user=url.username,
+    password=url.password,
+    database=url.path.lstrip('/'),
+)
 with conn.cursor() as cur:
     cur.execute("SELECT version FROM audit_schema_meta LIMIT 1")
     row = cur.fetchone()
