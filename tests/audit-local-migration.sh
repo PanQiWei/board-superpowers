@@ -380,6 +380,122 @@ check 'mode field preserved' \
 rm -rf "${TMP}"
 
 # ---------------------------------------------------------------------------
+# Scenario 6: 3-level legacy path — owner/name split from old caller signature
+# ---------------------------------------------------------------------------
+# Per issue #27: v0.1.0-minimum's `bsp_audit_local_write <host> <repo>`
+# signature accepted a `<repo>` arg containing a slash. Callers that
+# passed `<repo>=<owner>/<name>` (e.g. `PanQiWei/board-superpowers`)
+# ended up with a THREE-level legacy path:
+#
+#   ~/.board-superpowers/<host>/<owner>/<name>/audit-local.jsonl
+#
+# The migration scan glob was previously two-levels-only
+# (`/*/*/audit-local.jsonl`) and silently missed these paths. Seeded
+# legacy persisted; new path started fresh; legacy entries were lost
+# from the canonical timeline until manually merged.
+#
+# Migration MUST detect 3-level legacy paths whose innermost segment
+# (the "<name>" part) matches basename(repo_root). The intermediate
+# "<owner>" segment is the org slug; preferred match still uses
+# `git remote get-url origin` org parsing (now compared against
+# the parent of the innermost dir, not its grandparent).
+printf 'Scenario 6: 3-level legacy path (host/owner/name) — migration triggers\n'
+
+TMP="$(mktemp -d)"
+HOME_DIR="${TMP}/home"
+REPO_ROOT="${TMP}/checkout/board-superpowers"
+mkdir -p "${REPO_ROOT}"
+# Seed a 3-level legacy path mimicking v0.1.0-minimum caller that
+# passed <repo>="PanQiWei/board-superpowers".
+mkdir -p "${HOME_DIR}/.board-superpowers/somehost/PanQiWei/board-superpowers"
+LEGACY_FILE="${HOME_DIR}/.board-superpowers/somehost/PanQiWei/board-superpowers/audit-local.jsonl"
+printf '{"ts":"3-level-legacy","action_id":"100"}\n' > "${LEGACY_FILE}"
+
+NORMALIZED="$(normalize_path "${REPO_ROOT}")"
+NEW_FILE="${HOME_DIR}/.board-superpowers/repos/${NORMALIZED}/audit-local.jsonl"
+
+run_audit_write "${HOME_DIR}" "${REPO_ROOT}" '101' 'R' 'managing-board' 'first-write-after-3-level'
+
+check_not '3-level legacy file moved (no longer at old path)' test -f "${LEGACY_FILE}"
+check '3-level new file exists at canonical path' test -f "${NEW_FILE}"
+check '3-level new file has both legacy + new entries (2 lines)' \
+    count_eq "${NEW_FILE}" 2
+check '3-level legacy entry preserved in migrated file' \
+    grep -q '"ts":"3-level-legacy"' "${NEW_FILE}"
+check '3-level new entry appended after migration' \
+    grep -q '"action_id": "101"' "${NEW_FILE}"
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
+# Scenario 6b: 3-level legacy AND owner-aware match preference
+# ---------------------------------------------------------------------------
+# When git remote points at github.com:<owner>/<repo>, and TWO 3-level
+# candidates have matching innermost basenames but only one matches the
+# org slug, prefer the org-matching one.
+printf 'Scenario 6b: 3-level legacy with owner-slug preference\n'
+
+TMP="$(mktemp -d)"
+HOME_DIR="${TMP}/home"
+REPO_ROOT="${TMP}/checkout/board-superpowers"
+mkdir -p "${REPO_ROOT}"
+# Make repo a real git repo with a github remote so owner_slug parses.
+git -C "${REPO_ROOT}" init --quiet
+git -C "${REPO_ROOT}" remote add origin "git@github.com:PanQiWei/board-superpowers.git"
+
+# Two 3-level legacy candidates: only one is under PanQiWei.
+mkdir -p "${HOME_DIR}/.board-superpowers/host1/SomeoneElse/board-superpowers"
+mkdir -p "${HOME_DIR}/.board-superpowers/host2/PanQiWei/board-superpowers"
+WRONG_LEGACY="${HOME_DIR}/.board-superpowers/host1/SomeoneElse/board-superpowers/audit-local.jsonl"
+RIGHT_LEGACY="${HOME_DIR}/.board-superpowers/host2/PanQiWei/board-superpowers/audit-local.jsonl"
+printf '{"ts":"wrong-owner"}\n' > "${WRONG_LEGACY}"
+printf '{"ts":"correct-owner"}\n' > "${RIGHT_LEGACY}"
+
+NORMALIZED="$(normalize_path "${REPO_ROOT}")"
+NEW_FILE="${HOME_DIR}/.board-superpowers/repos/${NORMALIZED}/audit-local.jsonl"
+
+run_audit_write "${HOME_DIR}" "${REPO_ROOT}" '102' 'R' 'managing-board' 'owner-aware'
+
+check_not 'owner-aware: PanQiWei legacy moved' \
+    test -f "${RIGHT_LEGACY}"
+check 'owner-aware: SomeoneElse legacy NOT moved' \
+    test -f "${WRONG_LEGACY}"
+check 'owner-aware: new file has the correct legacy entry' \
+    grep -q '"ts":"correct-owner"' "${NEW_FILE}"
+check_not 'owner-aware: new file does NOT contain wrong-owner entry' \
+    grep -q '"ts":"wrong-owner"' "${NEW_FILE}"
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
+# Scenario 6c: 2-level legacy STILL works (no regression on existing path layout)
+# ---------------------------------------------------------------------------
+# This is a regression guard for Scenario 1: the glob extension MUST
+# keep matching 2-level legacy paths. Re-runs Scenario 1's exact shape
+# to make the regression coverage explicit.
+printf 'Scenario 6c: 2-level legacy STILL migrates (regression guard)\n'
+
+TMP="$(mktemp -d)"
+HOME_DIR="${TMP}/home"
+REPO_ROOT="${TMP}/checkout/board-superpowers"
+mkdir -p "${HOME_DIR}/.board-superpowers/somehost/board-superpowers"
+mkdir -p "${REPO_ROOT}"
+LEGACY_FILE="${HOME_DIR}/.board-superpowers/somehost/board-superpowers/audit-local.jsonl"
+printf '{"ts":"2-level-still-works"}\n' > "${LEGACY_FILE}"
+
+NORMALIZED="$(normalize_path "${REPO_ROOT}")"
+NEW_FILE="${HOME_DIR}/.board-superpowers/repos/${NORMALIZED}/audit-local.jsonl"
+
+run_audit_write "${HOME_DIR}" "${REPO_ROOT}" '103' 'R' 'managing-board' '2-level-regress-guard'
+
+check_not '2-level regression: legacy file moved' test -f "${LEGACY_FILE}"
+check '2-level regression: new file exists' test -f "${NEW_FILE}"
+check '2-level regression: legacy entry preserved' \
+    grep -q '"ts":"2-level-still-works"' "${NEW_FILE}"
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 printf '\nResults: %d passed, %d failed\n' "${PASS}" "${FAIL}"

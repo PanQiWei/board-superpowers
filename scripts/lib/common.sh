@@ -287,18 +287,29 @@ sys.exit(1)
 #
 # Inline legacy migration:
 #   Before computing the new path, this function checks whether the
-#   canonical new path exists. If not, it scans the legacy
-#   ~/.board-superpowers/<host>/<repo>/audit-local.jsonl layout
-#   (excluding paths under ~/.board-superpowers/repos/) for a match.
+#   canonical new path exists. If not, it scans for legacy paths
+#   (excluding the new ~/.board-superpowers/repos/ subtree). Two legacy
+#   layouts are recognized:
 #
-#   Match heuristic:
-#     - The legacy path's last directory segment (the "<repo>" part)
-#       must equal the basename of the supplied <repo_root>.
+#     2-level:  ~/.board-superpowers/<host>/<repo>/audit-local.jsonl
+#                  (v0.1.0+ caller signature: <repo> = bare basename)
+#     3-level:  ~/.board-superpowers/<host>/<owner>/<name>/audit-local.jsonl
+#                  (v0.1.0-minimum caller that passed <repo>=<owner>/<name>;
+#                  per issue #27 this layout was previously unmatched and
+#                  silently lost during migration)
+#
+#   Match heuristic (applied uniformly across both layouts):
+#     - The legacy path's INNERMOST directory segment (the "<repo>"
+#       or "<name>" part — i.e. `basename(dirname(candidate))`) must
+#       equal `basename(repo_root)`.
 #     - On ambiguity (multiple matches), prefer the one whose
-#       grandparent segment (the "<host>" part) matches the
-#       owner slug parsed from `git -C <repo_root> remote get-url
-#       origin` (when the remote is reachable and parseable).
-#     - Fallback: basename-only match.
+#       owner-position segment matches the owner slug parsed from
+#       `git -C <repo_root> remote get-url origin` (when the remote
+#       is reachable and parseable). The owner-position segment is:
+#         * 2-level: the GRANDPARENT (= `<host>` in that layout's
+#           naming, but functionally an owner-style identifier);
+#         * 3-level: the PARENT-OF-INNERMOST (= `<owner>`).
+#     - Fallback: basename-only match (first one wins).
 #
 #   On match: mkdir -p the new directory and `mv` the legacy file
 #   to the new path. Subsequent calls see the new path exists and
@@ -351,24 +362,64 @@ bsp_audit_local_write() {
                 fi
             fi
 
-            # Scan legacy paths. Skip the new "repos/" subtree.
+            # Scan legacy paths. Two layouts are checked (per issue #27):
+            #   2-level: <legacy_root>/<host>/<repo>/audit-local.jsonl
+            #   3-level: <legacy_root>/<host>/<owner>/<name>/audit-local.jsonl
+            # Bash globs return the literal pattern when no matches exist,
+            # so each candidate is guarded by `[ -f "${candidate}" ]`.
+            # The new layout root (~/.board-superpowers/repos/...) is
+            # excluded by checking for a leading "repos/" in the relative
+            # path under legacy_root.
             local candidate
-            for candidate in "${legacy_root}"/*/*/audit-local.jsonl; do
+            for candidate in \
+                "${legacy_root}"/*/*/audit-local.jsonl \
+                "${legacy_root}"/*/*/*/audit-local.jsonl
+            do
                 [ -f "${candidate}" ] || continue
-                # Path layout: <legacy_root>/<host>/<repo>/audit-local.jsonl
-                local cand_dir host_seg repo_seg
-                cand_dir="$(dirname "${candidate}")"
-                repo_seg="$(basename "${cand_dir}")"
-                host_seg="$(basename "$(dirname "${cand_dir}")")"
+
+                # Relative directory under legacy_root (drop the prefix +
+                # the trailing /audit-local.jsonl). This is the
+                # depth-aware key used to classify the layout.
+                local rel_dir="${candidate#"${legacy_root}/"}"
+                rel_dir="${rel_dir%/audit-local.jsonl}"
+
                 # Skip the new layout root.
-                [ "${host_seg}" = "repos" ] && continue
+                case "${rel_dir}" in
+                    repos|repos/*) continue ;;
+                esac
+
+                local repo_seg owner_pos_seg
+                case "${rel_dir}" in
+                    */*/*)
+                        # 3-level: host/owner/name. The owner-position
+                        # segment is the directory immediately above
+                        # the innermost (`name`).
+                        repo_seg="${rel_dir##*/}"
+                        local _without_name="${rel_dir%/*}"
+                        owner_pos_seg="${_without_name##*/}"
+                        ;;
+                    */*)
+                        # 2-level: host/repo. The owner-position segment
+                        # is the grandparent (`host` in the legacy naming
+                        # but treated as owner-style for matching).
+                        repo_seg="${rel_dir##*/}"
+                        owner_pos_seg="${rel_dir%/*}"
+                        ;;
+                    *)
+                        # Anything shallower can't host a legacy file.
+                        continue
+                        ;;
+                esac
+
                 # Basename match required.
                 [ "${repo_seg}" = "${repo_basename}" ] || continue
-                # Strong match: host_seg equals owner_slug.
-                if [ -n "${owner_slug}" ] && [ "${host_seg}" = "${owner_slug}" ]; then
+
+                # Strong match: owner-position segment equals owner_slug.
+                if [ -n "${owner_slug}" ] && [ "${owner_pos_seg}" = "${owner_slug}" ]; then
                     legacy_match="${candidate}"
                     break
                 fi
+
                 # Otherwise remember the first basename match as fallback.
                 if [ -z "${legacy_match}" ]; then
                     legacy_match="${candidate}"
