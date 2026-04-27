@@ -728,6 +728,20 @@ else
     audit_interactive_prompt
 fi
 
+# Derive RESOLVED_DB_URL for downstream steps (2f + 2g):
+#   - FLAG and env paths are captured directly from their vars.
+#   - credentials.yml path (new or pre-existing) is read from disk.
+#   - Interactive decline (BSP_AUDIT_DECLINED=1) → empty.
+RESOLVED_DB_URL=""
+if [ -n "${AUDIT_DB_URL_FLAG}" ]; then
+    RESOLVED_DB_URL="${AUDIT_DB_URL_FLAG}"
+elif [ -n "${BOARD_SP_AUDIT_DB_URL:-}" ]; then
+    RESOLVED_DB_URL="${BOARD_SP_AUDIT_DB_URL}"
+elif [ "${BSP_AUDIT_DECLINED:-0}" != "1" ] && [ -f "${CREDENTIALS_FILE}" ]; then
+    # shellcheck disable=SC2034  # consumed by steps 2f and 2g below
+    RESOLVED_DB_URL="$(credentials_yml_dsn "${CREDENTIALS_FILE}")"
+fi
+
 # --- Step 4 — dual-file routing block injection --------------------------
 #
 # Per spec § 1.5.2 step 4: inject the canonical routing block into
