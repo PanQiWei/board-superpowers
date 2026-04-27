@@ -321,11 +321,23 @@ sys.exit(1)
 #   On no match: no migration; just create the new path and append.
 
 bsp_audit_local_write() {
-    local repo_root="${1:?usage: bsp_audit_local_write <repo_root> <action_id> <class> <skill> <summary>}"
+    local repo_root="${1:?usage: bsp_audit_local_write <repo_root> <action_id> <class> <skill> <summary> [<mode>]}"
     local action_id="${2:?}"
     local decision="${3:?}"
     local skill="${4:?}"
     local summary="${5:?}"
+    # Optional mode field (6th arg). Defaults to legacy 'v1-minimum-degraded'
+    # for back-compat with callers (e.g., bootstrap scripts) that haven't
+    # been updated to pass an explicit mode. New callers (audit-log-write.sh)
+    # pass one of the v0.3.0 enum values: no-db / degraded-db-unavailable /
+    # degraded-uv-missing / degraded-venv-create-failed.
+    local mode="${6:-v1-minimum-degraded}"
+
+    # Re-derive PATH defensively. Caller may have a stripped PATH; we need
+    # dirname / mkdir / python3 / git regardless. Append caller PATH so
+    # caller's overrides still win. `local` scopes the override to this
+    # function call so consecutive invocations don't keep prepending.
+    local PATH="/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin${PATH:+:${PATH}}"
 
     local path
     path="$(bsp_audit_local_path "${repo_root}")"
@@ -457,11 +469,11 @@ entry = {
     'decision_class': sys.argv[3],
     'skill': sys.argv[4],
     'summary': sys.argv[5],
-    'mode': 'v1-minimum-degraded',
+    'mode': sys.argv[6],
 }
-with open(sys.argv[6], 'a') as f:
+with open(sys.argv[7], 'a') as f:
     f.write(json.dumps(entry) + '\n')
-" "${repo_root}" "${action_id}" "${decision}" "${skill}" "${summary}" "${path}"
+" "${repo_root}" "${action_id}" "${decision}" "${skill}" "${summary}" "${mode}" "${path}"
 
     bsp_log "audit-local: ${decision}-class action ${action_id} (${skill}) → ${path}"
 }
@@ -1025,4 +1037,202 @@ bsp_slugify() {
         | tr -s '-' \
         | sed 's/^-//;s/-$//' \
         | cut -c1-40
+}
+
+# --- venv self-healing ---------------------------------------------------
+#
+# Ensure the per-repo venv at <repo>/.board-superpowers/.venv/ exists and
+# return its python3 absolute path on stdout. Self-healing: if missing,
+# copies plugin-shipped pyproject.toml + uv.lock and runs `uv sync`.
+#
+# Args:   <repo_root>
+# Stdout: absolute path to venv-python on success
+# Returns:
+#   0 - venv ready (path on stdout)
+#   5 - uv missing on PATH (architect must run bootstrap-host.sh)
+#   6 - plugin template corruption (templates/pyproject.toml absent)
+#   7 - uv sync failed (network / proxy / lock conflict / disk full)
+
+bsp_ensure_venv() {
+    local repo_root="${1:?usage: bsp_ensure_venv <repo_root>}"
+    local venv_python="${repo_root}/.board-superpowers/.venv/bin/python3"
+
+    if [ -x "${venv_python}" ]; then
+        printf '%s\n' "${venv_python}"
+        return 0
+    fi
+
+    command -v uv >/dev/null 2>&1 || return 5
+
+    local plugin_root
+    plugin_root="$(bsp_plugin_root)"
+    local template_pyproject="${plugin_root}/scripts/templates/pyproject.toml"
+    local template_lock="${plugin_root}/scripts/templates/uv.lock"
+    [ -f "${template_pyproject}" ] || return 6
+
+    # Acquire mkdir-based lock to serialize parallel callers against the
+    # same repo (e.g., two SKILL invocations triggering venv create
+    # simultaneously). mkdir is atomic on POSIX. Best-effort 60s timeout;
+    # on timeout treat as create-fail so caller falls back to
+    # jsonl mode=degraded-venv-create-failed.
+    local lockdir="${repo_root}/.board-superpowers/.venv-create.lock"
+    mkdir -p "${repo_root}/.board-superpowers" 2>/dev/null || true
+    local elapsed=0
+    while ! mkdir "${lockdir}" 2>/dev/null; do
+        sleep 1
+        elapsed=$((elapsed + 1))
+        if [ "${elapsed}" -ge 60 ]; then
+            return 7
+        fi
+    done
+
+    # Re-check after acquiring lock — another caller may have already
+    # created the venv between our first check and lock acquisition.
+    if [ -x "${venv_python}" ]; then
+        rmdir "${lockdir}" 2>/dev/null || true
+        printf '%s\n' "${venv_python}"
+        return 0
+    fi
+
+    local target_pyproject="${repo_root}/.board-superpowers/pyproject.toml"
+    if [ ! -f "${target_pyproject}" ]; then
+        cp "${template_pyproject}" "${target_pyproject}"
+        # uv.lock is best-effort — its absence is not fatal (uv sync can
+        # regenerate). Plugin should always ship it though.
+        cp "${template_lock}" "${repo_root}/.board-superpowers/uv.lock" 2>/dev/null || true
+    fi
+
+    if (cd "${repo_root}/.board-superpowers/" && uv sync 2>&1) >&2; then
+        rmdir "${lockdir}" 2>/dev/null || true
+        printf '%s\n' "${venv_python}"
+        return 0
+    fi
+    rmdir "${lockdir}" 2>/dev/null || true
+    return 7
+}
+
+# --- audit DB URL resolution --------------------------------------------
+#
+# Per docs/architecture/0005-contracts/03-config-schemas.md § credentials.yml:
+#   1. BOARD_SP_AUDIT_DB_URL env var (highest precedence)
+#   2. ~/.board-superpowers/credentials.yml:audit_db_url
+#   3. (none) → caller falls back to jsonl mode=no-db
+#
+# Stdout: the URL on success; empty string when neither source has a value.
+# Returns: 0 always (absence is a legitimate state, not an error).
+
+bsp_resolve_audit_db_url() {
+    if [ -n "${BOARD_SP_AUDIT_DB_URL:-}" ]; then
+        printf '%s\n' "${BOARD_SP_AUDIT_DB_URL}"
+        return 0
+    fi
+    local creds="${HOME}/.board-superpowers/credentials.yml"
+    if [ -f "${creds}" ]; then
+        # yaml_get is defined in bootstrap-host.sh + bootstrap-project.sh.
+        # Inline the same grep+sed shape here to avoid a cross-file dep.
+        local url
+        url="$(grep -E '^audit_db_url[[:space:]]*:' "${creds}" 2>/dev/null \
+                | head -n1 \
+                | sed -E 's/^audit_db_url[[:space:]]*:[[:space:]]*//; s/^"//; s/"$//')"
+        if [ -n "${url}" ]; then
+            printf '%s\n' "${url}"
+            return 0
+        fi
+    fi
+    return 0
+}
+
+# --- autonomy class resolution ------------------------------------------
+#
+# Resolve the effective A/R/N class for an action_id by layering:
+#   1. ADR-0006 §3 matrix defaults (hardcoded below)
+#   2. ~/.board-superpowers/overrides.yml autonomy_overrides[]   (user layer)
+#   3. <repo>/.board-superpowers/config.local.yml autonomy_overrides[]  (project layer; wins)
+#
+# Args:   <action_id> [<repo_root>]
+# Stdout: A | R | N
+# Returns: 0 on success, non-zero on usage error
+#
+# Implementation: invokes venv-python with PyYAML (per design doc § 6.1).
+# Falls back to ADR-0006 default when venv unavailable.
+
+bsp_resolve_autonomy_class() {
+    local action_id="${1:?usage: bsp_resolve_autonomy_class <action_id> [<repo_root>]}"
+    local repo_root="${2:-${PWD}}"
+
+    # ADR-0006 §3 matrix defaults (Producer rows 1-14 + Consumer 100-111).
+    # 'A' default rows: 1, 2, 5, 9, 11, 13, 14, 100, 102, 104, 105, 106, 107, 108, 109, 110, 111
+    # 'R' default rows: 3, 4, 6, 7, 8, 10, 12, 101, 103
+    local default_class
+    case "${action_id}" in
+        1|2|5|9|11|13|14|100|102|104|105|106|107|108|109|110|111) default_class="A" ;;
+        3|4|6|7|8|10|12|101|103) default_class="R" ;;
+        *) printf '%s\n' "A"; return 0 ;;  # unknown rows fall through to A per ADR-0006 triage rule step 5
+    esac
+
+    # Try venv-python for yaml-aware override merge. Falls back to default.
+    local venv_python
+    if venv_python="$(bsp_ensure_venv "${repo_root}" 2>/dev/null)"; then
+        local override_class
+        override_class="$(BSP_REPO_ROOT="${repo_root}" \
+                          BSP_ACTION_ID="${action_id}" \
+                          "${venv_python}" - <<'PY'
+import os, sys
+try:
+    import yaml
+except ImportError:
+    sys.stderr.write(
+        '[bsp WARN] PyYAML missing in venv; autonomy_overrides not applied '
+        '(falling back to ADR-0006 matrix default). Run uv sync in '
+        '<repo>/.board-superpowers/ to install.\n'
+    )
+    sys.exit(0)
+
+repo_root = os.environ['BSP_REPO_ROOT']
+action_id = int(os.environ['BSP_ACTION_ID'])
+home = os.path.expanduser('~')
+
+def load_overrides(path):
+    if not os.path.isfile(path):
+        return []
+    try:
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+        return data.get('autonomy_overrides', []) or []
+    except Exception:
+        return []
+
+user_overrides = load_overrides(os.path.join(home, '.board-superpowers', 'overrides.yml'))
+project_overrides = load_overrides(os.path.join(repo_root, '.board-superpowers', 'config.local.yml'))
+
+# Project layer wins on conflict per spec 03 § Merge semantics. Validate
+# class enum BEFORE assignment so a malformed entry (missing or bad
+# `class`) does NOT silently overwrite a valid earlier entry.
+VALID_CLASSES = ('A', 'R', 'N')
+chosen = None
+for layer_name, entries in (('user', user_overrides), ('project', project_overrides)):
+    for entry in entries:
+        if entry.get('action_id') != action_id:
+            continue
+        klass = entry.get('class')
+        if klass in VALID_CLASSES:
+            chosen = klass
+        else:
+            sys.stderr.write(
+                f'[bsp WARN] {layer_name}-layer override entry for '
+                f'action_id={action_id} has invalid class {klass!r}; ignoring.\n'
+            )
+
+if chosen in VALID_CLASSES:
+    print(chosen)
+PY
+)"
+        if [ -n "${override_class}" ]; then
+            printf '%s\n' "${override_class}"
+            return 0
+        fi
+    fi
+
+    printf '%s\n' "${default_class}"
+    return 0
 }

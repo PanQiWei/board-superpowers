@@ -1,38 +1,109 @@
 ---
 name: bootstrapping-repo
 description: Use when board-superpowers is being run for the FIRST time on a (host, repo) pair — when the host manifest at ~/.board-superpowers/manifest.yml is absent, or the per-repo state at ~/.board-superpowers/repos/<normalized>/state.yml is absent. Triggers on the SessionStart hook injecting an `INVOKE: bootstrapping-repo` marker (fast path) AND on user phrases like "set up board-superpowers", "first time on this repo", "bootstrap this repo", "I just installed the plugin". Apply this skill even when the user does not say "bootstrap" — any session whose state probe reveals the manifest or per-repo state is missing routes here. Do NOT use this skill once both state files exist; the regular Producer / Consumer skills take over from there.
-when_to_use: Use when the SessionStart hook injected `INVOKE: bootstrapping-repo`, OR the user says "set up board-superpowers", "first time on this repo", "bootstrap this repo", "I just installed the plugin", "what do I need to do to start using this", OR the entry skill (using-board-superpowers) detects an absent manifest.yml / state.yml during its Layer 2 reliable-gate probe.
+when_to_use: Use when the SessionStart hook injected `INVOKE: bootstrapping-repo`, OR the user says "set up board-superpowers", "first time on this repo", "bootstrap this repo", "I just installed the plugin", "what do I need to do to start using this", OR the entry skill (board-superpowers:using-board-superpowers) detects an absent manifest.yml / state.yml during its Layer 2 reliable-gate probe.
 ---
 
 # bootstrapping-repo
 
-This is the molecular skill that drives **first-time setup** of board-superpowers on a `(host, repo)` pair. It orchestrates the two bootstrap features defined in [`docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md`](../../docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md):
+This is the molecular skill that drives **first-time setup** of board-superpowers on a `(host, repo)` pair. It orchestrates two bootstrap phases:
 
-- **F-B1 (host bootstrap)** — once per host (machine). Writes `~/.board-superpowers/manifest.yml`.
-- **F-B2 (per-repo bootstrap)** — once per `(host, repo)` pair. Validates the GitHub Project, writes `<repo>/.board-superpowers/config.yml`, appends a `.gitignore` entry, sets up BYO-RDBMS audit credentials, injects the routing block into `CLAUDE.md` + `AGENTS.md`, and writes the host-local per-repo `state.yml`.
+- **Host bootstrap** — once per host (machine). Writes `~/.board-superpowers/manifest.yml`.
+- **Per-repo bootstrap** — once per `(host, repo)` pair. Validates the GitHub Project, writes `<repo>/.board-superpowers/config.yml` and `config.local.yml`, appends a `.gitignore` entry, sets up BYO-RDBMS audit credentials, creates the per-repo Python venv, applies the audit DB schema, injects the routing block into `CLAUDE.md` + `AGENTS.md`, and writes the host-local per-repo `state.yml`.
 
-The skill is a thin orchestration layer over two scripts: `scripts/bootstrap-host.sh` (F-B1) and `scripts/bootstrap-project.sh` (F-B2). Both scripts are idempotent — re-running this skill on an already-bootstrapped repo is a no-op.
+The skill is a thin orchestration layer over two scripts: `scripts/bootstrap-host.sh` (host bootstrap) and `scripts/bootstrap-project.sh` (per-repo bootstrap). Both scripts are idempotent — re-running this skill on an already-bootstrapped repo is a no-op.
+
+## Flow at a glance
+
+```mermaid
+flowchart TD
+    Start["Skill invoked"] --> S1["Step 1: host bootstrap\nbootstrap-host.sh"]
+    S1 --> Pre["Step 2: preflight\nOWNER/PROJECT_NUMBER\n+ Status field validate"]
+    Pre --> S3["Step 3: per-repo bootstrap\nsub-steps 2a through 2g\n+ routing injection\n+ state.yml write"]
+    S3 -- "every mutating sub-step" --> Mut["5-step governance\nboard-superpowers:classifying-actions\nthen board-superpowers:auditing-actions"]
+    Mut --> S3
+    S3 --> Post["Step 4: post-bootstrap orientation\nreferences/first-time-user-guide.md"]
+    Post --> End(["Done"])
+```
 
 ## When this skill fires
 
 Two paths deliver the architect into this skill:
 
-1. **Hook fast path**: `hooks/session-start.sh` detects `manifest.yml` or per-repo `state.yml` is absent and injects `INVOKE: bootstrapping-repo` + `REASON: <one-liner>` into the session via `additionalContext`. The entry skill `using-board-superpowers` consumes the marker and routes here.
+1. **Hook fast path**: `hooks/session-start.sh` detects `manifest.yml` or per-repo `state.yml` is absent and injects `INVOKE: bootstrapping-repo` + `REASON: <one-liner>` into the session via `additionalContext`. The entry skill `board-superpowers:using-board-superpowers` consumes the marker and routes here.
 2. **Architect-spoken fallback**: the architect says "set up board-superpowers", "first time on this repo", "bootstrap this repo", or similar. The entry skill matches the phrase and routes here.
 
 Both paths arrive at the same procedure below. The hook is best-effort (CC `SessionStart` delivery is unreliable per the spec); the entry skill's Layer-2 state probe is the reliable gate. This skill itself does NOT re-probe — by the time control reaches here, the entry skill has confirmed at least one of the state files is missing.
 
+## Why bootstrap is mostly R-class
+
+Almost every step of this skill writes to a source-of-truth file
+(config.yml, config.local.yml, credentials.yml, AGENTS.md, CLAUDE.md,
+state.yml). Per the matrix, source-of-truth writes default to R —
+architect sees each one. This is the explicit posture for first-time
+bootstrap: every change gets an architect-glance.
+
+If the friction becomes too high (re-running bootstrap N times means
+N×6 prompts), architects can promote specific rows from R to A via
+`autonomy_overrides:` in `~/.board-superpowers/overrides.yml`. The
+matrix default is conservative; overrides relax it.
+
 ## Required atomic dependencies
 
-- `board-superpowers:board-canon` — read-only schema authority. Step 2's preflight relies on the canonical 6-status field contract documented there. (Not invoked as a skill at v1-minimum; the contract is a static reference.)
+- `board-superpowers:board-canon` — read-only schema authority. Step 2's preflight relies on the canonical 6-status field contract documented there. (Static reference — read the skill when in doubt about the Status field options or ordering.)
+- `board-superpowers:classifying-actions` — invoked at every mutating action point to receive the A / R / N decision for that action.
+- `board-superpowers:auditing-actions` — invoked after each A-class or R-class decision to write the audit row (proposal, approval, or decline entry as applicable).
 
-The deferred atomic `auditing-actions` would normally consolidate the audit-log writes; in v1-minimum the inline jsonl writer below stands in.
+## How mutating actions are handled
+
+For every mutating action this skill performs, follow the 5-step governance sequence:
+
+1. Resolve the action's action_id (from the `action-id-catalog.md`
+   file inside the `board-superpowers:classifying-actions` skill's
+   `references/`).
+2. Invoke `board-superpowers:classifying-actions` with that action_id;
+   receive a decision: A (auto), R (requires approval), or N (forbidden).
+3. If A: act → invoke `board-superpowers:auditing-actions` to record
+   one entry.
+4. If R:
+   a. invoke `board-superpowers:auditing-actions` to record the
+      proposal.
+   b. surface the proposal to the architect.
+   c. wait for the architect's reply (approve / decline).
+   d. on approve: act → invoke `board-superpowers:auditing-actions`
+      to record the approval-and-result.
+   e. on decline: invoke `board-superpowers:auditing-actions` to
+      record the decline; abort.
+5. If N: refuse the action and surface the block reason; no audit
+   entry at N.
+
+Bootstrap is mostly R-class (see "Why bootstrap is mostly R-class" above). Architects can promote specific rows to A via `autonomy_overrides:`.
+
+### Action ID catalog (bootstrap actions)
+
+```
+bootstrap-host          — host manifest write (mode 0644, ts + version)
+bootstrap-project-2a    — labels create (delegates to setup-labels.sh)
+bootstrap-project-2b    — Status field validation (read-only; no audit)
+bootstrap-project-2c    — config.yml + config.local.yml write
+bootstrap-project-2d    — .gitignore append (idempotent block)
+bootstrap-project-2e    — credentials.yml write (chmod 0600; DSN allowlist)
+bootstrap-project-2f    — uv sync per-repo venv create
+bootstrap-project-2g    — audit-init.sh dispatch (DDL apply)
+bootstrap-project-4     — routing block injection (CLAUDE.md + AGENTS.md;
+                                                    stub-redirect targets skipped)
+bootstrap-project-3     — state.yml write (host-local per-repo)
+```
+
+For the full default class (A/R) of each action_id, consult the
+`action-id-catalog.md` file inside the
+`board-superpowers:classifying-actions` skill's `references/`.
 
 ## Procedure
 
 The full sequence is four steps. Each step is independently idempotent and surfaces progress to the architect.
 
-### Step 1 — F-B1 host bootstrap
+### Step 1 — host bootstrap
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap-host.sh"
@@ -41,27 +112,30 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap-host.sh"
 The script:
 
 1. Verifies `~/.board-superpowers/` exists with mode 0700 (creates it if absent).
-2. Writes `manifest.yml` with `schema_version: 1`, `host_bootstrapped_at: <iso8601>`, `last_seen_version: <plugin version>`. Atomic via `mktemp` + `mv`.
-3. If the manifest already exists with the same `last_seen_version`, exits 0 with no write (idempotent fast path).
-4. Prints the absolute manifest path to stdout on success.
+2. Writes `manifest.yml` with `schema_version: 2`, `host_bootstrapped_at: <iso8601>`, `last_seen_version: <plugin version>`, `uv_version: <uv version>`. Atomic via `mktemp` + `mv`.
+3. Ensures `uv` is available on PATH (detects / prompts / `--auto-install-uv`).
+4. If the manifest already exists with the same `last_seen_version`, exits 0 with no write (idempotent fast path).
+5. Prints the absolute manifest path to stdout on success.
 
-**Surface to the architect**: report whether the manifest was newly written, refreshed (version bump), or already current. On failure (exit code 1), surface the script's stderr and STOP — do not attempt step 2 with a broken host state.
+**Surface to the architect**: report whether the manifest was newly written, refreshed (version bump), or already current. On failure (exit code 1), surface the script's stderr and STOP — do not attempt the per-repo bootstrap with a broken host state.
 
 `--force` is available as an escape hatch (overwrites unconditionally) but should be reserved for migration / dev scenarios; the architect must explicitly request it.
 
-### Step 2 — preflight check for F-B2
+Apply the governance sequence above for the manifest write (action_id: `bootstrap-host`).
 
-Before running F-B2 the architect must confirm two things:
+### Step 2 — preflight check for per-repo bootstrap
 
-1. **GitHub Project v2 exists** with the canonical 6-option Status field — `Backlog → Ready → In Progress → In Review → Done → Blocked` (the order is load-bearing). Per ADR-0001's substrate-commitment posture, the script does NOT create the project — Project v2 single-select option creation via API is unreliable with standard tokens.
+Before running the per-repo bootstrap the architect must confirm two things:
+
+1. **GitHub Project v2 exists** with the canonical 6-option Status field — `Backlog → Ready → In Progress → In Review → Done → Blocked` (the order is load-bearing). The script does NOT create the project — Project v2 single-select option creation via API is unreliable with standard tokens.
 
    If the project does NOT exist yet, walk the architect through `references/project-creation-walkthrough.md` (UI steps), wait for them to confirm completion, then proceed.
 
 2. **`OWNER/PROJECT_NUMBER` resolved**. The architect provides this (e.g., `PanQiWei/4`). The script needs both to query the project and validate the Status field.
 
-R-class discipline applies here too — do NOT proceed to step 3 without the architect's explicit confirmation that the Status field is set up correctly. F-B2's Status validation will hard-abort if the field drifts; that abort is recoverable but expensive (architect fixes UI, re-runs).
+Apply the governance sequence here too — do NOT proceed to step 3 without the architect's explicit confirmation that the Status field is set up correctly. The Status validation in the per-repo bootstrap will hard-abort if the field drifts; that abort is recoverable but expensive (architect fixes UI, re-runs).
 
-### Step 3 — F-B2 per-repo bootstrap
+### Step 3 — per-repo bootstrap
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap-project.sh" \
@@ -72,115 +146,79 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap-project.sh" \
 
 `--repo-root` defaults to `${CLAUDE_PROJECT_DIR:-$PWD}` resolved via `git rev-parse --show-toplevel`. Pass it explicitly when the architect is operating from a worktree to guarantee the correct primary-repo path is used.
 
-The script handles the five F-B2 sub-steps + step 4 (routing injection) + step 3 (state.yml write) internally:
+The script handles the per-repo sub-steps internally:
 
-| F-B2 sub-step | What `bootstrap-project.sh` does |
-|---------------|----------------------------------|
+| Sub-step | What `bootstrap-project.sh` does |
+|----------|----------------------------------|
 | 2a — labels | `setup-labels.sh` — creates the 9 standard labels (`type:feature`, `type:bug`, `type:chore`, `type:refactor`, `type:epic`, `size:XS`, `size:S`, `size:M`, `size:L`). Idempotent — pre-existing labels skipped. |
 | 2b — Status field validation | Reads the project's Status field via `gh project field-list`; aborts with exit 2 if the 6 options are missing or out of order. |
-| 2c — config.yml write | Renders `<repo>/.board-superpowers/config.yml` with `project: "OWNER/NUM"` and `wip_limit: 5`. Skipped when present unless `--force`. |
-| 2d — .gitignore append | Appends an idempotent block ignoring `.board-superpowers/claims/`. |
-| 2e — credentials.yml | Walks BYO-RDBMS DSN setup. Accepts the 6-scheme allowlist (`postgresql://`, `postgres://`, `mysql://`, `mysql+pymysql://`, `sqlite://`, `sqlite3://` per ADR-0009). Architect can decline → all A-class actions degrade to R-class until they reconfigure. |
-| step 4 — routing injection | Appends the canonical routing block to `CLAUDE.md` AND `AGENTS.md` between the marker pair `<!-- board-superpowers:routing -->` / `<!-- /board-superpowers:routing -->`. Records each block's SHA256 hash for F-B4 tamper detection. **Stub-redirect targets are silently skipped** — a target file ≤ 30 lines containing a Claude Code `@-include` line of shape `^@<file>.md$` (e.g. `@AGENTS.md`) is treated as a deliberate redirect; the file is left byte-identical and DOES NOT receive a `routing_blocks[]` entry. |
-| step 3 — state.yml write | Writes `~/.board-superpowers/repos/<normalized>/state.yml` with `schema_version: 1`, `repo_bootstrapped_at`, `last_seen_version_in_repo`, `features_enabled: [bootstrap.host, bootstrap.per_repo]`, and the `routing_blocks[]` array recorded during step 4. |
+| 2c — config.yml + config.local.yml write | Renders `<repo>/.board-superpowers/config.yml` (team-shared, committed) and `config.local.yml` (per-user, gitignored) with sensible defaults. Skipped when present unless `--force`. The generated `config.yml` includes a fully-commented-out `post_merge_cleanup` block (the OS-level cron opt-in for automated post-merge worktree cleanup). The architect uncomments the block and sets `auto_cron: true` to enable it; until that edit is made the feature is off. |
+| 2d — .gitignore append | Appends an idempotent block ignoring `.board-superpowers/claims/` and `.board-superpowers/.venv/`. |
+| 2e — credentials.yml | Walks BYO-RDBMS DSN setup. Accepts the 6-scheme allowlist (`postgresql://`, `postgres://`, `mysql://`, `mysql+pymysql://`, `sqlite://`, `sqlite3://`). Architect can decline → all actions requiring audit-DB write degrade to jsonl trace until they reconfigure. |
+| 2f — uv sync | Creates the per-repo Python venv at `<repo>/.board-superpowers/.venv/` via `uv sync` using the committed `pyproject.toml` + `uv.lock`. |
+| 2g — audit-init dispatch | If an audit DB URL is configured, runs `scripts/audit-init.sh` to apply the DDL schema idempotently. |
+| routing injection | Appends the canonical routing block to `CLAUDE.md` AND `AGENTS.md` between the marker pair `<!-- board-superpowers:routing -->` / `<!-- /board-superpowers:routing -->`. Records each block's SHA256 hash for version-transition tamper detection. **Stub-redirect targets are silently skipped** — a target file ≤ 30 lines containing a Claude Code `@-include` line of shape `^@<file>.md$` (e.g. `@AGENTS.md`) is treated as a deliberate redirect; the file is left byte-identical and does NOT receive a `routing_blocks[]` entry. |
+| state.yml write | Writes `~/.board-superpowers/repos/<normalized>/state.yml` with `schema_version: 1`, `repo_bootstrapped_at`, `last_seen_version_in_repo`, `features_enabled: [bootstrap.host, bootstrap.per_repo]`, and the `routing_blocks[]` array recorded during routing injection. |
 
-**Surface to the architect** after each F-B2 sub-step completes:
+Apply the governance sequence for each sub-step that writes a file (see "Action ID catalog" above). Sub-step 2b is read-only — no audit entry.
+
+**Surface to the architect** after each sub-step completes:
 
 - Number of labels created / skipped at 2a.
 - Status field validation result at 2b (PASS / drift detected — print the specific mismatched options).
-- File path of `config.yml` at 2c.
+- File paths of `config.yml` + `config.local.yml` at 2c.
 - Lines appended to `.gitignore` at 2d (or "already present" on idempotent skip).
-- BYO-RDBMS scheme accepted (or declined with degradation notice) at 2e.
-- Files routing-injected at step 4 (CLAUDE.md / AGENTS.md / both / neither).
-- Final state.yml absolute path at step 3.
+- BYO-RDBMS scheme accepted (or declined with jsonl-fallback notice) at 2e.
+- Venv creation result at 2f.
+- Audit-init result at 2g (or "skipped — no DB URL configured").
+- Files routing-injected (CLAUDE.md / AGENTS.md / both / neither).
+- Final state.yml absolute path.
 
-On exit codes 2 / 3 / 4 / 5, surface the script's stderr verbatim and STOP — F-B2 has surface-specific failure paths (Status drift, label delegation, BYO-RDBMS misconfiguration, orphan routing markers) and the script's error message names the recovery path.
+On exit codes 2 / 3 / 4 / 5, surface the script's stderr verbatim and STOP — the per-repo bootstrap has surface-specific failure paths (Status drift, label delegation, BYO-RDBMS misconfiguration, orphan routing markers) and the script's error message names the recovery path.
 
 ### Step 4 — deliver the first-time user guide
 
-After F-B2 completes successfully, hand the architect the post-bootstrap orientation. Load the content from `references/first-time-user-guide.md` and present it. The guide covers:
+After the per-repo bootstrap completes successfully, hand the architect the post-bootstrap orientation. Load the content from `references/first-time-user-guide.md` and present it. The guide covers:
 
-- How to create the first card (Manager session via `managing-board` intake routine, or hand-pasted in the GitHub UI using the `board-canon` Card body schema).
+- How to create the first card (Manager session via `board-superpowers:managing-board` intake routine, or hand-pasted in the GitHub UI using the `board-superpowers:board-canon` Card body schema).
 - How to claim a card (`[board-card:#N]` token in a fresh session).
 - Where state files live (host manifest, per-repo state, in-repo config, gitignored claims).
-- Two-role mental model — when to invoke `managing-board` vs `consuming-card`.
+- Two-role mental model — when to invoke `board-superpowers:managing-board` vs `board-superpowers:consuming-card`.
 
 The introduction in `references/intro.md` covers conceptual onboarding (what this plugin is, the cross-plugin composition with `superpowers` + `gstack`, common first-time questions). Surface it inline if the architect asks "what does this thing actually do" during step 4 — otherwise treat it as on-demand reading.
 
-## How mutating actions are handled (v1-minimum R-class default)
-
-Every mutating action this skill orchestrates follows the propose → ack → act → audit discipline. F-B1's manifest write is borderline (D-AUTONOMY-1 classifies it A — trivial first-run setup), but at v1-minimum every step is treated R-class and audit-logged. When `classifying-actions` ships, the matrix below moves into that atomic and this section gets a single-line cross-reference.
-
-```
-For each mutating action:
-  1. Propose the action to the architect with a one-line description.
-  2. Wait for explicit acknowledgement.
-  3. Act (run the script / write the file).
-  4. Append an audit-log entry via bsp_audit_local_write
-     (defined in scripts/lib/common.sh).
-```
-
-Some actions may be classified auto-act-OK by per-repo or per-user `autonomy_overrides:` in `.board-superpowers/config.yml`; until those overrides are configured, treat every action as requiring acknowledgement.
-
-### Action ID catalog (inlined, deferred replacement by `classifying-actions`)
-
-```
-Bootstrap actions:
-  bootstrap-host          — F-B1 manifest write (mode 0644, ts + version)
-  bootstrap-project-2a    — labels create (delegates to setup-labels.sh)
-  bootstrap-project-2b    — Status field validation (read-only; no audit)
-  bootstrap-project-2c    — config.yml write (project + wip_limit)
-  bootstrap-project-2d    — .gitignore append (idempotent block)
-  bootstrap-project-2e    — credentials.yml write (chmod 0600; DSN allowlist)
-  bootstrap-project-4     — routing block injection (CLAUDE.md + AGENTS.md;
-                                                      stub-redirect targets skipped)
-  bootstrap-project-3     — state.yml write (host-local per-repo)
-```
-
-All R-class in v1-minimum-degraded mode. The action_id values land in the formal D-AUTONOMY-1 catalog when `classifying-actions` ships.
-
-### Audit log entry
-
-Each acted-on action appends one jsonl line to `~/.board-superpowers/repos/<normalized>/audit-local.jsonl` via `bsp_audit_local_write` from `scripts/lib/common.sh`:
-
-```bash
-bsp_audit_local_write "${REPO_ROOT}" "<action_id>" R bootstrapping-repo "<one-line summary>"
-```
-
-This is the v1-minimum-degraded interim trace per the [`SKILLS.md`](../../SKILLS.md) v1-minimum degradation note for `auditing-actions`. The full BYO-RDBMS schema lands when `auditing-actions` ships — at that point this inline write becomes a single-line call to the atomic.
-
 ## Idempotency invariants
 
-- **Re-running this skill on an already-bootstrapped repo is a no-op.** F-B1 detects an existing manifest with the current version and skips the write. F-B2 detects an existing `state.yml` and skips the per-repo work entirely (per the spec § 1.5.2 trigger condition). The architect can re-invoke this skill safely; nothing is mutated when nothing needs to change.
+- **Re-running this skill on an already-bootstrapped repo is a no-op.** The host bootstrap detects an existing manifest with the current version and skips the write. The per-repo bootstrap detects an existing `state.yml` and skips the per-repo work entirely (per the trigger condition: both state files already present). The architect can re-invoke this skill safely; nothing is mutated when nothing needs to change.
 - **`--force` is the escape hatch.** Both scripts accept `--force` to overwrite unconditionally. Only use this on explicit architect request — typical scenarios are recovering from a partial bootstrap, dev-loop schema work, or migrating a corrupted manifest.
-- **F-B1's idempotency fast path is the version-equal check**, not a "does the file exist" check. A version bump after a plugin upgrade triggers a manifest refresh on next session — that's the F-B3 path (deferred to `migrating-repo-version`), but the host-side write itself is the same atomic mv used here.
+- **The host-bootstrap idempotency fast path is the version-equal check**, not a "does the file exist" check. A version bump after a plugin upgrade triggers a manifest refresh on next session — that refresh is handled by the version-transition skill (`board-superpowers:migrating-repo-version`), but the host-side write itself is the same atomic mv used here.
 
 ## Failure paths (brief)
 
 | Where | Symptom | Recovery |
 |-------|---------|---------|
-| F-B1 | exit 1 — bad plugin root, mkdir failure, write failure | Surface the script's stderr; do NOT attempt F-B2; ask the architect to inspect filesystem permissions or `${CLAUDE_PLUGIN_ROOT}` wiring. |
-| F-B2 step 2b | exit 2 — Status field options missing or out of order | Surface the named mismatched options; tell the architect to fix in the GitHub Project UI; re-run this skill after they confirm. |
-| F-B2 step 2a | exit 3 — `setup-labels.sh` delegation failed | Usually a token-scope issue (`gh auth status` to verify). After fix, re-run. |
-| F-B2 step 2e | exit 4 — BYO-RDBMS DSN invalid (bad scheme; sqlite parent unwritable; interactive retry budget exhausted) | Surface the specific error from the script; offer two paths — fix the DSN or decline BYO-RDBMS (sets degraded R-class default). |
-| F-B2 step 4 | exit 5 — orphan routing markers (only one of `<!-- board-superpowers:routing -->` / `<!-- /board-superpowers:routing -->` present in the target file) | Surface the script's verbatim error; abort. The architect inspects `CLAUDE.md` / `AGENTS.md`, removes the orphaned marker, then re-runs. Do NOT auto-repair — the architect's intent is unknown. |
+| Host bootstrap | exit 1 — bad plugin root, mkdir failure, write failure | Surface the script's stderr; do NOT attempt per-repo bootstrap; ask the architect to inspect filesystem permissions or `${CLAUDE_PLUGIN_ROOT}` wiring. |
+| Per-repo 2b | exit 2 — Status field options missing or out of order | Surface the named mismatched options; tell the architect to fix in the GitHub Project UI; re-run this skill after they confirm. |
+| Per-repo 2a | exit 3 — `setup-labels.sh` delegation failed | Usually a token-scope issue (`gh auth status` to verify). After fix, re-run. |
+| Per-repo 2e | exit 4 — BYO-RDBMS DSN invalid (bad scheme; sqlite parent unwritable; interactive retry budget exhausted) | Surface the specific error from the script; offer two paths — fix the DSN or decline BYO-RDBMS (all audit-DB writes degrade to jsonl trace). |
+| Per-repo routing injection | exit 5 — orphan routing markers (only one of `<!-- board-superpowers:routing -->` / `<!-- /board-superpowers:routing -->` present in the target file) | Surface the script's verbatim error; abort. The architect inspects `CLAUDE.md` / `AGENTS.md`, removes the orphaned marker, then re-runs. Do NOT auto-repair — the architect's intent is unknown. |
 
-In every failure path, leave the pre-bootstrap state intact: the scripts use atomic write semantics so a half-completed F-B2 does not leave a half-written `state.yml` claiming bootstrap completed.
+In every failure path, leave the pre-bootstrap state intact: the scripts use atomic write semantics so a half-completed per-repo bootstrap does not leave a half-written `state.yml` claiming bootstrap completed.
 
 ## Anti-pattern: bootstrapping without consent
 
-This skill MUST NOT run F-B2 silently. The first interaction with a fresh repo is the architect's introduction to the plugin — the routing block injection alone modifies two files (`CLAUDE.md`, `AGENTS.md`) the architect has been editing by hand. Auto-mutating those files without consent burns trust in a way that's hard to recover from.
+This skill MUST NOT run the per-repo bootstrap silently. The first interaction with a fresh repo is the architect's introduction to the plugin — the routing block injection alone modifies two files (`CLAUDE.md`, `AGENTS.md`) the architect has been editing by hand. Auto-mutating those files without consent burns trust in a way that's hard to recover from.
 
 Always:
 
-1. Surface the F-B1 result (manifest written / refreshed) before asking about F-B2.
-2. Confirm `OWNER/PROJECT_NUMBER` and the GitHub Project's Status field state before invoking F-B2.
-3. Surface each F-B2 sub-step's outcome as it completes — do NOT batch-report at the end.
+1. Surface the host bootstrap result (manifest written / refreshed) before asking about the per-repo bootstrap.
+2. Confirm `OWNER/PROJECT_NUMBER` and the GitHub Project's Status field state before invoking the per-repo bootstrap.
+3. Surface each sub-step's outcome as it completes — do NOT batch-report at the end.
 
-If the architect declines BYO-RDBMS at step 2e, the bootstrap completes and the friction is captured (every A-class action becomes R-class until they reconfigure). That trade-off is documented per ADR-0006's "trade-off explicitly registered" note — surface it once at decline time, do NOT nag on every subsequent session.
+If the architect declines BYO-RDBMS at step 2e, the bootstrap completes and the friction is captured (audit-DB writes degrade to jsonl trace until they reconfigure). Surface that trade-off once at decline time, do NOT nag on every subsequent session.
 
 ## Cross-platform notes
 
 This skill works on both Claude Code and Codex CLI. Both `bootstrap-host.sh` and `bootstrap-project.sh` resolve their plugin root via `bsp_plugin_root` (Claude uses `${CLAUDE_PLUGIN_ROOT}`, Codex uses path-derivation) so the architect's invocation works without platform-specific argument shaping.
 
-Routing block injection is dual-target by design — `CLAUDE.md` (for Claude Code's auto-load) and `AGENTS.md` (for Codex CLI's auto-load) both receive the same content, which is why the architect's session lands cleanly regardless of which platform they next open in this repo. **Exception**: when one of the two files is a *stub redirect* (≤ 30 lines AND contains a `^@<file>.md$` line), F-B2 silently skips injecting that file. The architect's intent for such files is "redirect to the other one", and injecting a routing block would defeat that single-source-of-truth purpose; both platforms still receive the routing block via the other, non-stub file (CC's `@AGENTS.md` resolution and Codex's native AGENTS.md auto-load both pick it up from AGENTS.md when CLAUDE.md is the stub).
+Routing block injection is dual-target by design — `CLAUDE.md` (for Claude Code's auto-load) and `AGENTS.md` (for Codex CLI's auto-load) both receive the same content, which is why the architect's session lands cleanly regardless of which platform they next open in this repo. **Exception**: when one of the two files is a *stub redirect* (≤ 30 lines AND contains a `^@<file>.md$` line), the per-repo bootstrap silently skips injecting that file. The architect's intent for such files is "redirect to the other one", and injecting a routing block would defeat that single-source-of-truth purpose; both platforms still receive the routing block via the other, non-stub file (CC's `@AGENTS.md` resolution and Codex's native AGENTS.md auto-load both pick it up from AGENTS.md when CLAUDE.md is the stub).

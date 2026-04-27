@@ -350,6 +350,8 @@ LOCAL_PATTERN_HEADER="# Per-user local override files — convention: <name>.loc
 LOCAL_PATTERN_ENTRY="*.local.*"
 CLAIMS_HEADER="# board-superpowers local state (claim markers are per-session)"
 CLAIMS_ENTRY=".board-superpowers/claims/"
+VENV_HEADER="# board-superpowers per-repo Python venv (created by step 2f)"
+VENV_ENTRY=".board-superpowers/.venv/"
 
 ensure_trailing_newline() {
     if [ -s "${GITIGNORE_FILE}" ]; then
@@ -371,11 +373,12 @@ append_block() {
     } >> "${GITIGNORE_FILE}"
 }
 
-# Bootstrap: create file with both blocks if absent.
+# Bootstrap: create file with all blocks if absent.
 if [ ! -f "${GITIGNORE_FILE}" ]; then
     bsp_log "step 2d: creating ${GITIGNORE_FILE} with board-superpowers blocks"
     append_block "${LOCAL_PATTERN_HEADER}" "${LOCAL_PATTERN_ENTRY}" 0
     append_block "${CLAIMS_HEADER}" "${CLAIMS_ENTRY}" 1
+    append_block "${VENV_HEADER}" "${VENV_ENTRY}" 1
 else
     # Append-on-missing for each entry independently.
     if grep -Fxq "${LOCAL_PATTERN_ENTRY}" "${GITIGNORE_FILE}"; then
@@ -392,6 +395,16 @@ else
         ensure_trailing_newline
         bsp_log "step 2d: appending '${CLAIMS_ENTRY}' block to ${GITIGNORE_FILE}"
         append_block "${CLAIMS_HEADER}" "${CLAIMS_ENTRY}" 1
+    fi
+
+    # F6: .venv/ must not leak into git. Step 2f creates
+    # <repo>/.board-superpowers/.venv/ — ensure it is gitignored.
+    if grep -Fxq "${VENV_ENTRY}" "${GITIGNORE_FILE}"; then
+        bsp_log "step 2d: .gitignore already contains '${VENV_ENTRY}' — no change"
+    else
+        ensure_trailing_newline
+        bsp_log "step 2d: appending '${VENV_ENTRY}' block to ${GITIGNORE_FILE}"
+        append_block "${VENV_HEADER}" "${VENV_ENTRY}" 1
     fi
 fi
 
@@ -523,6 +536,48 @@ audit_sqlite_parent_writable() {
     return 0
 }
 
+# Reject a sqlite DSN whose absolute path resolves under ${REPO_ROOT}.
+# Per spec 07-path-conventions § forbidden-destinations + 03-config-schemas.md
+# credentials.yml: a SQLite audit DB inside the repo's own working tree
+# would bleed audit data into git history.
+# Returns 0 (safe), 1 (rejected — prints error to stderr).
+audit_sqlite_not_under_repo() {
+    local dsn="$1"
+    local abs_path
+    abs_path="$(audit_sqlite_path_extract "${dsn}")"
+    # Only applies to sqlite DSNs; non-sqlite forms are silently OK here.
+    [ -z "${abs_path}" ] && return 0
+
+    # Canonicalise REPO_ROOT to an absolute path with trailing slash so
+    # the prefix test is unambiguous.
+    local repo_canonical
+    repo_canonical="$(cd "${REPO_ROOT}" && pwd -P)/"
+
+    # Resolve abs_path as far as possible; the file may not yet exist so
+    # we only resolve up to the existing parent.
+    local abs_canonical
+    local abs_parent
+    abs_parent="$(dirname "${abs_path}")"
+    if [ -d "${abs_parent}" ]; then
+        abs_canonical="$(cd "${abs_parent}" && pwd -P)/$(basename "${abs_path}")"
+    else
+        abs_canonical="${abs_path}"
+    fi
+    # Normalise: ensure trailing / on the repo prefix before comparing.
+    case "${abs_canonical}/" in
+        "${repo_canonical}"*)
+            printf '[bsp ERROR] step 2e: SQLite DB path resolves under the repo root (%s).\n' \
+                "${REPO_ROOT}" >&2
+            printf '[bsp]   Audit data must be stored outside the working tree (spec 07-path-conventions\n' >&2
+            printf '[bsp]   § forbidden-destinations). Suggested default path:\n' >&2
+            printf '[bsp]   sqlite:////%s/.board-superpowers/repos/<normalized>/audit.db\n' \
+                "${HOME#/}" >&2
+            return 1
+            ;;
+    esac
+    return 0
+}
+
 # Read top-level audit_db_url from a flat YAML credentials file.
 # Empty stdout if absent or unparseable. Same shape as yaml_get
 # helpers below but inlined here so step 2e is self-contained.
@@ -644,9 +699,21 @@ audit_interactive_prompt() {
             exit 4
         fi
 
-        # SQLite parent-dir writability check.
+        # SQLite checks: under-repo guard + parent-dir writability.
         case "${dsn}" in
             sqlite://*|sqlite3://*)
+                if ! audit_sqlite_not_under_repo "${dsn}"; then
+                    # Under-repo: re-prompt so the architect can pick a
+                    # safe path.
+                    if [ "${attempt}" -lt "${max_attempts}" ]; then
+                        printf '[bsp] retry (%d of %d remaining)\n' \
+                            "$((max_attempts - attempt))" "${max_attempts}" >&2
+                        continue
+                    fi
+                    printf '[bsp ERROR] step 2e: retry budget exhausted (%d attempts)\n' \
+                        "${max_attempts}" >&2
+                    exit 4
+                fi
                 if ! audit_sqlite_parent_writable "${dsn}"; then
                     # Hard fail — don't re-prompt; spec says abort on
                     # unwritable parent dir before any credentials.yml
@@ -683,9 +750,12 @@ if [ -n "${AUDIT_DB_URL_FLAG}" ]; then
         printf '[bsp]   sqlite/sqlite3 require the 4-slash absolute form (sqlite:////abs/path) per ADR-0009\n' >&2
         exit 4
     fi
-    # SQLite-only filesystem-side check: parent dir must be writable.
+    # SQLite-only filesystem-side checks: under-repo guard + parent writable.
     case "${AUDIT_DB_URL_FLAG}" in
         sqlite://*|sqlite3://*)
+            if ! audit_sqlite_not_under_repo "${AUDIT_DB_URL_FLAG}"; then
+                exit 4
+            fi
             if ! audit_sqlite_parent_writable "${AUDIT_DB_URL_FLAG}"; then
                 exit 4
             fi
@@ -705,27 +775,150 @@ elif [ -n "${BOARD_SP_AUDIT_DB_URL:-}" ]; then
         printf '[bsp]   sqlite/sqlite3 require the 4-slash absolute form (sqlite:////abs/path) per ADR-0009\n' >&2
         exit 4
     fi
+    # Under-repo guard for env var path too.
+    case "${BOARD_SP_AUDIT_DB_URL}" in
+        sqlite://*|sqlite3://*)
+            if ! audit_sqlite_not_under_repo "${BOARD_SP_AUDIT_DB_URL}"; then
+                exit 4
+            fi
+            ;;
+    esac
     bsp_log "step 2e: BOARD_SP_AUDIT_DB_URL env var present; using as runtime override (no credentials.yml write)"
 elif [ -f "${CREDENTIALS_FILE}" ]; then
     EXISTING_DSN="$(credentials_yml_dsn "${CREDENTIALS_FILE}")"
     if [ -n "${EXISTING_DSN}" ] && audit_dsn_validate "${EXISTING_DSN}"; then
-        # Pre-existing valid file. Check mode; warn if loose.
-        EXISTING_MODE=""
-        if EXISTING_MODE="$(stat -f '%A' "${CREDENTIALS_FILE}" 2>/dev/null)"; then
-            :
-        else
-            EXISTING_MODE="$(stat -c '%a' "${CREDENTIALS_FILE}" 2>/dev/null || true)"
+        # Pre-existing valid file. Under-repo guard for pre-existing creds.
+        case "${EXISTING_DSN}" in
+            sqlite://*|sqlite3://*)
+                if ! audit_sqlite_not_under_repo "${EXISTING_DSN}"; then
+                    bsp_warn "step 2e: pre-existing credentials.yml has a SQLite DSN under the repo root — falling through to interactive prompt for a new DSN"
+                    audit_interactive_prompt
+                    EXISTING_DSN=""  # mark as handled by prompt
+                fi
+                ;;
+        esac
+        if [ -n "${EXISTING_DSN}" ]; then
+            # Check mode; warn if loose.
+            EXISTING_MODE=""
+            if EXISTING_MODE="$(stat -f '%A' "${CREDENTIALS_FILE}" 2>/dev/null)"; then
+                :
+            else
+                EXISTING_MODE="$(stat -c '%a' "${CREDENTIALS_FILE}" 2>/dev/null || true)"
+            fi
+            if [ -n "${EXISTING_MODE}" ] && [ "${EXISTING_MODE}" != "600" ]; then
+                bsp_warn "step 2e: ${CREDENTIALS_FILE} mode is 0${EXISTING_MODE} (expected 0600); proceeding without auto-tightening — user-managed file. chmod 0600 yourself when convenient."
+            fi
+            bsp_log "step 2e: re-using pre-existing credentials.yml (no prompt)"
         fi
-        if [ -n "${EXISTING_MODE}" ] && [ "${EXISTING_MODE}" != "600" ]; then
-            bsp_warn "step 2e: ${CREDENTIALS_FILE} mode is 0${EXISTING_MODE} (expected 0600); proceeding without auto-tightening — user-managed file. chmod 0600 yourself when convenient."
-        fi
-        bsp_log "step 2e: re-using pre-existing credentials.yml (no prompt)"
     else
         bsp_warn "step 2e: ${CREDENTIALS_FILE} exists but audit_db_url is missing or has an invalid scheme; falling through to interactive prompt"
         audit_interactive_prompt
     fi
 else
     audit_interactive_prompt
+fi
+
+# Derive RESOLVED_DB_URL for downstream steps (2g):
+#   - FLAG and env paths are captured directly from their vars.
+#   - credentials.yml path (new or pre-existing) is read from disk.
+#   - Interactive decline (BSP_AUDIT_DECLINED=1) → empty.
+RESOLVED_DB_URL=""
+if [ -n "${AUDIT_DB_URL_FLAG}" ]; then
+    RESOLVED_DB_URL="${AUDIT_DB_URL_FLAG}"
+elif [ -n "${BOARD_SP_AUDIT_DB_URL:-}" ]; then
+    RESOLVED_DB_URL="${BOARD_SP_AUDIT_DB_URL}"
+elif [ "${BSP_AUDIT_DECLINED:-0}" != "1" ] && [ -f "${CREDENTIALS_FILE}" ]; then
+    RESOLVED_DB_URL="$(credentials_yml_dsn "${CREDENTIALS_FILE}")"
+fi
+
+# --- Step 2f — uv sync per-repo venv ------------------------------------
+#
+# Copies plugin-shipped pyproject.toml + uv.lock to
+# <repo>/.board-superpowers/ (only if not already present), then runs
+# `uv sync` to materialise the per-repo Python venv.
+#
+# On failure: rolls back ONLY the files this step copied (newly-created
+# pyproject.toml / uv.lock / partial .venv). credentials.yml from step
+# 2e is NOT touched — per Codex round-2 #14 fix discipline.
+# Rollback NEVER deletes a pre-existing .venv (VENV_PREEXISTED=1).
+
+TARGET_PYPROJECT="${REPO_ROOT}/.board-superpowers/pyproject.toml"
+TARGET_LOCK="${REPO_ROOT}/.board-superpowers/uv.lock"
+TEMPLATE_PYPROJECT="${PLUGIN_ROOT}/scripts/templates/pyproject.toml"
+TEMPLATE_LOCK="${PLUGIN_ROOT}/scripts/templates/uv.lock"
+
+# Track whether THIS step created the files (for rollback).
+COPIED_PYPROJECT=0
+COPIED_LOCK=0
+
+# Track whether a .venv already existed before this step so rollback
+# never destroys a working venv the architect had before re-running
+# bootstrap. Only remove .venv on rollback if THIS step created it.
+VENV_PREEXISTED=0
+if [ -f "${REPO_ROOT}/.board-superpowers/.venv/bin/python3" ]; then
+    VENV_PREEXISTED=1
+fi
+
+if [ ! -f "${TARGET_PYPROJECT}" ]; then
+    [ -f "${TEMPLATE_PYPROJECT}" ] || bsp_die "step 2f: plugin template missing: ${TEMPLATE_PYPROJECT}"
+    cp "${TEMPLATE_PYPROJECT}" "${TARGET_PYPROJECT}"
+    COPIED_PYPROJECT=1
+fi
+if [ ! -f "${TARGET_LOCK}" ] && [ -f "${TEMPLATE_LOCK}" ]; then
+    cp "${TEMPLATE_LOCK}" "${TARGET_LOCK}"
+    COPIED_LOCK=1
+fi
+
+# Run uv sync. On failure, roll back ONLY this step's writes; preserve
+# credentials.yml from step 2e (already-confirmed standalone outcome).
+if (cd "${REPO_ROOT}/.board-superpowers/" && uv sync 2>&1) >&2; then
+    bsp_log "step 2f: venv ready at ${REPO_ROOT}/.board-superpowers/.venv"
+else
+    bsp_warn "step 2f: uv sync failed; rolling back step-2f-created files"
+    [ "${COPIED_PYPROJECT}" = "1" ] && rm -f "${TARGET_PYPROJECT}"
+    [ "${COPIED_LOCK}" = "1" ] && rm -f "${TARGET_LOCK}"
+    # Only remove .venv if THIS step created it — never clobber a
+    # pre-existing working venv the architect had before re-running.
+    if [ "${VENV_PREEXISTED}" = "0" ]; then
+        rm -rf "${REPO_ROOT}/.board-superpowers/.venv"
+    fi
+    bsp_die "step 2f: venv setup failed; investigate uv (network / proxy / lock conflict / disk full); credentials.yml from step 2e preserved; re-run bootstrap-project.sh after fix"
+fi
+
+# --- Step 2g — apply audit DDL (when audit_db_url set) ------------------
+#
+# Invokes audit-init.sh inline to create the 8-column audit_log table.
+# On DDL failure (exit 1 or 3): warns and continues — architect can
+# re-run audit-init.sh manually after fixing the DB. credentials.yml
+# is preserved regardless.
+# On exit 2 (script bug): bootstrap-project exits 1 (hard failure).
+
+if [ -n "${RESOLVED_DB_URL}" ]; then
+    bsp_log "step 2g: applying audit DDL via audit-init.sh"
+    AUDIT_INIT_RC=0
+    # cd to REPO_ROOT before invoking audit-init.sh so its PWD-based
+    # bsp_primary_repo_root() call resolves the correct repo and finds
+    # the venv created by step 2f at <REPO_ROOT>/.board-superpowers/.venv.
+    # Without this, running bootstrap-project.sh from a non-repo cwd
+    # (e.g. the architect's home dir) would leave audit-init.sh unable
+    # to locate the venv. Per Codex MAJOR #5.
+    (cd "${REPO_ROOT}" && \
+        BOARD_SP_AUDIT_DB_URL="${RESOLVED_DB_URL}" \
+        bash "${PLUGIN_ROOT}/scripts/audit-init.sh") \
+        || AUDIT_INIT_RC=$?
+    case "${AUDIT_INIT_RC}" in
+        0)
+            bsp_log "step 2g: audit DB initialized"
+            ;;
+        2)
+            bsp_die "step 2g: audit-init.sh exited 2 (script bug); inspect scripts/audit-init.sh"
+            ;;
+        *)
+            bsp_warn "step 2g: audit DDL apply failed (exit ${AUDIT_INIT_RC}); audit DB not usable until fixed (run 'bash scripts/audit-init.sh' manually after resolving)"
+            # Do NOT roll back credentials.yml — architect can reattempt.
+            # Bootstrap as a whole still succeeds.
+            ;;
+    esac
 fi
 
 # --- Step 4 — dual-file routing block injection --------------------------
@@ -889,5 +1082,5 @@ else
     bsp_log "wrote ${STATE_FILE}"
 fi
 
-bsp_log "F-B2 slice 4 complete (steps 2a-2e + step 4 routing block injection + state.yml with routing_blocks)."
+bsp_log "F-B2 slice 4 complete (steps 2a-2g + step 4 routing block injection + state.yml with routing_blocks)."
 exit 0

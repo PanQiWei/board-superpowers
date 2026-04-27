@@ -114,6 +114,15 @@ EOF
     mkdir -p "${target_dir}/skills/using-board-superpowers/references"
     cp "${PLUGIN_ROOT_REAL}/skills/using-board-superpowers/references/agentsmd-routing.md" \
        "${target_dir}/skills/using-board-superpowers/references/agentsmd-routing.md"
+    # Step 2f requires templates/ + uv; step 2g requires audit-init.sh.
+    mkdir -p "${target_dir}/scripts/templates"
+    cp "${PLUGIN_ROOT_REAL}/scripts/templates/pyproject.toml" \
+       "${target_dir}/scripts/templates/pyproject.toml"
+    cp "${PLUGIN_ROOT_REAL}/scripts/templates/uv.lock" \
+       "${target_dir}/scripts/templates/uv.lock"
+    cp "${PLUGIN_ROOT_REAL}/scripts/audit-init.sh" \
+       "${target_dir}/scripts/audit-init.sh"
+    chmod +x "${target_dir}/scripts/audit-init.sh"
 }
 
 init_tmp_repo() {
@@ -217,7 +226,10 @@ run_bootstrap() {
     local home_dir="$1"; shift
     local plugin_root="$1"; shift
     local stubs_dir="$1"; shift
-    env -i HOME="${home_dir}" PATH="${stubs_dir}:/usr/bin:/bin" \
+    # Include common uv install locations so step 2f can find the uv
+    # binary even when the env is cleaned with env -i.
+    local uv_path="${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin"
+    env -i HOME="${home_dir}" PATH="${stubs_dir}:${uv_path}:/usr/bin:/bin" \
         bash "${plugin_root}/scripts/bootstrap-project.sh" \
             --plugin-root "${plugin_root}" \
             "$@" </dev/null
@@ -227,7 +239,8 @@ run_rollback() {
     local home_dir="$1"; shift
     local plugin_root="$1"; shift
     local stubs_dir="$1"; shift
-    env -i HOME="${home_dir}" PATH="${stubs_dir}:/usr/bin:/bin" \
+    local uv_path="${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin"
+    env -i HOME="${home_dir}" PATH="${stubs_dir}:${uv_path}:/usr/bin:/bin" \
         bash "${plugin_root}/scripts/bootstrap-rollback.sh" "$@"
 }
 

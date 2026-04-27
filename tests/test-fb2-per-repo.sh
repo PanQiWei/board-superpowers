@@ -140,6 +140,16 @@ EOF
     mkdir -p "${target_dir}/skills/using-board-superpowers/references"
     cp "${PLUGIN_ROOT_REAL}/skills/using-board-superpowers/references/agentsmd-routing.md" \
        "${target_dir}/skills/using-board-superpowers/references/agentsmd-routing.md"
+    # Step 2f requires templates/ + uv; step 2g requires audit-init.sh.
+    # Copy both so the stub plugin root satisfies all steps.
+    mkdir -p "${target_dir}/scripts/templates"
+    cp "${PLUGIN_ROOT_REAL}/scripts/templates/pyproject.toml" \
+       "${target_dir}/scripts/templates/pyproject.toml"
+    cp "${PLUGIN_ROOT_REAL}/scripts/templates/uv.lock" \
+       "${target_dir}/scripts/templates/uv.lock"
+    cp "${PLUGIN_ROOT_REAL}/scripts/audit-init.sh" \
+       "${target_dir}/scripts/audit-init.sh"
+    chmod +x "${target_dir}/scripts/audit-init.sh"
 }
 
 # Initialize a tmp git repo with origin pointing at owner/name.
@@ -276,8 +286,19 @@ run_bootstrap() {
     local home_dir="$1"; shift
     local plugin_root="$1"; shift
     local stubs_dir="$1"; shift
+    # Include common uv install locations so step 2f can find the uv
+    # binary even when PATH is restricted to stubs + system dirs.
+    # IMPORTANT: bash same-line prefix-var expansion uses the NEW HOME
+    # (the home_dir override), not the parent shell's HOME. Capture the
+    # parent HOME explicitly into a local var BEFORE the prefix-var line
+    # so PATH gets the architect's actual ~/.local/bin (where uv lives).
+    # The other 4 tests in this batch (fb2-byo-rdbms, fb2-routing-injection,
+    # e2e, rollback) use `env -i ...` instead, which forces parent-HOME
+    # expansion via env's argument-parsing semantics — equivalent fix,
+    # different mechanism.
+    local _host_home="${HOME}"
     HOME="${home_dir}" \
-    PATH="${stubs_dir}:/usr/bin:/bin" \
+    PATH="${stubs_dir}:${_host_home}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
         bash "${plugin_root}/scripts/bootstrap-project.sh" \
             --plugin-root "${plugin_root}" \
             "$@"
@@ -548,7 +569,9 @@ stub_gh "${STUBS_DIR}"
 printf '%s\n' "${CANONICAL_STATUS}" > "${STUBS_DIR}/status_opts"
 printf '[]\n' > "${STUBS_DIR}/labels.json"
 
-# Pre-existing .gitignore with the canonical entries already present.
+# Pre-existing .gitignore with all 3 canonical entries already present
+# (per-user override pattern + claims/ + per-repo .venv/). Bootstrap
+# re-running on this file should detect each entry and skip the append.
 cat > "${REPO_ROOT}/.gitignore" <<'EOF'
 # user existing rule
 node_modules/
@@ -558,6 +581,9 @@ node_modules/
 
 # board-superpowers local state (claim markers are per-session)
 .board-superpowers/claims/
+
+# board-superpowers per-repo Python venv (created by step 2f)
+.board-superpowers/.venv/
 EOF
 
 GITIGNORE_BYTES_BEFORE="$(wc -c < "${REPO_ROOT}/.gitignore" | tr -d ' ')"

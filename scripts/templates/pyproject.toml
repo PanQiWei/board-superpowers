@@ -1,0 +1,16 @@
+# board-superpowers per-repo Python runtime config.
+# This file is plugin-shipped — copied to <repo>/.board-superpowers/pyproject.toml
+# by bootstrap-project.sh step 2f. DO NOT hand-edit in a consumer repo;
+# plugin upgrades sync via three-way prompt per docs/plans/audit-governance/
+# 2026-04-27-audit-governance-design.md § 5.4.
+
+[project]
+name = "board-superpowers-runtime"
+version = "0.3.0"
+requires-python = ">=3.9"
+dependencies = [
+    "pyyaml>=6.0",
+    # PyMySQL lower bound 1.1.1 to exclude CVE-2024-36039 (SQL injection
+    # in pymysql 1.1.0 and earlier). The committed uv.lock pins 1.1.2+.
+    "pymysql>=1.1.1",
+]

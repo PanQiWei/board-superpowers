@@ -24,7 +24,7 @@ under `hooks/` must satisfy" view.
 
 ## v1 events wired
 
-v1-minimum wires only `SessionStart`. Other events
+The plugin currently wires only `SessionStart`. Other events
 (`PreToolUse`, `PostToolUse`, `Stop`) are not yet active but
 must use the same payload pattern when added later.
 

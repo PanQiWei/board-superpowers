@@ -6,45 +6,36 @@ user-facing overview.
 
 @SKILLS.md
 
-## Project status — v1-minimum self-hosting active
+## Project status — v1 catalog 8/10 shipped
 
-> **The plugin is now loadable at runtime.** `hooks/`,
+> **The plugin is loadable at runtime.** `hooks/`,
 > `scripts/`, and `skills/` directories exist at the repo root.
-> `SessionStart` fires. The 6 v1-minimum skills auto-match.
+> `SessionStart` fires. The 8 v1-catalog skills auto-match.
 > The plugin dogfoods itself for any new skill / script / hook.
 
-**v1-minimum = 6 of 10 skills shipped** (per
-[`SKILLS.md`](./SKILLS.md) § "v1 minimum vs v1 complete"):
+**v1 catalog = 8 of 10 skills shipped** (10 once `decomposing-into-milestones` + `migrating-repo-version` ship), per [`SKILLS.md`](./SKILLS.md):
 
 - **Shipped**: `using-board-superpowers` (entry),
   `managing-board` + `consuming-card` + `bootstrapping-repo`
-  (molecular), `board-canon` + `enforcing-pr-contract` (atomic).
-- **Deferred to v1-complete**: `decomposing-into-milestones`,
-  `migrating-repo-version`, `classifying-actions`,
-  `auditing-actions`. Reasons live in the SKILLS.md table.
+  (molecular), `board-canon` + `enforcing-pr-contract` +
+  **`classifying-actions` + `auditing-actions`** (atomic).
+- **Roadmap (pending shipment)**: `decomposing-into-milestones`,
+  `migrating-repo-version`. Reasons live in the SKILLS.md table.
 
-**v1-minimum degraded behaviors** (designed-in, removed when
-deferred atomics ship):
+**Remaining degraded behavior**:
 
-- All mutating actions run as **R-class default** (propose →
-  ask architect → ack → act). The full D-AUTONOMY-1 matrix
-  triage from `classifying-actions` is inlined as one block per
-  v1-minimum molecular SKILL.md.
-- All audit entries write to a **local jsonl trace file** at
-  `~/.board-superpowers/repos/<normalized>/audit-local.jsonl`. The
-  full BYO RDBMS schema from `auditing-actions` is deferred.
 - **No `migrating-repo-version` skill yet** — current plugin
-  version is `v0.2.0`; the schema-aware migration runner lands
-  starting from the v0.2.x → v0.3.x transition. The hook never
-  injects `INVOKE: migrating-repo-version` in v0.2.0.
+  version is `v0.3.0`; the schema-aware migration runner lands
+  starting from the v0.3.x → v0.4.x transition. The hook never
+  injects `INVOKE: migrating-repo-version` in v0.3.0.
 
 The single source of truth for v1 design remains
 [`docs/architecture/`](./docs/architecture/) — read
 `0001-positioning.md` first; the
 [`docs/architecture/README.md`](./docs/architecture/README.md)
-index lists everything else in canonical order. v1-minimum
-implementation is the **current state**, not the **target
-state** — v1-complete is the target.
+index lists everything else in canonical order. The 8 shipped
+skills are the operating substrate; the 2 deferred skills are
+roadmap items, not gates on day-to-day work.
 
 ## Subdirectory contracts
 
@@ -139,10 +130,12 @@ it does four things:
    ([P4b](./docs/architecture/0001-positioning.md), ADR-0004);
    we never reimplement upstream disciplines.
 4. **Records** every mutating action to a BYO RDBMS audit log
-   (Postgres / MySQL only —
-   [ADR-0006 §5](./docs/architecture/adr/0006-producer-autonomy-boundary.md)).
-   When the DB is unavailable, every A-class action degrades to
-   R-class (architect prompt required).
+   (Postgres / MySQL / SQLite via the 6-scheme allowlist —
+   [ADR-0006 §5](./docs/architecture/adr/0006-producer-autonomy-boundary.md)
+   + [ADR-0009](./docs/architecture/adr/0009-allow-sqlite-as-byo-audit-db.md)).
+   When the DB is unavailable, audit-log-write.sh degrades to
+   a local jsonl trace and the entry's `mode` field records the
+   degradation cause (see spec 06 § "jsonl fallback mode-field").
 
 ### Skills system — the v1 catalog (10 skills, 3 layers)
 
@@ -201,8 +194,8 @@ REASON: First time using board-superpowers on this (host, repo)
 
 ```
 INVOKE: migrating-repo-version
-REASON: Plugin version v0.2.0 detected; state.yml records
-        last_seen_version_in_repo=v0.1.0.
+REASON: Plugin version v0.3.0 detected; state.yml records
+        last_seen_version_in_repo=v0.2.0.
 ```
 
 The marker fast-paths the entry skill's routing decision. The
@@ -224,6 +217,12 @@ v1 wires only `SessionStart`.
 
 - **bash 3.2+** with strict mode for `scripts/`. Callers
   `set -euo pipefail` before sourcing `scripts/lib/common.sh`.
+- **uv** (host-level globally installed; install via `brew install uv`
+  or `curl -LsSf https://astral.sh/uv/install.sh | sh`) — manages the
+  per-repo Python venv at `<repo>/.board-superpowers/.venv/` for
+  plugin's own runtime deps (`pyyaml + pymysql` at v0.3.0). The plugin
+  ships `pyproject.toml` + `uv.lock` templates; bootstrap-project.sh
+  copies them per repo. See "Why per-repo venv" below.
 - **gh CLI** with `project` scope (plus `issue` / `pr`
   implicitly).
 - **python3** for JSON parsing (gh output → field / option IDs).
@@ -240,6 +239,24 @@ v1 wires only `SessionStart`.
   same `SKILL.md` shape.
 - No runtime dependencies beyond the above. No node, no go, no
   compiled artifacts.
+
+### Why per-repo venv (not host-local)
+
+board-superpowers's Python deps live in `<repo>/.board-superpowers/.venv/` per repo, not at host-level `~/.board-superpowers/.venv/`. Trade-off:
+
+| Dimension | host-local | **per-repo (chosen)** |
+|-----------|------------|------------------------|
+| Disk | 1 venv (~10 MB) | N venvs (~10 MB × N) |
+| Plugin upgrade | one upgrade affects all repos at once | each repo upgrades independently on bootstrap re-run |
+| Plugin version mix | impossible (one venv → one deps set) | possible (different repos pin different plugin versions via different `uv.lock`) |
+| Multi-architect on shared host | shared deps version | each architect's per-repo isolation |
+
+Per-repo wins because:
+
+1. **Plugin version isolation**. Architect A upgrading the plugin in repo X does not break repo Y's audit governance behavior. With host-local venv, a plugin upgrade would silently change deps versions for every repo simultaneously.
+2. **`uv.lock` reproducibility**. Each repo's committed `uv.lock` is the source of truth for that repo's audit governance behavior. Host-shared venv would require host-level lock coordination, breaking the "repo is the unit of coordination" principle that the rest of board-superpowers follows.
+3. **Disk cost is acceptable**. ~10 MB × N repos is small relative to typical repo size + modern host disk; SSDs make the per-repo overhead negligible.
+4. **Co-location with other plugin-managed scaffolding**. The venv lives next to `config.yml`, `config.local.yml`, `pyproject.toml`, `uv.lock` — all per-repo plugin-managed files.
 
 ## Directory layout
 
@@ -273,7 +290,7 @@ When v1 implementation lands, four new top-level directories
 appear (`hooks/`, `scripts/`, `skills/`, optionally `tests/`)
 authored against the spec.
 
-## Self-hosting (v1-minimum onwards)
+## Self-hosting
 
 The plugin **dogfoods itself** as of `v0.1.0-minimum`. Any new
 skill / script / hook / spec change for board-superpowers itself
@@ -460,8 +477,8 @@ cross-cutting checks that span multiple subdirectories.
 - `scripts/verify-skill-frontmatter.sh` — Tier 1 + Tier 2 +
   no-Tier-3 compliance per SKILL.md.
 - `shellcheck -x scripts/**/*.sh hooks/*.sh` — full pass.
-- Manual smoke: open a fresh CC session, type each of the 6
-  v1-minimum skills' trigger phrases, verify auto-trigger.
+- Manual smoke: open a fresh CC session, type each of the 8
+  shipped skills' trigger phrases, verify auto-trigger.
 
 ### Release flow
 
@@ -476,7 +493,7 @@ cross-cutting checks that span multiple subdirectories.
 <!-- board-superpowers:routing -->
 ## board-superpowers session routing
 
-This project uses the `board-superpowers` plugin (v0.2.0).
+This project uses the `board-superpowers` plugin (v0.3.0).
 Any Claude Code session in this project plays one of two roles:
 
 - **Board Consumer** — if the first message contains `[board-card:#N]`,

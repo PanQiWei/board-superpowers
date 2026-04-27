@@ -10,6 +10,21 @@ This is the entry skill — first touch when a board-superpowers session starts.
 
 The skill operates in three steps. Steps 1-3 are the **Layer 2 reliable gate** of the bootstrap surface (the SessionStart hook is Layer 1, advisory). Per [`docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md`](../../docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md) § "three-layer alert + intent-injection strategy", Layer 2 always re-runs the same dep + state check Layer 1 ran, so routing works even when CC `SessionStart` delivery silently drops the hook output.
 
+## Decision tree at a glance
+
+```mermaid
+flowchart TD
+    A["Session message arrives"] --> B{"Hook injected\nINVOKE marker?"}
+    B -- yes --> C["Route per marker"]
+    B -- no --> D{"State probe:\nmanifest.yml or\nper-repo state.yml\nabsent?"}
+    D -- yes --> E["Route to\nboard-superpowers:bootstrapping-repo"]
+    D -- no --> F{"Message signal?"}
+    F -- "[board-card:#N] /\n'claim card N' /\n'work on card N'" --> G["Route to\nboard-superpowers:consuming-card"]
+    F -- "'what should I work on' /\n'review the PRs' /\n'new requirement' /\n'triage'" --> H["Route to\nboard-superpowers:managing-board"]
+    F -- "'what does this plugin do'" --> I["Inline answer from\nreferences/first-time-user-guide.md"]
+    F -- "no clear signal" --> J["Ask user to disambiguate"]
+```
+
 ## Step 1 — re-run dep + state check (Layer 2 reliable gate)
 
 The hook is best-effort; this skill is the contract. Always run BOTH probes itself, even if the hook fired correctly.
@@ -52,13 +67,13 @@ Marker grammar is pinned in [`02-hook-contracts.md`](../../docs/architecture/000
 
 The marker is a fast-path optimization, not a correctness requirement. Same routing decision regardless of whether Layer 1 delivered the marker or not.
 
-## Step 3 — chain F-B1 → F-B2 when state files are absent
+## Step 3 — chain bootstrap when state files are absent
 
 When step 1's state probe reports a missing file (whether or not step 2 saw the marker), chain bootstrap:
 
-- **`~/.board-superpowers/manifest.yml` absent** — invoke `bash ${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap-host.sh` (F-B1). This writes the host manifest and is idempotent on re-run.
-- **Per-repo `state.yml` absent** — invoke the `bootstrapping-repo` skill, which drives F-B2 via `scripts/bootstrap-project.sh`. F-B2 collects `OWNER/NUMBER`, writes per-repo `config.yml` + host-local `state.yml`, and injects the routing block into `AGENTS.md` / `CLAUDE.md`.
-- **Both absent** — F-B1 first, then chain into F-B2.
+- **`~/.board-superpowers/manifest.yml` absent** — invoke `bash ${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap-host.sh` (host bootstrap). This writes the host manifest and is idempotent on re-run.
+- **Per-repo `state.yml` absent** — invoke `board-superpowers:bootstrapping-repo`, which drives the per-repo bootstrap via `scripts/bootstrap-project.sh`. The script collects `OWNER/NUMBER`, writes per-repo `config.yml` + host-local `state.yml`, and injects the routing block into `AGENTS.md` / `CLAUDE.md`.
+- **Both absent** — host bootstrap first, then chain into per-repo bootstrap.
 
 After bootstrap completes, continue with the routing table below for the user's actual request.
 
@@ -75,7 +90,7 @@ The post-bootstrap routing — used after step 1 surfaces no problems and step 2
 | "new requirement" / "intake this idea" / "I have a feature" | `board-superpowers:managing-board` (intake routine) |
 | "what's blocked" / "triage the board" / "release stale claims" | `board-superpowers:managing-board` (triage routine) |
 | "what does this plugin do" / "how does this work" / "what's available" | Answer inline (informational query) — see `references/first-time-user-guide.md` |
-| "set up board-superpowers on this repo" / "first time on this repo" | Route to `bootstrapping-repo` skill (F-B2) |
+| "set up board-superpowers on this repo" / "first time on this repo" | Route to `board-superpowers:bootstrapping-repo` skill (per-repo bootstrap) |
 | Anything clearly board-related but not in the table | Ask the user to disambiguate — do NOT pick a default |
 
 ## Routing discipline

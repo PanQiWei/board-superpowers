@@ -1,4 +1,4 @@
-# Skills system — board-superpowers v1 catalog (10 skills total: 6 v1-minimum + 4 deferred to v1-complete, 3 layers)
+# Skills system — board-superpowers v1 catalog (10 skills total: 8 shipped + 2 deferred to v1-complete, 3 layers)
 
 > **Always loaded.** This document is referenced from
 > [`AGENTS.md`](./AGENTS.md) via `@SKILLS.md` and rides into
@@ -76,11 +76,12 @@ A9).
 
 ## v1 minimum vs v1 complete
 
-The full v1 catalog defines **10 skills**. As of `v0.2.0`,
-**6 v1-minimum skills** ship — enough to make the plugin
-**self-hostable on this very repo** AND to bootstrap a fresh
-consuming repo from zero. The remaining **4 are deferred to
-v1-complete** and ship in follow-up PRs once each is unblocked.
+The full v1 catalog defines **10 skills**. As of `v0.3.0`,
+**8 skills ship** — enough to make the plugin self-hostable on
+this very repo AND to bootstrap a fresh consuming repo from zero
+AND to govern every mutating action through classifying-actions +
+auditing-actions. The remaining **2 are deferred to v1-complete**
+and ship in follow-up PRs once each is unblocked.
 
 | Skill | Layer | v1 status | Why this scoping |
 |-------|-------|-----------|-------------------|
@@ -92,17 +93,8 @@ v1-complete** and ship in follow-up PRs once each is unblocked.
 | `migrating-repo-version` | Molecular | deferred to v1-complete | Migration becomes meaningful starting from v0.2.x → v0.3.x transitions; the v0.2.0 ship establishes the baseline. |
 | `board-canon` | Atomic | **v1-minimum** | True SPOT — every other v1-minimum skill consumes its state machine + schema + WIP rules. |
 | `enforcing-pr-contract` | Atomic | **v1-minimum** | True SPOT — Consumer's F-C12 PR submit + Manager's F-02 Review Queue both depend on it. |
-| `classifying-actions` | Atomic | deferred to v1-complete | D-AUTONOMY-1 matrix lives inline in v1-minimum skills as "ask-architect-on-every-mutation" (degraded R-class default). Atomic SPOT extraction lands in v1-complete with `auditing-actions`. |
-| `auditing-actions` | Atomic | deferred to v1-complete | BYO RDBMS audit log requires user-side Postgres/MySQL setup. v1-minimum degrades all A-class actions to R-class; full audit log lands when the BYO setup contract is implemented. |
-
-**Degraded behavior in v1-minimum**: every mutating action that
-would normally route through `classifying-actions` /
-`auditing-actions` instead runs the **R-class default inline**
-("propose action, ask architect, await ack, then act, then log a
-local jsonl entry"). This is documented in each v1-minimum
-molecular SKILL.md as a temporary block clearly labeled "v1
-minimum — replace with classifying-actions + auditing-actions
-when both atomics ship."
+| `classifying-actions` | Atomic | shipped (v0.3.0) | True SPOT shipped in v0.3.0 — every mutating SKILL consumes its D-AUTONOMY-1 14-row matrix + 5-step triage rule + autonomy_overrides parsing. |
+| `auditing-actions` | Atomic | shipped (v0.3.0) | True SPOT shipped in v0.3.0 — every mutating SKILL invokes audit-log-write.sh through this skill's payload templates and propose/resolve sequencing rules. |
 
 **Cross-platform hook delivery**: `hooks/session-start.sh` is
 identical on both platforms (uses `bsp_plugin_root()` from
@@ -117,12 +109,11 @@ means for board-superpowers" #3 for the full rationale.
 ## Skill catalog
 
 > Per-skill `layer`, `type`, `mode`, `bounded-context` live in
-> `<skill-dir>/.skill-meta.yaml`. The catalog below uses a
-> `(v1-minimum)` / `(deferred to v1-complete)` tag on each
-> skill name to mark v1 status. Tier 2 frontmatter
-> recommendations are listed only for v1-minimum skills (the
-> deferred ones get their Tier 2 fields decided in the
-> follow-up PR alongside their bodies).
+> `<skill-dir>/.skill-meta.yaml`. The catalog below tags each
+> skill name as `(shipped vX)` once it has landed, or
+> `(deferred to v1-complete)` while still on the roadmap.
+> Tier 2 frontmatter recommendations are listed for every
+> shipped skill.
 
 ### Entry layer (1 skill)
 
@@ -144,7 +135,7 @@ means for board-superpowers" #3 for the full rationale.
 - **Tier 2 frontmatter**: `when_to_use` (extended trigger
   vocabulary outside the primary `description`).
 
-### Molecular layer (5 skills: 3 v1-minimum + 2 deferred)
+### Molecular layer (5 skills: 3 shipped + 2 deferred)
 
 #### `managing-board` (v1-minimum)
 
@@ -159,8 +150,8 @@ means for board-superpowers" #3 for the full rationale.
   v1-complete).
 - **Composes (atomic)**: `board-canon`,
   `enforcing-pr-contract` (Review Queue contract-violation
-  check). `classifying-actions` + `auditing-actions` are
-  inlined as degraded R-class behavior in v1-minimum.
+  check), `classifying-actions` + `auditing-actions` (every
+  mutating action).
 - **Composes (cross-plugin)**: see § "Cross-plugin edges" below.
 - **Tier 2 frontmatter**: `when_to_use` (intake / daily /
   review-queue / triage trigger phrases) +
@@ -172,13 +163,19 @@ means for board-superpowers" #3 for the full rationale.
 - **Role**: Consumer session main skill. Full F-C0..F-C14
   lifecycle from
   [`docs/architecture/0002-product-features-and-flows/04-consumer-surface.md`](./docs/architecture/0002-product-features-and-flows/04-consumer-surface.md).
-- **Body target**: 350-450 lines.
+  Consumer subactions span action_id 100-113 (100-111 review
+  cycle + 112 PR-submit pre-flight card body sync + 113
+  post-merge cleanup).
+- **Body target**: ≤ 300 lines (current 229).
 - **References folder**:
   `references/{handoff-to-superpowers,pr-template,surface-protocol,permission-boundary}.md`.
 - **Composes (atomic)**: `board-canon`,
-  `enforcing-pr-contract` (F-C12 PR submit).
-  `classifying-actions` + `auditing-actions` are inlined as
-  degraded R-class behavior in v1-minimum.
+  `board-superpowers:enforcing-pr-contract` (Step 9.5
+  card body sync + Step 10 PR submit; action_ids 112 and 113
+  also audit via this path),
+  `board-superpowers:classifying-actions` +
+  `board-superpowers:auditing-actions` (every
+  mutating action, action_ids 100-113).
 - **Composes (cross-plugin)**: see § "Cross-plugin edges" below.
 - **Constraint**: under Mode-2 it runs as a CC subagent —
   `max_depth=1` means it CANNOT spawn further subagents; every
@@ -205,9 +202,10 @@ means for board-superpowers" #3 for the full rationale.
 #### `bootstrapping-repo` (v1-minimum, shipped v0.2.0)
 
 - **Role**: F-B1 (host bootstrap) + F-B2 (per-repo bootstrap with
-  5 sub-capabilities — standard labels, Status validation,
+  7 sub-capabilities — standard labels, Status validation,
   `config.yml` write, `.gitignore` entry, BYO-RDBMS credential
-  setup) + step 4 routing-block injection into `AGENTS.md` +
+  setup, per-repo venv via `uv`, audit DDL dispatch) + step 4
+  routing-block injection into `AGENTS.md` +
   `CLAUDE.md` + initial host-local `state.yml` write. Drives
   `scripts/bootstrap-host.sh` and `scripts/bootstrap-project.sh`
   end-to-end and orchestrates the architect's first-session UX.
@@ -215,9 +213,8 @@ means for board-superpowers" #3 for the full rationale.
 - **References folder**: `references/{intro,first-time-user-guide}.md`
   + `references/changelog/v0.2.0.md`.
 - **Composes (atomic)**: `board-canon` (read schema invariants for
-  Status validation; static reference at v1-minimum). The deferred
-  atomic `auditing-actions` is inlined as the v1-minimum-degraded
-  jsonl audit trace via `bsp_audit_local_write`.
+  Status validation), `classifying-actions` + `auditing-actions`
+  (every mutating action).
 - **Composes (cross-plugin)**: none (bootstrap is
   board-superpowers-internal).
 - **Trigger model**: `INVOKE: bootstrapping-repo` marker injected
@@ -249,7 +246,7 @@ means for board-superpowers" #3 for the full rationale.
   `plugin.json:version` (fast path), OR architect says
   "what's new in this version" (fallback path).
 
-### Atomic layer (4 skills: 2 v1-minimum + 2 deferred)
+### Atomic layer (4 skills, all shipped)
 
 #### `board-canon` (v1-minimum)
 
@@ -269,65 +266,69 @@ means for board-superpowers" #3 for the full rationale.
 
 #### `enforcing-pr-contract` (v1-minimum)
 
-- **Role**: PR three-section contract enforcement —
-  `## Automated Verification` (required), `## Human
-  Verification TODO` (optional, must not be filler),
-  `## Retro Notes` (required when reusable lessons exist).
-  Provides both injection templates (Consumer side, F-C12) and
-  validation rules (Producer side, F-02 Review Queue).
-- **Body target**: 200-250 lines.
+- **Role**: Two-contract enforcement — **Contract A** (PR body
+  three-section shape: `## Automated Verification` required,
+  `## Human Verification TODO` optional but must not be filler,
+  `## Retro Notes` required when reusable lessons exist) +
+  **Contract B** (card body acceptance-criteria sync: every AC
+  must be `[x]` or `[!]` with a reason at PR-submit time;
+  bare `[ ]` is forbidden). Provides injection templates for
+  the Consumer (Step 10 PR submit) and validation rules for
+  the Producer (F-02 Review Queue). Both contracts are checked
+  by `scripts/submit-pr.sh` and by the Producer's review-queue
+  routine.
+- **Body target**: ≤ 200 lines (current 151).
 - **References folder**:
   `references/{section-templates,validation-rules,filler-detection}.md`.
-- **Called by**: `consuming-card` (F-C12 PR submit),
-  `managing-board` (F-02 Review Queue contract-violation
-  flagging).
+- **Called by**: `consuming-card` (Step 9.5 card body sync +
+  Step 10 PR submit), `managing-board` (F-02 Review Queue
+  contract-violation flagging).
 - **Calls**: nothing.
-- **SPOT consolidates**: PR three-section schema would
-  otherwise be inlined in both Consumer and Producer skills.
+- **SPOT consolidates**: Contract A (PR three-section shape)
+  and Contract B (AC terminal-state rule) would otherwise be
+  inlined separately in both Consumer and Producer skills —
+  this skill is the single source of truth for both.
 - **Tier 2 frontmatter**: `user-invocable: false` (atomic
   reflex, never user-driven directly).
 
-#### `classifying-actions` (deferred to v1-complete)
+#### `classifying-actions` (v1-complete, shipped v0.3.0)
 
-- **Role**: D-AUTONOMY-1 14-row matrix + Consumer subaction
-  catalog (`action_id` 100-111) + 4-step triage rule +
-  `autonomy_overrides:` parsing (project + user layers). The
-  caller hands in an action; this skill returns the A / R / N
-  decision.
-- **Body target**: 200-250 lines.
+- **Role**: D-AUTONOMY-1 14-row Producer matrix + Consumer
+  subaction catalog (`action_id` 100-113: 100-111 review-cycle
+  actions, 112 PR-submit pre-flight card body sync, 113
+  post-merge cleanup) + 5-step triage rule +
+  `autonomy_overrides:` parsing (project + user layers via
+  `bsp_resolve_autonomy_class`). The caller hands in an
+  action_id; this skill returns the A / R / N decision.
+- **Body target**: ≤ 200 lines (frequently-loaded atomic; current 81).
 - **References folder**:
   `references/{matrix,triage-rule,override-parsing,action-id-catalog}.md`.
 - **Called by**: every mutating skill (5 of them).
 - **Calls**: nothing.
 - **SPOT consolidates**: ADR-0006 matrix would otherwise be
-  inlined 5 times — 14 rows × 5 = 70 lines of duplicated rule
-  encoding drifting independently.
-- **v1-minimum degradation**: until this skill ships, every
-  v1-minimum molecular SKILL.md inlines the R-class default
-  ("propose, ask architect, await ack, then act"). Replace
-  those inline blocks when this skill lands.
+  inlined 5 times — Producer 14 rows + Consumer 14 rows × 5 =
+  140 lines of duplicated rule encoding drifting independently.
+- **Tier 2 frontmatter**: `user-invocable: false` (atomic
+  reflex, never user-driven directly).
 
-#### `auditing-actions` (deferred to v1-complete)
+#### `auditing-actions` (v1-complete, shipped v0.3.0)
 
 - **Role**: Audit log schema (8 columns + 4 enum sets) + R-class
   two-entry rule (propose + resolve) + BYO RDBMS write
   conventions + degradation mode (when DB unavailable, A-class
-  degrades to R-class).
-- **Body target**: 200-300 lines.
+  degrades to R-class with jsonl fallback, explicit mode-field
+  enum).
+- **Body target**: ≤ 200 lines (frequently-loaded atomic; current 84).
 - **References folder**:
   `references/{schema,two-entry-rule,db-write-conventions,degradation-mode}.md`.
 - **Called by**: every mutating skill (5 of them) — invoked
   immediately after `classifying-actions` returns A or R.
 - **Calls**: external RDBMS via
-  `${CLAUDE_PLUGIN_ROOT}/scripts/audit-log-write.sh`
-  (script TBD per ADR-0006).
+  `${CLAUDE_PLUGIN_ROOT}/scripts/audit-log-write.sh`.
 - **SPOT consolidates**: ADR-0006 §5 schema would otherwise be
   inlined 5 times.
-- **v1-minimum degradation**: until this skill ships, every
-  v1-minimum molecular SKILL.md appends a one-line jsonl entry
-  to a local `~/.board-superpowers/repos/<normalized>/audit-local.jsonl`
-  file as an interim trace. Replace with full schema + BYO
-  RDBMS write when this skill lands.
+- **Tier 2 frontmatter**: `user-invocable: false` (atomic
+  reflex, never user-driven directly).
 
 ## Call graph
 

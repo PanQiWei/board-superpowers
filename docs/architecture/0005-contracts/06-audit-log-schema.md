@@ -683,7 +683,7 @@ Rejected alternatives: per-architect (violates I-3); per-Card
 
 ---
 
-## DDL ownership — one-shot init script (TBD-4 finalized)
+## DDL ownership — one-shot init script (shipped in v0.3.0 / #34)
 
 **Decision:** board-superpowers ships a one-shot
 `scripts/audit-init.sh` that runs idempotent DDL the first time
@@ -691,34 +691,34 @@ Rejected alternatives: per-architect (violates I-3); per-Card
 resolves successfully. Architect controls the DB; plugin owns the
 schema.
 
-### Script contract (forward-looking — not in v1 ship; lands per
-TBD-4)
+### Script contract
 
-`scripts/audit-init.sh` will:
+`scripts/audit-init.sh` reads credentials, validates the scheme,
+dispatches DDL by dialect, and verifies the sentinel row.
 
 | Step | Behavior |
 |------|----------|
-| 1 | Read credentials from `BOARD_SP_AUDIT_DB_URL` env var or `~/.board-superpowers/credentials.yml:audit_db_url` (env-var precedence per [`03-config-schemas.md`](./03-config-schemas.md)) |
-| 2 | Connect; refuse if the DSN is not Postgres or MySQL |
-| 3 | Run idempotent DDL — `CREATE TABLE IF NOT EXISTS audit_log (…)` with the 7-column shape pinned above |
-| 4 | Run idempotent DDL for the recommended starter indices (see "Indices" above) |
-| 5 | Insert a sentinel `schema_version` row (or use a sibling `audit_schema_meta` table tracking `version: 1`) |
-| 6 | Exit 0 on success; exit 1 on any DDL failure (architect fixes DB / scope) |
+| 1 | `bsp_ensure_venv <repo_root>` — uv missing OR uv sync fail → exit 1 |
+| 2 | Read credentials from `BOARD_SP_AUDIT_DB_URL` env var or `~/.board-superpowers/credentials.yml:audit_db_url` (env-var precedence) |
+| 3 | Parse URL + validate against the **6-scheme allowlist** (`postgres` / `postgresql` / `mysql` / `mysql+pymysql` / `sqlite` / `sqlite3` per ADR-0009) |
+| 4 | Dispatch DDL apply by scheme — sqlite (stdlib `sqlite3` executescript on `audit-schema.sqlite.sql`) / postgres (subprocess `psql -f audit-schema.postgres.sql`) / mysql (venv-python `pymysql` executescript on `audit-schema.mysql.sql`) |
+| 5 | Verify `audit_schema_meta.version=1` row exists; insert sentinel via `INSERT ... ON CONFLICT DO NOTHING` |
 
 ### Idempotency
 
 DDL uses `IF NOT EXISTS` clauses so re-runs are safe. Indices
-similarly. The schema-version sentinel is upserted (architect's
-DB; we do not own the table — merely the schema definition).
+similarly. The schema-version sentinel is upserted (`INSERT ... ON
+CONFLICT DO NOTHING` for postgres / sqlite; `ON DUPLICATE KEY UPDATE`
+for mysql); re-runs safe.
 
-### Exit codes (forward-looking)
+### Exit codes
 
 | Code | Meaning |
 |------|---------|
 | `0` | DDL applied (or schema already at current version — no-op) |
-| `1` | DB unreachable, DDL failed, credentials malformed |
+| `1` | DB unreachable / DDL failed / credentials malformed / `bsp_ensure_venv` returned non-zero |
 | `2` | Bad arguments |
-| `3` | Postgres / MySQL client (`psql` / `mysql`) unavailable on PATH |
+| `3` | `psql` / `mysql` client unavailable on PATH (sqlite scheme uses stdlib so this code never fires for sqlite) |
 
 ### Why one-shot, not embedded
 
@@ -733,9 +733,39 @@ DB; we do not own the table — merely the schema definition).
 
 ### Cited rationale
 
-- 0003 § 3.3.8 TBD-4 — finalization here.
 - P7 / D-META-1 (mechanism, not configuration).
 - ADR-0006 §5 (BYO RDBMS).
+- ADR-0009 (6-scheme allowlist).
+
+---
+
+## jsonl fallback mode-field
+
+When audit-log-write.sh degrades to jsonl (instead of writing to the
+configured RDBMS), the entry's `mode` field carries one of these values
+identifying the degradation cause. SPOT: only `bsp_audit_local_write`
+in `scripts/lib/common.sh` writes this field; SKILL bodies and other
+callers do not duplicate.
+
+### Legacy values (read-back compatibility only)
+
+| Value | Origin |
+|-------|--------|
+| `v1-minimum-degraded` | Written by board-superpowers v0.2.x (before audit governance shipped). Readers MUST handle this for forward-compat; writers MUST NOT emit new entries with this value. |
+
+### Current write enum (v0.3.0 onward)
+
+| Value | Trigger |
+|-------|---------|
+| `no-db` | Architect picked "skip" at bootstrap step 2e; audit_db_url unset by design |
+| `degraded-db-unavailable` | audit_db_url set but DB rejected connection (network / auth / DDL not applied) |
+| `degraded-uv-missing` | host doesn't have uv installed (architect must run bootstrap-host.sh) |
+| `degraded-venv-create-failed` | uv installed but `uv sync` failed (network / proxy / lock conflict / disk full) |
+
+### Cited rationale
+
+- ADR-0006 §5 "Trade-off explicitly registered" + ADR-0009.
+- Card #34 design doc § 4.4 (5-tier mode enum) + § 7.1 (this section as same-PR add).
 
 ---
 

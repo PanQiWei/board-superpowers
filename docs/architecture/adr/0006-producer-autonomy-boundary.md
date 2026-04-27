@@ -149,6 +149,11 @@ acceptable** because it's file-based and would re-introduce the
 > preserved and not affected by ADR-0009. See
 > [`0005-contracts/03-config-schemas.md`](../0005-contracts/03-config-schemas.md)
 > for the live 6-scheme allowlist.
+>
+> ADR-0009 + #34 ship together: audit-init.sh, audit-log-write.sh,
+> 3-dialect schema, classifying-actions + auditing-actions atomic SKILLs.
+> The "Alternatives considered → Allow SQLite" sub-section in this ADR
+> is now a historical record; SQLite is a first-class scheme as of #34.
 
 **Credentials.** Connection details live in user-level config.
 Two candidate mechanisms (final choice deferred to

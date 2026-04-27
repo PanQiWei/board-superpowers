@@ -56,21 +56,27 @@ Plugin-managed; per-host. Owned by the **HostBootstrap aggregate**
 Directory `~/.board-superpowers/` is mode `0700`. File mode
 inherits umask (typically `0644` after `umask 022`).
 
-### v1 schema
+### v2 schema (current, shipped in v0.3.0 / Card #34)
 
 ```yaml
-schema_version: 1
-host_bootstrapped_at: "2026-04-26T10:30:00Z"   # ISO 8601 UTC
-last_seen_version: "0.1.0"                      # semver string
+schema_version: 2
+host_bootstrapped_at: "2026-04-26T10:30:00Z"
+last_seen_version: "0.3.0"
+uv_version: "0.5.7"
 ```
 
 ### Field types and defaults
 
 | Field | Type | Required? | Notes |
 |-------|------|-----------|-------|
-| `schema_version` | integer | yes | `1` at v1; bumped per I-12 on every additive migration |
+| `schema_version` | integer | yes | `2` as of v0.3.0; bumped per I-12 on every additive migration |
 | `host_bootstrapped_at` | string (ISO 8601, UTC, `Z` suffix) | yes | Set once at F-B1 firing; never updated |
 | `last_seen_version` | string (semver) | yes | Updated by F-B3 at every host version transition |
+| `uv_version` | string (semver) | yes (since v2) | Recorded by bootstrap-host.sh after detecting / installing uv. Updated on each bootstrap-host re-run if uv version drifted. |
+
+> **Migration note:** schema_version 2 ships in v0.3.0 / Card #34;
+> bootstrap-host.sh runs an inline mini-migration when it detects v1
+> manifests, until `migrating-repo-version` skill ships.
 
 ### Origin
 
@@ -208,6 +214,45 @@ project: "OWNER/NUMBER"
 | `base_branch` | string (branch name) | no (commented placeholder) | `main` (auto-detected from `origin/HEAD`) | Future; not yet read by `claim-card.sh` |
 | `default_execution_skill` | string | no (commented placeholder) | `superpowers:subagent-driven-development` | Future |
 
+### `post_merge_cleanup` — opt-in auto cron for post-merge cleanup
+
+This block is written as a commented-out section by
+`bootstrap-project.sh` at step 2c. The architect uncomments it and
+sets `auto_cron: true` to enable the OS-level cron / launchd polling
+path. When the block is absent or fully commented out, the plugin
+treats `auto_cron: false` (no cron installed).
+
+```yaml
+# post_merge_cleanup:
+#   auto_cron: false              # Opt-in. Default false. When true,
+#                                 # install-post-merge-cron.sh installs an
+#                                 # OS-level cron / launchd entry that polls
+#                                 # PR merge state at poll_interval_minutes
+#                                 # and runs post-merge-cleanup.sh on MERGED.
+#   poll_interval_minutes: 15     # How often the cron / launchd entry fires.
+#   timeout_hours: 48             # Cron self-uninstalls if PR still OPEN
+#                                 # past this threshold; surfaces to architect.
+```
+
+#### `post_merge_cleanup` field types and defaults
+
+| Field | Type | Required? | Default | Notes |
+|-------|------|-----------|---------|-------|
+| `post_merge_cleanup.auto_cron` | boolean | no | `false` | Opt-in only. When `false` (or block absent), the Consumer handles cleanup in the interactive session. When `true`, `install-post-merge-cron.sh --card <N>` is called at PR-submit time and the cron drives cleanup. |
+| `post_merge_cleanup.poll_interval_minutes` | positive integer | no | `15` | How many minutes between each `gh pr view --json state` poll cycle. Effective only when `auto_cron: true`. |
+| `post_merge_cleanup.timeout_hours` | positive integer | no | `48` | If the PR is still `OPEN` past this many hours, the cron entry self-uninstalls and surfaces a notice to the architect. Prevents indefinite cron accumulation on abandoned PRs. |
+
+#### Migration note
+
+`post_merge_cleanup` is an additive opt-in block appended to an
+existing `config.yml`. No `schema_version` bump is required — the
+file is not schema-versioned (per I-11 / I-12 cross-cutting rule
+above), and a plugin that does not recognise the block simply
+ignores it. Architects who upgrade from an earlier version of the
+plugin may add the block by hand or re-run
+`bootstrap-project.sh --force` to regenerate `config.yml` with the
+commented-out placeholder included.
+
 ### No `schema_version` field
 
 Per I-11 / I-12 / §1.5 cross-cutting: `config.yml` is **not**
@@ -223,6 +268,9 @@ beyond the initial `bootstrap-project.sh` write.
 - I-11, I-13.
 - ADR-0005 (BoardAdapter — `project:` round-trip stability).
 - 0003 § 3.3.7 RepoConfig aggregate — entity home.
+- [`06-audit-log-schema.md`](./06-audit-log-schema.md) —
+  action_id 113 (post-merge cleanup audit row) that
+  `post_merge_cleanup.auto_cron: true` triggers on each cron run.
 
 ---
 

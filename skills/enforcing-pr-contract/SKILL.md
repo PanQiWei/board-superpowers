@@ -9,15 +9,45 @@ user-invocable: false
 
 This skill is a discipline — it enforces a rule that's tempting to skip under shipping pressure. Use it on both sides of the loop: the Consumer drafting a PR and the Producer reviewing one.
 
+## Decision tree at a glance
+
+```mermaid
+flowchart TD
+    PR["PR opened from claim branch"] --> CA{"Contract A:\nPR body 3 sections\nvalid and non-filler?"}
+    CA -- no --> Reject["Reject PR;\nroute card back to In Progress"]
+    CA -- yes --> CB{"Contract B:\ncard body ACs all\n[x] or [!] with reason?"}
+    CB -- "no, has unchecked [ ]" --> Reject
+    CB -- "no, [!] without reason" --> Reject
+    CB -- yes --> Pass(["Validation pass\ncard stays In Review"])
+```
+
 ## The iron law
 
-**A PR opened from a `claim/<N>-...` branch MUST have all three sections in this exact order, with non-filler content:**
+**A PR opened from a `claim/<N>-...` branch MUST satisfy two contracts simultaneously:**
+
+### Contract A — PR body shape
+
+All three sections in this exact order, with non-filler content:
 
 1. `## Automated Verification`
 2. `## Human Verification TODO` (optional in spirit, but must not be filler if present)
 3. `## Retro Notes`
 
-`scripts/submit-pr.sh` rejects PRs missing any required section or containing filler before opening. The `managing-board` skill's review-queue routine re-checks at review time and routes violators back to the Consumer.
+### Contract B — Card body acceptance-criteria sync
+
+The card linked from the `claim/<N>-...` branch MUST have every acceptance-criterion checkbox in a terminal state by PR-submit time:
+
+- `[x]` — verified-passing (the default for items the Consumer just shipped).
+- `[!]` — explicitly deferred, with a one-line reason inline (`[!] depends on #45 — split as follow-up`). Use for items the Consumer cleanly chose NOT to deliver in this PR.
+- `[ ]` — UNSHIPPED. **Forbidden at PR-submit time.** A `[ ]` AC means the Consumer has not addressed it; reviewer is left guessing whether it was forgotten or aborted.
+
+The Consumer toggles each checkbox during `consuming-card` Step 9.5 (PR-submit pre-flight card body sync, action_id 112). Producer-side validation rejects a PR whose linked card has any `[ ]` AC.
+
+### Why both contracts
+
+`Contract A` makes the PR description honest about **what was checked**; `Contract B` makes the card body honest about **what was delivered**. Without B, a reviewer reads the PR body but the card body still claims "[ ] all 12 ACs unimplemented" — instant cognitive dissonance, hidden scope leak, and a stale "to-do" list for the next Consumer to mistakenly pick up.
+
+`scripts/submit-pr.sh` rejects PRs missing any required PR-body section, containing filler, or whose linked card body has unchecked ACs. The `managing-board` skill's review-queue routine re-checks both contracts at review time and routes violators back to the Consumer.
 
 ## Why this contract exists
 
@@ -78,6 +108,8 @@ Rules:
 
 `references/validation-rules.md` documents the precise regex set. Summary:
 
+**PR body shape (Contract A):**
+
 1. The literal heading `## Automated Verification` exists.
 2. The Automated Verification section is non-empty.
 3. The Automated Verification section is not exactly one of the filler phrases (TBD / N/A / etc.).
@@ -85,7 +117,12 @@ Rules:
 5. The Retro Notes section is non-empty.
 6. (If `## Human Verification TODO` is present) it is not filler.
 
-The script does NOT enforce ordering of sections beyond the existence of headings. Reviewers care about ordering for readability; the validator cares about presence.
+**Card body AC sync (Contract B):**
+
+7. The card linked from the `claim/<N>-...` branch has zero `- [ ]` lines under its `## Acceptance criteria` heading. Every AC must be `- [x]` or `- [!]`.
+8. (If any `- [!]` appears) the line must continue with prose (≥ 5 chars) explaining the deferral. A bare `- [!]` is filler.
+
+The script does NOT enforce ordering of PR body sections beyond the existence of headings. Reviewers care about ordering for readability; the validator cares about presence + (for the card) terminal-state ACs.
 
 ## Filler detection
 
@@ -105,10 +142,11 @@ A semantic-grade catalog (catching "I checked it manually" without saying what w
 
 When the Producer's `managing-board` skill runs its review-queue routine, for each open PR linked to a card it:
 
-1. Fetches the PR body via `gh pr view <N> --json body`.
-2. Runs the same validation logic as `submit-pr.sh`.
-3. If validation fails: comments on the PR pointing at the violation; the Producer then proposes routing the card from `In Review` back to `In Progress` (rework signal) and asks the Consumer to acknowledge before transitioning.
-4. If validation passes: leaves the card in `In Review` for normal review-and-merge.
+1. Fetches the PR body via `gh pr view <PR-N> --json body`.
+2. Fetches the card body via `gh issue view <card-N> --json body`.
+3. Runs the full validation logic as `submit-pr.sh` — both Contract A (PR body shape) and Contract B (card body AC sync).
+4. If validation fails: comments on the PR pointing at the specific violation (cite which contract + which rule); the Producer then proposes routing the card from `In Review` back to `In Progress` (rework signal) and asks the Consumer to acknowledge before transitioning.
+5. If validation passes: leaves the card in `In Review` for normal review-and-merge.
 
 This skill is the **single source of truth** for both sides (Consumer write + Producer validate) — there is no second implementation of these rules anywhere in the plugin. Changes to the contract land in this one SKILL.md and take effect on both sides automatically.
 

@@ -94,7 +94,7 @@ F-B2 step 4 appended a routing block to both `CLAUDE.md` (for Claude Code's auto
 <!-- /board-superpowers:routing -->
 ```
 
-The block content is plugin-owned within the marker pair, user-owned outside. The plugin records a SHA256 hash of the injected content in `state.yml`; on the next plugin upgrade, F-B4 (deferred to `migrating-repo-version`) compares the on-disk block to the recorded hash. Match → auto-update. Mismatch → ask you what to do (replace / merge / leave alone).
+The block content is plugin-owned within the marker pair, user-owned outside. The plugin records a SHA256 hash of the injected content in `state.yml`; on the next plugin upgrade, the `board-superpowers:migrating-repo-version` skill compares the on-disk block to the recorded hash. Match → auto-update. Mismatch → ask you what to do (replace / merge / leave alone).
 
 Do not edit anything **between** the markers by hand — your edits will be overwritten by the next auto-update. If you need to customize the routing, edit content **outside** the markers (CLAUDE.md / AGENTS.md are otherwise yours).
 
@@ -136,6 +136,6 @@ The `check-deps.sh` invocation should exit 0. If it exits 2, the routing block i
 
 ## What about audit logging
 
-If you accepted BYO-RDBMS at F-B2 step 2e, every R-class mutating action writes a row to your audit DB once `auditing-actions` ships (deferred to v1-complete). At v0.2.0 the audit goes to a host-local jsonl trace file at `~/.board-superpowers/repos/<normalized>/audit-local.jsonl` — that's the v1-minimum-degraded interim trace, not your forever solution.
+If you accepted BYO-RDBMS at the credential-setup step, every R-class mutating action writes a row to your audit DB via `board-superpowers:auditing-actions`. If the DB is unreachable (network / auth / DDL not yet applied) or you declined BYO-RDBMS, audit-log-write.sh degrades to a host-local jsonl trace file at `~/.board-superpowers/repos/<normalized>/audit-local.jsonl` and the entry's `mode` field records the cause.
 
-If you declined BYO-RDBMS, the same jsonl trace is your audit log. Every A-class action that would normally auto-act becomes R-class (the agent asks you first). That's the documented friction-feature per ADR-0006 — chattier sessions, but no silent state mutation.
+If you declined BYO-RDBMS, the jsonl trace is your audit log. Every A-class action that would normally auto-act becomes R-class (the agent asks you first). That's the documented friction-feature — chattier sessions, but no silent state mutation.

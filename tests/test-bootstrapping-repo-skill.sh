@@ -121,16 +121,22 @@ check 'meta has bounded-context: bootstrap' \
 # ---------------------------------------------------------------------------
 printf 'Body — load-bearing procedures\n'
 
-check 'body mentions F-B1 (host bootstrap)' \
-    grep -qE 'F-B1' "${SKILL_FILE}"
-check 'body mentions F-B2 (per-repo bootstrap)' \
-    grep -qE 'F-B2' "${SKILL_FILE}"
+check 'body describes host bootstrap step' \
+    grep -qiE '^### Step 1 — host bootstrap|host bootstrap' "${SKILL_FILE}"
+check 'body describes per-repo bootstrap step' \
+    grep -qiE 'per-repo bootstrap|^### Step 3' "${SKILL_FILE}"
 check 'body invokes bootstrap-host.sh script' \
     grep -q 'bootstrap-host\.sh' "${SKILL_FILE}"
 check 'body invokes bootstrap-project.sh script' \
     grep -q 'bootstrap-project\.sh' "${SKILL_FILE}"
-check 'body references the 5 F-B2 sub-steps (2a..2e)' \
-    grep -qE '2a.*labels|2b.*Status|2c.*config|2d.*\.gitignore|2e.*credential' "${SKILL_FILE}"
+check 'body references the 7 bootstrap-project sub-steps (2a..2g)' \
+    bash -c "grep -qE '2a.*labels' '${SKILL_FILE}' && \
+             grep -qE '2b.*Status' '${SKILL_FILE}' && \
+             grep -qE '2c.*config' '${SKILL_FILE}' && \
+             grep -qE '2d.*\\.gitignore' '${SKILL_FILE}' && \
+             grep -qE '2e.*credential' '${SKILL_FILE}' && \
+             grep -qE '2f.*venv|2f.*uv sync' '${SKILL_FILE}' && \
+             grep -qE '2g.*audit-init|2g.*DDL' '${SKILL_FILE}'"
 check 'body references step 4 routing injection' \
     grep -qE 'routing.*inject|step 4.*routing' "${SKILL_FILE}"
 check 'body mentions CLAUDE.md AND AGENTS.md as routing targets' \
@@ -149,16 +155,16 @@ check 'catalog names bootstrap-project-2a..2e actions' \
 check 'catalog names bootstrap-project-4 routing action' \
     grep -q 'bootstrap-project-4' "${SKILL_FILE}"
 
-printf 'Body — R-class default + audit log\n'
+printf 'Body — governance via atomic skills\n'
 
-check 'body declares v1-minimum R-class default' \
-    grep -qE 'R-class' "${SKILL_FILE}"
-check 'body describes propose -> ack -> act -> audit discipline' \
-    grep -qiE 'propose.*ack.*act|propose.*acknowledge|propose.*architect.*await' "${SKILL_FILE}"
-check 'body references bsp_audit_local_write helper' \
-    grep -q 'bsp_audit_local_write' "${SKILL_FILE}"
-check 'body references audit-local.jsonl interim trace' \
-    grep -q 'audit-local\.jsonl' "${SKILL_FILE}"
+check 'body declares the R-class posture (mostly R-class)' \
+    grep -qE 'mostly R-class|Why bootstrap is mostly R-class' "${SKILL_FILE}"
+check 'body invokes board-superpowers:classifying-actions' \
+    grep -q 'board-superpowers:classifying-actions' "${SKILL_FILE}"
+check 'body invokes board-superpowers:auditing-actions' \
+    grep -q 'board-superpowers:auditing-actions' "${SKILL_FILE}"
+check 'body documents the 5-step governance sequence' \
+    grep -qiE '5-step.*governance|How mutating actions are handled' "${SKILL_FILE}"
 
 printf 'Body — idempotency + failure paths\n'
 
