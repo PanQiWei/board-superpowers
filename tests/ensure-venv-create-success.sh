@@ -2,6 +2,7 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMPREPO="$(mktemp -d)"
+trap 'rm -rf "${TMPREPO}"' EXIT
 mkdir -p "${TMPREPO}/.board-superpowers"
 
 # Verify uv is available; otherwise skip.

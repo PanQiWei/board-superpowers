@@ -2,10 +2,11 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMPREPO="$(mktemp -d)"
+TMPPLUGIN="$(mktemp -d)"
+trap 'rm -rf "${TMPREPO}" "${TMPPLUGIN}"' EXIT
 mkdir -p "${TMPREPO}/.board-superpowers"
 
 # Mock CLAUDE_PLUGIN_ROOT to a directory without templates/.
-TMPPLUGIN="$(mktemp -d)"
 export CLAUDE_PLUGIN_ROOT="${TMPPLUGIN}"
 
 source "${SCRIPT_DIR}/scripts/lib/common.sh"

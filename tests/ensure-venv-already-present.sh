@@ -2,6 +2,7 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TMPREPO="$(mktemp -d)"
+trap 'rm -rf "${TMPREPO}"' EXIT
 mkdir -p "${TMPREPO}/.board-superpowers/.venv/bin"
 # Stub a python3 executable.
 cat > "${TMPREPO}/.board-superpowers/.venv/bin/python3" <<'EOF'
