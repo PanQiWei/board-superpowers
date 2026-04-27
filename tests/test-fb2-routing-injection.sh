@@ -1067,6 +1067,192 @@ check_not 'stub-e2e: state.yml does NOT mention CLAUDE.md target' \
 rm -rf "${TMP}"
 
 # ---------------------------------------------------------------------------
+# Scenario 18: end-to-end with substantive (non-stub) CLAUDE.md preserved
+# ---------------------------------------------------------------------------
+# The TODO in PR #29 asked to verify F-B2 still injects normally when
+# CLAUDE.md is a substantive (non-stub) file. Hermetic version: pre-seed
+# CLAUDE.md as a 50-line developer-doc-style file (no @-include), run
+# F-B2, expect (1) markers injected after the existing content, (2)
+# state.yml routing_blocks contains both AGENTS.md AND CLAUDE.md, (3)
+# original CLAUDE.md content preserved verbatim above the markers.
+printf 'Scenario 18: end-to-end F-B2 with substantive CLAUDE.md — both files injected\n'
+
+TMP="$(mktemp -d)"
+HOME_DIR="${TMP}/home"
+PLUGIN_ROOT="${TMP}/plugin"
+STUBS_DIR="${TMP}/stubs"
+REPO_ROOT="${TMP}/repo"
+
+mkdir -p "${HOME_DIR}" "${STUBS_DIR}"
+make_stub_plugin_root "0.2.0" "${PLUGIN_ROOT}"
+init_tmp_repo "${REPO_ROOT}" "foo/bar"
+stub_gh "${STUBS_DIR}"
+printf '%s\n' "${CANONICAL_STATUS}" > "${STUBS_DIR}/status_opts"
+printf '[]\n' > "${STUBS_DIR}/labels.json"
+
+# Pre-seed CLAUDE.md as a substantive developer guide. > 30 lines so
+# the line-count predicate trips, no @-include line so the stub
+# predicate fails — must NOT be classified as stub.
+{
+    printf '# Project CLAUDE.md\n\n'
+    for i in $(seq 1 50); do
+        printf 'Substantive developer guidance line %d.\n' "${i}"
+    done
+    printf '\n## Architecture overview\n\nMore content here.\n'
+} > "${REPO_ROOT}/CLAUDE.md"
+
+CLAUDE_PRE_SHA="$(sha256_of_file "${REPO_ROOT}/CLAUDE.md")"
+
+set +e
+ALL_OUT="$(run_bootstrap "${HOME_DIR}" "${PLUGIN_ROOT}" "${STUBS_DIR}" \
+    --owner foo --project 1 --repo-root "${REPO_ROOT}" 2>&1)"
+RC=$?
+set -e
+
+assert_eq 'substantive-CLAUDE: bootstrap exit 0' '0' "${RC}"
+check 'substantive-CLAUDE: AGENTS.md created with marker pair' \
+    bash -c "grep -Fq '<!-- board-superpowers:routing -->' \"\$1\"" _ "${REPO_ROOT}/AGENTS.md"
+check 'substantive-CLAUDE: CLAUDE.md HAS marker pair (substantive → injected)' \
+    bash -c "grep -Fq '<!-- board-superpowers:routing -->' \"\$1\" && grep -Fq '<!-- /board-superpowers:routing -->' \"\$1\"" _ "${REPO_ROOT}/CLAUDE.md"
+check 'substantive-CLAUDE: original "Substantive developer guidance" content preserved' \
+    grep -Fq 'Substantive developer guidance line 25' "${REPO_ROOT}/CLAUDE.md"
+check 'substantive-CLAUDE: original "## Architecture overview" heading preserved' \
+    grep -Fq '## Architecture overview' "${REPO_ROOT}/CLAUDE.md"
+# File grew (because the routing block was appended).
+CLAUDE_POST_BYTES="$(wc -c < "${REPO_ROOT}/CLAUDE.md" | tr -d ' ')"
+CLAUDE_PRE_BYTES="$(wc -c <<< "${CLAUDE_PRE_SHA}")"  # placeholder; we want pre-file size
+# Recompute pre size from the seeded content cleanly.
+PRE_SIZE_FILE="${TMP}/pre-claude.txt"
+{
+    printf '# Project CLAUDE.md\n\n'
+    for i in $(seq 1 50); do
+        printf 'Substantive developer guidance line %d.\n' "${i}"
+    done
+    printf '\n## Architecture overview\n\nMore content here.\n'
+} > "${PRE_SIZE_FILE}"
+CLAUDE_PRE_BYTES="$(wc -c < "${PRE_SIZE_FILE}" | tr -d ' ')"
+check 'substantive-CLAUDE: file grew (block appended, content NOT replaced)' \
+    test "${CLAUDE_POST_BYTES}" -gt "${CLAUDE_PRE_BYTES}"
+
+STATE_DIR="$(normalized_state_dir "${HOME_DIR}" "${REPO_ROOT}")"
+STATE_FILE="${STATE_DIR}/state.yml"
+
+COUNT="$(python3 -c "
+import sys
+data = open(sys.argv[1]).read()
+lines = data.splitlines()
+in_rb = False
+n = 0
+for line in lines:
+    if line.startswith('routing_blocks:'):
+        in_rb = True
+        continue
+    if in_rb:
+        if line.startswith('  - target_file:'):
+            n += 1
+        elif line and not line.startswith(' '):
+            break
+print(n)
+" "${STATE_FILE}")"
+assert_eq 'substantive-CLAUDE: state.yml has 2 routing_blocks entries' '2' "${COUNT}"
+check 'substantive-CLAUDE: state.yml mentions AGENTS.md target' \
+    bash -c "grep -Eq 'target_file:.*AGENTS\\.md' \"\$1\"" _ "${STATE_FILE}"
+check 'substantive-CLAUDE: state.yml mentions CLAUDE.md target' \
+    bash -c "grep -Eq 'target_file:.*CLAUDE\\.md' \"\$1\"" _ "${STATE_FILE}"
+
+: "${ALL_OUT:-}"
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
+# Scenario 19: dual stub redirects — routing_blocks empty + check-deps warns
+# ---------------------------------------------------------------------------
+# The TODO in PR #29 asked to verify the degenerate case where BOTH
+# AGENTS.md AND CLAUDE.md are stub redirects (mutually pointing). F-B2
+# must produce routing_blocks: [] (no injection happened anywhere) and
+# check-deps must warn that the routing block is missing — because
+# functionally the routing IS missing: neither file carries the markers.
+printf 'Scenario 19: dual stub redirects — empty routing_blocks + check-deps warns\n'
+
+TMP="$(mktemp -d)"
+HOME_DIR="${TMP}/home"
+PLUGIN_ROOT="${TMP}/plugin"
+STUBS_DIR="${TMP}/stubs"
+REPO_ROOT="${TMP}/repo"
+
+mkdir -p "${HOME_DIR}" "${STUBS_DIR}"
+make_stub_plugin_root "0.2.0" "${PLUGIN_ROOT}"
+init_tmp_repo "${REPO_ROOT}" "foo/bar"
+stub_gh "${STUBS_DIR}"
+printf '%s\n' "${CANONICAL_STATUS}" > "${STUBS_DIR}/status_opts"
+printf '[]\n' > "${STUBS_DIR}/labels.json"
+
+# Pre-seed BOTH files as stub redirects pointing at each other.
+cat > "${REPO_ROOT}/AGENTS.md" <<'EOF'
+# AGENTS.md (stub redirect)
+
+This file is a stub redirect. The substantive content lives elsewhere.
+
+@CLAUDE.md
+EOF
+
+cat > "${REPO_ROOT}/CLAUDE.md" <<'EOF'
+# CLAUDE.md (stub redirect)
+
+This file is a stub redirect. The substantive content lives elsewhere.
+
+@AGENTS.md
+EOF
+
+AGENTS_PRE_SHA="$(sha256_of_file "${REPO_ROOT}/AGENTS.md")"
+CLAUDE_PRE_SHA="$(sha256_of_file "${REPO_ROOT}/CLAUDE.md")"
+
+set +e
+ALL_OUT="$(run_bootstrap "${HOME_DIR}" "${PLUGIN_ROOT}" "${STUBS_DIR}" \
+    --owner foo --project 1 --repo-root "${REPO_ROOT}" 2>&1)"
+RC=$?
+set -e
+
+assert_eq 'dual-stub: bootstrap exit 0' '0' "${RC}"
+AGENTS_POST_SHA="$(sha256_of_file "${REPO_ROOT}/AGENTS.md")"
+CLAUDE_POST_SHA="$(sha256_of_file "${REPO_ROOT}/CLAUDE.md")"
+assert_eq 'dual-stub: AGENTS.md untouched (stub preserved)' \
+    "${AGENTS_PRE_SHA}" "${AGENTS_POST_SHA}"
+assert_eq 'dual-stub: CLAUDE.md untouched (stub preserved)' \
+    "${CLAUDE_PRE_SHA}" "${CLAUDE_POST_SHA}"
+check_not 'dual-stub: AGENTS.md has NO routing markers' \
+    grep -Fq '<!-- board-superpowers:routing -->' "${REPO_ROOT}/AGENTS.md"
+check_not 'dual-stub: CLAUDE.md has NO routing markers' \
+    grep -Fq '<!-- board-superpowers:routing -->' "${REPO_ROOT}/CLAUDE.md"
+
+STATE_DIR="$(normalized_state_dir "${HOME_DIR}" "${REPO_ROOT}")"
+STATE_FILE="${STATE_DIR}/state.yml"
+check 'dual-stub: state.yml created' test -f "${STATE_FILE}"
+check 'dual-stub: state.yml has routing_blocks: []' \
+    bash -c "grep -Fq 'routing_blocks: []' \"\$1\"" _ "${STATE_FILE}"
+check_not 'dual-stub: state.yml mentions NO target_file entries' \
+    bash -c "grep -Eq 'target_file:' \"\$1\"" _ "${STATE_FILE}"
+
+# Now run check-deps.sh against this repo and verify it reports
+# "routing block missing" (the dual-stub case is functionally a repo
+# without injected routing — the asymmetric rule MUST trip, since at
+# least one of AGENTS.md / CLAUDE.md exists but neither carries the
+# canonical heading).
+# Use the real plugin root for check-deps.sh — make_stub_plugin_root
+# only copies the bootstrap-related scripts. check-deps.sh is plugin-
+# version-agnostic and only inspects CLAUDE_PROJECT_DIR's repo state.
+CHECK_DEPS_OUT="$(env -i HOME="${HOME_DIR}" \
+    PATH="${STUBS_DIR}:/usr/bin:/bin" \
+    CLAUDE_PROJECT_DIR="${REPO_ROOT}" \
+    bash "${PLUGIN_ROOT_REAL}/scripts/check-deps.sh" --machine 2>&1 || true)"
+check 'dual-stub: check-deps machine mode emits ROUTING_INJECTED=no' \
+    bash -c "printf '%s' \"\$1\" | grep -Fq 'ROUTING_INJECTED=no'" _ "${CHECK_DEPS_OUT}"
+
+: "${ALL_OUT:-}"
+
+rm -rf "${TMP}"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 printf '\n— TOTALS —\nPASS: %d\nFAIL: %d\n' "${PASS}" "${FAIL}"

@@ -528,6 +528,20 @@ needs its config.
      default, opt-out per-extension).
   4. **Routing-block re-injection** — for each of `CLAUDE.md`
      and `AGENTS.md`:
+     - **Stub-redirect filter (must precede everything else
+       below).** F-B4 inherits F-B2 step 4's stub-redirect rule
+       (target ≤ 30 lines AND contains a CC `@-include` line of
+       shape `^@<file>.md$`). When the on-disk target file
+       matches the stub-redirect predicate, F-B4 MUST treat it
+       as out-of-scope: no hash compute, no `routing_blocks[]`
+       comparison, no architect prompt. The stub is the
+       architect's deliberate redirect; F-B4 must never propose
+       to "restore" a routing block on it (doing so would defeat
+       the single-source-of-truth purpose the stub exists to
+       serve). Symmetrically, if a `state.yml:routing_blocks[]`
+       entry exists for a file that has since become a stub,
+       F-B4 silently drops the entry (state ↔ disk
+       reconciliation in the safe direction).
      - Read the current on-disk block (between the marker pair).
      - Compute its SHA256.
      - Find the matching `target_file` element in
