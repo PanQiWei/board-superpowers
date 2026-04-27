@@ -75,7 +75,11 @@ if [ -z "${VENV_PYTHON}" ]; then
         5) MODE="degraded-uv-missing"; bsp_warn "uv missing on PATH; degrading to jsonl" ;;
         6) bsp_die "plugin template corruption (templates/pyproject.toml absent)" ;;
         7) MODE="degraded-venv-create-failed"; bsp_warn "uv sync failed; degrading to jsonl" ;;
-        *) MODE="degraded-venv-unknown"; bsp_warn "venv unavailable (rc=${VENV_RC}); degrading to jsonl" ;;
+        # Unknown rc collapses into the create-failed bucket so the wire
+        # format stays inside the documented 4-value current enum
+        # (spec 06 § "jsonl fallback mode-field"). The real rc value
+        # surfaces via the bsp_warn log line below for forensic use.
+        *) MODE="degraded-venv-create-failed"; bsp_warn "venv unavailable (rc=${VENV_RC}); degrading to jsonl" ;;
     esac
     bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
         "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \

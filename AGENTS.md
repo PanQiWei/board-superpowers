@@ -19,7 +19,7 @@ user-facing overview.
   `managing-board` + `consuming-card` + `bootstrapping-repo`
   (molecular), `board-canon` + `enforcing-pr-contract` +
   **`classifying-actions` + `auditing-actions`** (atomic).
-- **Deferred to v1-complete**: `decomposing-into-milestones`,
+- **Roadmap (pending shipment)**: `decomposing-into-milestones`,
   `migrating-repo-version`. Reasons live in the SKILLS.md table.
 
 **Remaining degraded behavior**:
@@ -175,8 +175,8 @@ REASON: First time using board-superpowers on this (host, repo)
 
 ```
 INVOKE: migrating-repo-version
-REASON: Plugin version v0.2.0 detected; state.yml records
-        last_seen_version_in_repo=v0.1.0.
+REASON: Plugin version v0.3.0 detected; state.yml records
+        last_seen_version_in_repo=v0.2.0.
 ```
 
 The marker fast-paths the entry skill's routing decision. The
@@ -271,7 +271,7 @@ When v1 implementation lands, four new top-level directories
 appear (`hooks/`, `scripts/`, `skills/`, optionally `tests/`)
 authored against the spec.
 
-## Self-hosting (v1-minimum onwards)
+## Self-hosting
 
 The plugin **dogfoods itself** as of `v0.1.0-minimum`. Any new
 skill / script / hook / spec change for board-superpowers itself
@@ -490,7 +490,7 @@ frontmatter").
 
 ## Maintaining v1 implementation
 
-The v1-minimum plugin is loadable. The operational checklist:
+The plugin is loadable at runtime. The operational checklist:
 
 ### Skills (`skills/<name>/`)
 
@@ -519,7 +519,7 @@ The v1-minimum plugin is loadable. The operational checklist:
 
 ### Hooks (`hooks/`)
 
-- v1-minimum wires only `SessionStart`. Future hook events use
+- The plugin currently wires only `SessionStart`. Future hook events use
   the same `INVOKE: <skill> / REASON: <line>` payload pattern
   per [`docs/architecture/0005-contracts/02-hook-contracts.md`](./docs/architecture/0005-contracts/02-hook-contracts.md).
 - Every hook script must declare a 10s timeout in `hooks.json`.
@@ -540,8 +540,8 @@ The v1-minimum plugin is loadable. The operational checklist:
 - `scripts/verify-skill-frontmatter.sh` — Tier 1 + Tier 2 +
   no-Tier-3 compliance per SKILL.md.
 - `shellcheck -x scripts/**/*.sh hooks/*.sh` — full pass.
-- Manual smoke: open a fresh CC session, type each of the 6
-  v1-minimum skills' trigger phrases, verify auto-trigger.
+- Manual smoke: open a fresh CC session, type each of the 8
+  shipped skills' trigger phrases, verify auto-trigger.
 
 ### Release flow
 
