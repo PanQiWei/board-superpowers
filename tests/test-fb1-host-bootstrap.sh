@@ -4,10 +4,10 @@
 # docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md
 # § 1.5.1 and 07-path-conventions.md "Per-host layout".
 #
-# Contracts under test:
+# Contracts under test (post-Card-#34 expected shape — schema v2):
 #   - Cold start: writes ~/.board-superpowers/manifest.yml with
-#     schema_version: 1 + ISO-8601 host_bootstrapped_at + plugin version
-#     last_seen_version. Directory mode 0700; file mode 0644.
+#     schema_version: 2 + ISO-8601 host_bootstrapped_at + plugin version
+#     last_seen_version + uv_version. Directory mode 0700; file mode 0644.
 #   - Idempotent re-run: same version, manifest already valid → no
 #     overwrite (mtime preserved), exit 0.
 #   - Version refresh: manifest exists with older last_seen_version →

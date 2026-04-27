@@ -160,9 +160,13 @@ yaml_get() {
     local key="$2"
     [ -f "${file}" ] || return 0
     # Match `key<ws>*:<ws>*<value>` at line start; strip surrounding quotes.
+    # `|| true` ensures the pipeline returns 0 even when grep finds no match
+    # (grep exits 1 on no match; with pipefail a missing key would exit non-zero
+    # and trigger set -e in the caller).
     grep -E "^${key}[[:space:]]*:" "${file}" 2>/dev/null \
         | head -n1 \
-        | sed -E "s/^${key}[[:space:]]*:[[:space:]]*//; s/^\"//; s/\"$//"
+        | sed -E "s/^${key}[[:space:]]*:[[:space:]]*//; s/^\"//; s/\"$//" \
+        || true
 }
 
 iso_utc_now() {

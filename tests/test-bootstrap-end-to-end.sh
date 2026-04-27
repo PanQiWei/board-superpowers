@@ -120,6 +120,15 @@ EOF
     mkdir -p "${target_dir}/skills/using-board-superpowers/references"
     cp "${PLUGIN_ROOT_REAL}/skills/using-board-superpowers/references/agentsmd-routing.md" \
        "${target_dir}/skills/using-board-superpowers/references/agentsmd-routing.md"
+    # Step 2f requires templates/ + uv; step 2g requires audit-init.sh.
+    mkdir -p "${target_dir}/scripts/templates"
+    cp "${PLUGIN_ROOT_REAL}/scripts/templates/pyproject.toml" \
+       "${target_dir}/scripts/templates/pyproject.toml"
+    cp "${PLUGIN_ROOT_REAL}/scripts/templates/uv.lock" \
+       "${target_dir}/scripts/templates/uv.lock"
+    cp "${PLUGIN_ROOT_REAL}/scripts/audit-init.sh" \
+       "${target_dir}/scripts/audit-init.sh"
+    chmod +x "${target_dir}/scripts/audit-init.sh"
 }
 
 init_tmp_repo() {
@@ -253,7 +262,8 @@ DSN="sqlite:////${SQLITE_DIR#/}/audit.db"
 
 # --- F-B1 host bootstrap -------------------------------------------------
 set +e
-HOST_OUT="$(env -i HOME="${HOME_DIR}" PATH="${STUBS_DIR}:/usr/bin:/bin" \
+HOST_OUT="$(env -i HOME="${HOME_DIR}" \
+        PATH="${STUBS_DIR}:${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
     bash "${PLUGIN_ROOT}/scripts/bootstrap-host.sh" \
         --plugin-root "${PLUGIN_ROOT}" </dev/null 2>&1)"
 RC_HOST=$?
@@ -262,8 +272,8 @@ set -e
 assert_eq 'F-B1: bootstrap-host.sh exit 0' '0' "${RC_HOST}"
 check 'F-B1: ~/.board-superpowers/manifest.yml present' \
     test -f "${HOME_DIR}/.board-superpowers/manifest.yml"
-check 'F-B1: manifest.yml has schema_version: 1' \
-    grep -Eq '^schema_version:[[:space:]]*1$' \
+check 'F-B1: manifest.yml has schema_version: 2 (post-Card-#34)' \
+    grep -Eq '^schema_version:[[:space:]]*2$' \
     "${HOME_DIR}/.board-superpowers/manifest.yml"
 check 'F-B1: manifest.yml has last_seen_version: "0.2.0"' \
     grep -Eq '^last_seen_version:[[:space:]]*"0\.2\.0"$' \
@@ -279,7 +289,8 @@ check 'F-B1: ~/.board-superpowers dir mode 0700' \
 
 # --- F-B2 per-repo bootstrap ---------------------------------------------
 set +e
-PROJ_OUT="$(env -i HOME="${HOME_DIR}" PATH="${STUBS_DIR}:/usr/bin:/bin" \
+PROJ_OUT="$(env -i HOME="${HOME_DIR}" \
+        PATH="${STUBS_DIR}:${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
     bash "${PLUGIN_ROOT}/scripts/bootstrap-project.sh" \
         --plugin-root "${PLUGIN_ROOT}" \
         --owner foo --project 1 --repo-root "${REPO_ROOT}" \
@@ -361,7 +372,8 @@ SHA_AGENTS_BEFORE="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(s
 SHA_CLAUDE_BEFORE="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "${CLAUDE}")"
 
 set +e
-RERUN_OUT="$(env -i HOME="${HOME_DIR}" PATH="${STUBS_DIR}:/usr/bin:/bin" \
+RERUN_OUT="$(env -i HOME="${HOME_DIR}" \
+        PATH="${STUBS_DIR}:${HOME}/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
     bash "${PLUGIN_ROOT}/scripts/bootstrap-project.sh" \
         --plugin-root "${PLUGIN_ROOT}" \
         --owner foo --project 1 --repo-root "${REPO_ROOT}" </dev/null 2>&1)"
