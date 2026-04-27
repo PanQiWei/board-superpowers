@@ -33,10 +33,11 @@ The four user scenarios this matrix covers (see §2.1 / §2.2 /
 **Cross-cutting principles applied throughout this section**
 (every subsection MUST honor):
 
-- **Self-contained scripts at the dep-check layer.** Per `CLAUDE.md`
-  ("Two files are deliberately self-contained"),
-  `scripts/check-deps.sh` and `hooks/session-start.sh` MUST NOT
-  source `scripts/lib/common.sh`. A broken lib must never break
+- **Self-contained scripts at the dep-check layer.** Per
+  `scripts/AGENTS.md` § "Self-contained scripts" and
+  `hooks/AGENTS.md` Invariant 1, `scripts/check-deps.sh` and
+  `hooks/session-start.sh` MUST NOT source
+  `scripts/lib/common.sh`. A broken lib must never break
   dependency detection or session startup.
 - **Three-layer alert + intent-injection strategy.** Layer 1
   (SessionStart hook) does **two** things: (a) the dep alert
@@ -185,7 +186,7 @@ needs its config.
   PROJECT=<absolute path>
   ```
   Renaming any of these three keys breaks the SessionStart hook
-  parser (`hooks/session-start.sh`); see `CLAUDE.md` change-impact
+  parser (`hooks/session-start.sh`); see `docs/architecture/AGENTS.md` change-impact
   matrix.
 - **Three-layer delivery** (in increasing reliability):
   - **Layer 1 — SessionStart hook**: `hooks/session-start.sh`

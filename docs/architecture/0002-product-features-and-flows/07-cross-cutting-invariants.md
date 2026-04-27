@@ -165,9 +165,10 @@ injected into downstream `CLAUDE.md` and `AGENTS.md` is
 byte-identical to the fenced block in
 `skills/using-board-superpowers/references/agentsmd-routing.md`
 between the marker pair. Edits to one MUST land in the other
-in the same commit. Cited by: F-B2, F-B4, `CLAUDE.md`
-change-impact matrix, the `<!-- board-superpowers:routing -->`
-marker pair detected by `check-deps.sh`.
+in the same commit. Cited by: F-B2, F-B4,
+`docs/architecture/AGENTS.md` change-impact matrix, the
+`<!-- board-superpowers:routing -->` marker pair detected by
+`check-deps.sh`.
 **Aggregate:** RepoBootstrap (RoutingBlockTracker member
 entity carries the BlockHash that enforces the mirror).
 What breaks: routing

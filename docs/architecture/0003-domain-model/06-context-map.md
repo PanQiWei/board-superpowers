@@ -246,7 +246,7 @@ current map's logic.
   (`scripts/*.sh` exit codes, `check-deps.sh --machine` keys,
   routing-block marker strings, `${CLAUDE_PLUGIN_ROOT}` env
   var, etc.) live in `0005-contracts.md` (when filled) and
-  the `CLAUDE.md` change-impact matrix.
+  the `docs/architecture/AGENTS.md` change-impact matrix.
 
 The map's job is to make context boundaries argumentatively
 visible — to give a future maintainer a one-page check on

@@ -683,9 +683,13 @@ periodically.
   to the relevant platform section with a note: "Empirically
   verified <date>; not in primary docs." Link to the test or
   reproducer.
-- This doc is referenced from `AGENTS.md`'s "Required reading"
-  section (after the parent edit accompanying this commit) and is
-  loaded into every Mode-2-design session.
+- This doc is referenced **by name** from `AGENTS.md`'s
+  "Cross-cutting reference docs" table — not loaded with
+  `@`-prefix — so it does not ride into every session's
+  context. The `skills/AGENTS.md` per-directory contract
+  sends agents here when designing orchestration where one
+  agent spawns another (Producer → Consumer subagent,
+  agent-teams, fan-out / fan-in pipelines).
 
 ---
 
