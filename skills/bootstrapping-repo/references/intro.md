@@ -78,6 +78,6 @@ The `<normalized>` directory name is the repo's absolute path with leading `/` s
 
 ## What this skill does NOT do
 
-- It does not migrate state across plugin versions. Once you upgrade past v0.2.0 to a newer version, the F-B3 / F-B4 transitions are handled by a separate skill (`migrating-repo-version`, deferred to v1-complete). At v0.2.0 there is nothing to migrate from.
+- It does not migrate state across plugin versions. When you upgrade to a newer plugin version, host manifest schema migration + per-repo state migration are the responsibility of the separate `board-superpowers:migrating-repo-version` skill where applicable.
 - It does not seed your board with cards. After bootstrap completes, your board is empty — the first card is your responsibility (use the Manager session intake routine).
-- It does not configure the BYO-RDBMS schema for you. F-B2 step 2e records your DSN in `credentials.yml`; the schema migration runs the first time `auditing-actions` writes to the DB (and `auditing-actions` itself is deferred to v1-complete).
+- It does not configure the BYO-RDBMS schema for you. The credential-setup step records your DSN in `credentials.yml`; the schema is applied via `scripts/audit-init.sh` at bootstrap (when DSN provided) and `board-superpowers:auditing-actions` writes use that schema thereafter.

@@ -31,7 +31,7 @@ matcher).
    `{target_file, block_hash: "sha256:<hex>", injected_at: <iso8601>}`
    — into `~/.board-superpowers/repos/<normalized>/state.yml`'s
    `routing_blocks:` list.
-5. F-B4 (deferred to the `migrating-repo-version` skill) consumes
+5. The `board-superpowers:migrating-repo-version` skill consumes
    `state.yml:routing_blocks[]` hashes for tamper detection at plugin
    upgrade time.
 

@@ -52,13 +52,13 @@ Marker grammar is pinned in [`02-hook-contracts.md`](../../docs/architecture/000
 
 The marker is a fast-path optimization, not a correctness requirement. Same routing decision regardless of whether Layer 1 delivered the marker or not.
 
-## Step 3 — chain F-B1 → F-B2 when state files are absent
+## Step 3 — chain bootstrap when state files are absent
 
 When step 1's state probe reports a missing file (whether or not step 2 saw the marker), chain bootstrap:
 
-- **`~/.board-superpowers/manifest.yml` absent** — invoke `bash ${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap-host.sh` (F-B1). This writes the host manifest and is idempotent on re-run.
-- **Per-repo `state.yml` absent** — invoke the `bootstrapping-repo` skill, which drives F-B2 via `scripts/bootstrap-project.sh`. F-B2 collects `OWNER/NUMBER`, writes per-repo `config.yml` + host-local `state.yml`, and injects the routing block into `AGENTS.md` / `CLAUDE.md`.
-- **Both absent** — F-B1 first, then chain into F-B2.
+- **`~/.board-superpowers/manifest.yml` absent** — invoke `bash ${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap-host.sh` (host bootstrap). This writes the host manifest and is idempotent on re-run.
+- **Per-repo `state.yml` absent** — invoke `board-superpowers:bootstrapping-repo`, which drives the per-repo bootstrap via `scripts/bootstrap-project.sh`. The script collects `OWNER/NUMBER`, writes per-repo `config.yml` + host-local `state.yml`, and injects the routing block into `AGENTS.md` / `CLAUDE.md`.
+- **Both absent** — host bootstrap first, then chain into per-repo bootstrap.
 
 After bootstrap completes, continue with the routing table below for the user's actual request.
 
@@ -75,7 +75,7 @@ The post-bootstrap routing — used after step 1 surfaces no problems and step 2
 | "new requirement" / "intake this idea" / "I have a feature" | `board-superpowers:managing-board` (intake routine) |
 | "what's blocked" / "triage the board" / "release stale claims" | `board-superpowers:managing-board` (triage routine) |
 | "what does this plugin do" / "how does this work" / "what's available" | Answer inline (informational query) — see `references/first-time-user-guide.md` |
-| "set up board-superpowers on this repo" / "first time on this repo" | Route to `bootstrapping-repo` skill (F-B2) |
+| "set up board-superpowers on this repo" / "first time on this repo" | Route to `board-superpowers:bootstrapping-repo` skill (per-repo bootstrap) |
 | Anything clearly board-related but not in the table | Ask the user to disambiguate — do NOT pick a default |
 
 ## Routing discipline
