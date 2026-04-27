@@ -259,6 +259,9 @@ state.
 | `<repo>/.board-superpowers/config.local.yml` | **no** (gitignored via `*.local.*` pattern) | RepoConfig (per-user layer) | Per-user override of team-shared config — `wip_limit`, `autonomy_overrides`, etc. (per [`03-config-schemas.md`](./03-config-schemas.md) § "config.local.yml") |
 | `<repo>/.board-superpowers/claims/` | **no** (gitignored locally) | ConsumerLogical | Per-session claim markers; force-committed to claim branch only |
 | `<repo>/.board-superpowers/claims/<N>.claim` | gitignored locally; **force-added on the claim branch** | ConsumerLogical | One marker per claimed card; YAML payload per [`05-github-artifact-schemas.md`](./05-github-artifact-schemas.md) |
+| `<repo>/.board-superpowers/pyproject.toml` | **yes** (plugin-managed) | RepoConfig | Copied by `bootstrap-project.sh` F-B2 sub-cap 6 from plugin template; declares per-repo Python venv deps (`pyyaml + pymysql`). Committed for reproducibility — each repo pins its own deps version |
+| `<repo>/.board-superpowers/uv.lock` | **yes** (plugin-managed) | RepoConfig | uv lockfile; committed alongside `pyproject.toml` for reproducible `uv sync` runs. Updated by `bootstrap-project.sh` on re-run if the plugin ships a newer lockfile |
+| `<repo>/.board-superpowers/.venv/` | **no** (gitignored; uv-managed) | AuditTrail | Per-repo Python venv created by `uv sync` during F-B2 sub-cap 6. Recreated automatically by `bsp_ensure_venv` if absent or corrupt |
 
 ### Claim marker — locally gitignored, branch-committed
 
@@ -446,9 +449,12 @@ during F-B2 setup. The exact form, verbatim from the script:
 
 # board-superpowers local state (claim markers are per-session)
 .board-superpowers/claims/
+
+# board-superpowers per-repo Python venv (uv-managed; recreated by bsp_ensure_venv)
+.board-superpowers/.venv/
 ```
 
-Two distinct entries land:
+Three distinct entries land:
 
 1. The project-wide `*.local.*` pattern — any file whose name
    matches `<name>.local.<ext>` is gitignored regardless of
@@ -458,14 +464,18 @@ Two distinct entries land:
 2. The board-superpowers-specific `.board-superpowers/claims/`
    rule — claim markers are per-session and must never appear
    on `main`.
+3. The `.board-superpowers/.venv/` rule — the per-repo Python
+   venv managed by uv; recreated automatically by
+   `bsp_ensure_venv` if absent. `pyproject.toml` and `uv.lock`
+   are committed (plugin-managed); `.venv/` itself is not.
 
 ### Write semantics
 
 | Scenario | Behavior |
 |----------|----------|
 | `.gitignore` does not exist | Created with both entries above as its initial content |
-| `.gitignore` exists, both entries already present (exact line match for each) | Idempotent no-op; logs `✓ already present` |
-| `.gitignore` exists, one or both entries missing | Ensures trailing newline on the existing file, prepends one blank line for visual separation, then appends only the missing entries with their respective comment headers |
+| `.gitignore` exists, all three entries already present (exact line match for each) | Idempotent no-op; logs `✓ already present` |
+| `.gitignore` exists, one or more entries missing | Ensures trailing newline on the existing file, prepends one blank line for visual separation, then appends only the missing entries with their respective comment headers |
 
 The "exact match" check uses `grep -Fxq` — a fixed-string,
 whole-line, quiet match. Trailing-slash differences

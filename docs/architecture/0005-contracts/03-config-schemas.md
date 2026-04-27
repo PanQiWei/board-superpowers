@@ -56,21 +56,27 @@ Plugin-managed; per-host. Owned by the **HostBootstrap aggregate**
 Directory `~/.board-superpowers/` is mode `0700`. File mode
 inherits umask (typically `0644` after `umask 022`).
 
-### v1 schema
+### v2 schema (current, shipped in v0.3.0 / Card #34)
 
 ```yaml
-schema_version: 1
-host_bootstrapped_at: "2026-04-26T10:30:00Z"   # ISO 8601 UTC
-last_seen_version: "0.1.0"                      # semver string
+schema_version: 2
+host_bootstrapped_at: "2026-04-26T10:30:00Z"
+last_seen_version: "0.3.0"
+uv_version: "0.5.7"
 ```
 
 ### Field types and defaults
 
 | Field | Type | Required? | Notes |
 |-------|------|-----------|-------|
-| `schema_version` | integer | yes | `1` at v1; bumped per I-12 on every additive migration |
+| `schema_version` | integer | yes | `2` as of v0.3.0; bumped per I-12 on every additive migration |
 | `host_bootstrapped_at` | string (ISO 8601, UTC, `Z` suffix) | yes | Set once at F-B1 firing; never updated |
 | `last_seen_version` | string (semver) | yes | Updated by F-B3 at every host version transition |
+| `uv_version` | string (semver) | yes (since v2) | Recorded by bootstrap-host.sh after detecting / installing uv. Updated on each bootstrap-host re-run if uv version drifted. |
+
+> **Migration note:** schema_version 2 ships in v0.3.0 / Card #34;
+> bootstrap-host.sh runs an inline mini-migration when it detects v1
+> manifests, until `migrating-repo-version` skill ships.
 
 ### Origin
 

@@ -289,7 +289,9 @@ needs its config.
   is absent for the current repo on the current host, run the
   per-`(host, repo)` initialization: Project v2 confirmation
   (manual UI step, see ADR-0001), `bootstrap-project.sh`
-  (4 sub-capabilities — gitignore step now narrower; see below),
+  (7 sub-capabilities — labels, status validation, config.yml,
+  gitignore, BYO audit DB credentials, per-repo venv setup via
+  uv, audit DDL dispatch; see below),
   initial `state.yml` write at the host-local path, dual-file
   routing injection (CLAUDE.md + AGENTS.md), and first-card
   pointer delivery. F-B2 fires once per `(host, repo)` pair, on
@@ -317,7 +319,7 @@ needs its config.
      standard tokens. The skill walks the architect through the
      UI steps if needed, then waits for the architect to paste
      `OWNER/NUMBER`.
-  2. **`bootstrap-project.sh` runs the five sub-capabilities**,
+  2. **`bootstrap-project.sh` runs the seven sub-capabilities**,
      in execution order:
      1. **Standard labels** (`type:feature`, `type:bug`,
         `type:chore`, `type:refactor`, `type:epic`,
@@ -369,6 +371,15 @@ needs its config.
         a DB. The bootstrap completes either way; the friction
         is a feature per ADR-0006's "trade-off explicitly
         registered" note.
+     6. **per-repo venv setup via uv** — copy plugin-shipped
+        `pyproject.toml` + `uv.lock` to `<repo>/.board-superpowers/`;
+        run `uv sync` to create `<repo>/.board-superpowers/.venv/`.
+        On failure, roll back step-6-created files only; preserve
+        credentials.yml.
+     7. **audit DDL dispatch** — when `audit_db_url` is set, invoke
+        `scripts/audit-init.sh` to apply schema. DDL failure does
+        NOT abort bootstrap; architect can re-run after fixing DB
+        issue.
   3. **Initial `state.yml` write** — at
      `~/.board-superpowers/repos/<normalized-repo-path>/state.yml`,
      mode inherits the `0700` parent. Fields: `schema_version: 1`,
