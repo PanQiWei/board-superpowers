@@ -268,27 +268,50 @@ case "${VALIDATION_RESULT}" in
         ;;
 esac
 
-# --- Step 2c — write <repo>/.board-superpowers/config.yml ----------------
+# --- Step 2c — write <repo>/.board-superpowers/config.yml + config.local.yml ----
 
 CONFIG_DIR="${REPO_ROOT}/.board-superpowers"
 CONFIG_FILE="${CONFIG_DIR}/config.yml"
+LOCAL_CONFIG_FILE="${CONFIG_DIR}/config.local.yml"
 
 mkdir -p "${CONFIG_DIR}" || bsp_die "step 2c: cannot create ${CONFIG_DIR}"
 
 write_config_yml() {
     cat > "${CONFIG_FILE}" <<EOF
-# board-superpowers per-repo configuration (committed to git).
+# board-superpowers per-repo configuration (committed to git, team-shared).
 # Managed by using-board-superpowers. Safe to edit by hand.
 # See docs/architecture/0005-contracts/03-config-schemas.md for the
 # full schema.
+#
+# Per-user fields (wip_limit, autonomy_overrides) live in
+# config.local.yml — gitignored via the *.local.* pattern.
 
 project: "${OWNER}/${PROJECT_NUM}"
+
+# Future team-shared fields (uncomment when needed):
+# audit_db_url: "postgresql://user:pwd@host:5432/db"
+# base_branch: main
+# default_execution_skill: superpowers:subagent-driven-development
+EOF
+}
+
+write_local_config_yml() {
+    cat > "${LOCAL_CONFIG_FILE}" <<'EOF'
+# board-superpowers per-user override config (gitignored).
+# Each architect on this repo may have different values here.
+# See docs/architecture/0005-contracts/03-config-schemas.md
+# § "config.local.yml — LocalRepoConfig" for the full schema.
+
+# Personal capacity / parallelism choice (Soft cap; default 5).
+# Counted as: In Progress + In Review; Blocked excluded.
 wip_limit: 5
 
-# Future fields (uncomment when needed):
-# audit_db_url: "postgresql://user:pwd@host:5432/db"
-# claim_branch_prefix: "claim/"
-# worktree_dir: "/custom/worktrees"
+# Per-project autonomy overrides (per ADR-0006 §4).
+# autonomy_overrides:
+#   - action_id: 5
+#     class: A
+#     since: "YYYY-MM-DDTHH:MM:SSZ"
+#     evolved_by: "github_username"
 EOF
 }
 
@@ -303,40 +326,73 @@ else
     write_config_yml
 fi
 
+if [ -f "${LOCAL_CONFIG_FILE}" ] && [ "${FORCE}" -eq 0 ]; then
+    bsp_log "step 2c: ${LOCAL_CONFIG_FILE} already exists — leaving alone (use --force to overwrite)"
+else
+    if [ -f "${LOCAL_CONFIG_FILE}" ]; then
+        bsp_log "step 2c: --force overwriting ${LOCAL_CONFIG_FILE}"
+    else
+        bsp_log "step 2c: writing ${LOCAL_CONFIG_FILE} (gitignored, per-user)"
+    fi
+    write_local_config_yml
+fi
+
 # --- Step 2d — append to <repo>/.gitignore (idempotent) ------------------
+#
+# Two distinct entries land independently:
+#   1. Project-wide *.local.* per-user override pattern.
+#   2. board-superpowers-specific .board-superpowers/claims/ rule.
+# Each is checked + appended on its own so partial state (one
+# entry already present, the other missing) is handled correctly.
 
 GITIGNORE_FILE="${REPO_ROOT}/.gitignore"
-GITIGNORE_HEADER="# board-superpowers local state (claim markers are per-session)"
-GITIGNORE_ENTRY=".board-superpowers/claims/"
+LOCAL_PATTERN_HEADER="# Per-user local override files — convention: <name>.local.<ext>"
+LOCAL_PATTERN_ENTRY="*.local.*"
+CLAIMS_HEADER="# board-superpowers local state (claim markers are per-session)"
+CLAIMS_ENTRY=".board-superpowers/claims/"
 
-write_gitignore_block() {
-    # Append a leading blank line for visual separation only when the
-    # file already has content. New files start with the block.
-    local prepend_blank="$1"
+ensure_trailing_newline() {
+    if [ -s "${GITIGNORE_FILE}" ]; then
+        tail -c1 "${GITIGNORE_FILE}" | od -An -c | tr -d ' ' | grep -q '\\n' \
+            || printf '\n' >> "${GITIGNORE_FILE}"
+    fi
+}
+
+append_block() {
+    # $1 = header line; $2 = entry line; $3 = "1" to prepend blank line.
+    local header="$1"
+    local entry="$2"
+    local prepend_blank="$3"
     {
         if [ "${prepend_blank}" = "1" ]; then
             printf '\n'
         fi
-        printf '%s\n%s\n' "${GITIGNORE_HEADER}" "${GITIGNORE_ENTRY}"
+        printf '%s\n%s\n' "${header}" "${entry}"
     } >> "${GITIGNORE_FILE}"
 }
 
-if [ -f "${GITIGNORE_FILE}" ]; then
-    if grep -Fxq "${GITIGNORE_ENTRY}" "${GITIGNORE_FILE}"; then
-        bsp_log "step 2d: .gitignore already contains '${GITIGNORE_ENTRY}' — no change"
-    else
-        # Defensive: ensure trailing newline before append so we don't
-        # glue our block onto the last line of an unterminated file.
-        if [ -s "${GITIGNORE_FILE}" ]; then
-            tail -c1 "${GITIGNORE_FILE}" | od -An -c | tr -d ' ' | grep -q '\\n' \
-                || printf '\n' >> "${GITIGNORE_FILE}"
-        fi
-        bsp_log "step 2d: appending board-superpowers block to ${GITIGNORE_FILE}"
-        write_gitignore_block 1
-    fi
+# Bootstrap: create file with both blocks if absent.
+if [ ! -f "${GITIGNORE_FILE}" ]; then
+    bsp_log "step 2d: creating ${GITIGNORE_FILE} with board-superpowers blocks"
+    append_block "${LOCAL_PATTERN_HEADER}" "${LOCAL_PATTERN_ENTRY}" 0
+    append_block "${CLAIMS_HEADER}" "${CLAIMS_ENTRY}" 1
 else
-    bsp_log "step 2d: creating ${GITIGNORE_FILE} with board-superpowers block"
-    write_gitignore_block 0
+    # Append-on-missing for each entry independently.
+    if grep -Fxq "${LOCAL_PATTERN_ENTRY}" "${GITIGNORE_FILE}"; then
+        bsp_log "step 2d: .gitignore already contains '${LOCAL_PATTERN_ENTRY}' — no change"
+    else
+        ensure_trailing_newline
+        bsp_log "step 2d: appending '${LOCAL_PATTERN_ENTRY}' block to ${GITIGNORE_FILE}"
+        append_block "${LOCAL_PATTERN_HEADER}" "${LOCAL_PATTERN_ENTRY}" 1
+    fi
+
+    if grep -Fxq "${CLAIMS_ENTRY}" "${GITIGNORE_FILE}"; then
+        bsp_log "step 2d: .gitignore already contains '${CLAIMS_ENTRY}' — no change"
+    else
+        ensure_trailing_newline
+        bsp_log "step 2d: appending '${CLAIMS_ENTRY}' block to ${GITIGNORE_FILE}"
+        append_block "${CLAIMS_HEADER}" "${CLAIMS_ENTRY}" 1
+    fi
 fi
 
 # --- Step 2e — BYO-RDBMS audit-log credential UX -------------------------

@@ -173,10 +173,14 @@ form (one blank line above and below the block within the markers).
 
 ---
 
-## `<repo>/.board-superpowers/config.yml` — RepoConfig
+## `<repo>/.board-superpowers/config.yml` — RepoConfig (team-shared)
 
 User-editable; per-repo. Owned by the **RepoConfig aggregate**
-(0003 § 3.3.7).
+(0003 § 3.3.7). Holds only the **team-shared** subset of project
+config — fields whose value should be identical for every
+collaborator on this repo. Per-user fields (`wip_limit`,
+`autonomy_overrides`) live in the sibling `config.local.yml`
+(see next section).
 
 ### Tracked in git? — **Yes** (per I-13). Team-shared.
 
@@ -185,18 +189,15 @@ User-editable; per-repo. Owned by the **RepoConfig aggregate**
 ```yaml
 # board-superpowers project config.
 # Managed by using-board-superpowers. Safe to edit by hand.
+#
+# Per-user fields (wip_limit, autonomy_overrides) live in
+# config.local.yml — gitignored via the *.local.* pattern.
 
 project: "OWNER/NUMBER"
-wip_limit: 5
 
-# Future fields (not yet consumed):
+# Future team-shared fields (not yet consumed):
 #   base_branch: main
 #   default_execution_skill: superpowers:subagent-driven-development
-#   autonomy_overrides:                # see 03-config-schemas.md
-#     - action_id: 5
-#       class: A
-#       since: "2026-05-15T09:00:00Z"
-#       evolved_by: "github_username"
 ```
 
 ### Field types and defaults
@@ -204,10 +205,8 @@ wip_limit: 5
 | Field | Type | Required? | Default | Notes |
 |-------|------|-----------|---------|-------|
 | `project` | string in `OWNER/NUMBER` form (YAML quoting is stylistic; the value is the bare string) | yes | — | Round-trip stable per ADR-0005 (BoardAdapter `parse / serialize`). The example `project: "OWNER/NUMBER"` is YAML-quoted only to avoid the `/` parser quirk; `project: OWNER/NUMBER` is also valid. |
-| `wip_limit` | positive integer | no | `5` | Soft limit; counted as `In Progress + In Review`; `Blocked` does NOT count (I-6) |
 | `base_branch` | string (branch name) | no (commented placeholder) | `main` (auto-detected from `origin/HEAD`) | Future; not yet read by `claim-card.sh` |
 | `default_execution_skill` | string | no (commented placeholder) | `superpowers:subagent-driven-development` | Future |
-| `autonomy_overrides` | list of objects | no (commented placeholder at v1) | `[]` | See "Autonomy overrides schema" below |
 
 ### No `schema_version` field
 
@@ -221,10 +220,79 @@ beyond the initial `bootstrap-project.sh` write.
 ### Rationale link
 
 - §1.5.2 F-B2 — initial write by `bootstrap-project.sh`.
-- I-6 (WIP limit), I-11, I-13.
+- I-11, I-13.
 - ADR-0005 (BoardAdapter — `project:` round-trip stability).
-- ADR-0006 §4 (autonomy overrides — finalized below).
 - 0003 § 3.3.7 RepoConfig aggregate — entity home.
+
+---
+
+## `<repo>/.board-superpowers/config.local.yml` — LocalRepoConfig (per-user)
+
+User-editable; per-repo, per-architect. Owned by the **RepoConfig
+aggregate** at the per-user layer (0003 § 3.3.7). Holds the
+fields that should NOT be team-coordinated:
+
+- `wip_limit` — personal capacity / parallelism choice.
+  Alice running 5 parallel Consumer agents and Bob running 1
+  is not a team-coordination decision; it is each architect's
+  local capacity preference.
+- `autonomy_overrides` (per-project layer) — personal
+  risk-tolerance choice. Per ADR-0006 §4, each architect may
+  promote different R-class actions to A-class without
+  imposing that promotion on collaborators.
+
+### Tracked in git? — **No**. Gitignored via the project-wide `*.local.*` pattern.
+
+The `*.local.*` pattern is a project-wide convention: any file
+whose name matches `<basename>.local.<ext>` is gitignored
+regardless of directory. This generalizes the per-user override
+file convention beyond board-superpowers — any future per-user
+file in any directory follows the same rule.
+
+### v1 schema
+
+```yaml
+# board-superpowers per-user override config.
+# This file is GITIGNORED via the *.local.* pattern in .gitignore.
+# Each architect on this repo may have different values here.
+
+wip_limit: 5
+
+# Per-project autonomy overrides (per ADR-0006 §4).
+# Merged with ~/.board-superpowers/overrides.yml; this file's
+# entries take precedence on conflict.
+# autonomy_overrides:
+#   - action_id: 5
+#     class: A
+#     since: "2026-05-15T09:00:00Z"
+#     evolved_by: "github_username"
+```
+
+### Field types and defaults
+
+| Field | Type | Required? | Default | Notes |
+|-------|------|-----------|---------|-------|
+| `wip_limit` | positive integer | no | `5` | Soft limit; counted as `In Progress + In Review`; `Blocked` does NOT count (I-6). Each architect sets their own value to reflect personal-machine parallelism capacity. |
+| `autonomy_overrides` | list of objects | no | `[]` | Per-project layer of the autonomy-override schema. Merge precedence: `config.local.yml` entries beat `~/.board-superpowers/overrides.yml` entries on conflict (project-specific beats user-global). Per ADR-0006 §4. |
+
+### No `schema_version` field
+
+Same convention as `config.yml`: not schema-versioned;
+hand-editable; future fields appear as commented placeholders.
+
+### Bootstrap behavior
+
+`bootstrap-project.sh` step 2c writes both `config.yml` (the
+team-shared subset) AND `config.local.yml` (the per-user subset
+with sensible defaults). `config.local.yml` is gitignored before
+the first commit, so subsequent collaborators running F-B2 will
+each generate their own.
+
+### Rationale link
+
+- I-6 (WIP limit), I-11, I-13 (per-user state not in git).
+- ADR-0006 §4 (autonomy overrides — project / user layers).
+- 0003 § 3.3.7 RepoConfig aggregate — per-user layer.
 
 ---
 

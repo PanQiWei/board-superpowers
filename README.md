@@ -155,7 +155,10 @@ For each repo where you want board-superpowers active. Currently manual — an a
 3. **Create `.board-superpowers/config.yml`** in the repo root and commit it:
    ```yaml
    project: <owner>/<number>      # e.g., PanQiWei/4
-   wip_cap_per_consumer: 1
+   ```
+   Then create `.board-superpowers/config.local.yml` (gitignored, per-user):
+   ```yaml
+   wip_limit: 5                   # personal capacity; soft cap, default 5
    ```
 4. **Verify** by running:
    ```bash

@@ -298,13 +298,23 @@ CRED_FILE="${HOME_DIR}/.board-superpowers/credentials.yml"
 STATE_DIR="$(normalized_state_dir "${HOME_DIR}" "${REPO_ROOT}")"
 STATE_FILE="${STATE_DIR}/state.yml"
 
+LOCAL_CONFIG_FILE="$(dirname "${CONFIG_FILE}")/config.local.yml"
+
 check 'F-B2: config.yml present' test -f "${CONFIG_FILE}"
 check 'F-B2: config.yml has project: "foo/1"' \
     grep -Fq 'project: "foo/1"' "${CONFIG_FILE}"
-check 'F-B2: config.yml has wip_limit: 5' \
-    grep -Eq '^wip_limit:[[:space:]]*5$' "${CONFIG_FILE}"
+# shellcheck disable=SC2016  # $1 is intentional bash -c positional, not parent expansion
+check 'F-B2: config.yml does NOT carry per-user wip_limit' \
+    bash -c '! grep -Eq "^wip_limit:" "$1"' _ "${CONFIG_FILE}"
 
-check 'F-B2: .gitignore present with bootstrap entry' \
+check 'F-B2: config.local.yml present (per-user, gitignored)' \
+    test -f "${LOCAL_CONFIG_FILE}"
+check 'F-B2: config.local.yml has wip_limit: 5' \
+    grep -Eq '^wip_limit:[[:space:]]*5$' "${LOCAL_CONFIG_FILE}"
+
+check 'F-B2: .gitignore has *.local.* per-user pattern' \
+    grep -Fxq '*.local.*' "${GITIGNORE}"
+check 'F-B2: .gitignore has claims/ bootstrap entry' \
     grep -Fxq '.board-superpowers/claims/' "${GITIGNORE}"
 
 check 'F-B2: AGENTS.md present with both markers' \
