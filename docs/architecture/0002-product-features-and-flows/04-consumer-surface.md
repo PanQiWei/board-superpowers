@@ -603,24 +603,39 @@ reading retro notes); its structure is rigid by design.
     KPI / throughput metrics. Initially written at PR
     submit; supplemented after merge with review-cycle
     insights.
-- **Inputs**: implementation diff; F-C9 / F-C10 / F-C11
+- **Pre-flight card body sync**: immediately before drafting
+  the PR body, Consumer syncs the card body to reflect what
+  was just verified. This A-class action (matrix row 112)
+  consists of: fetching the current card body, toggling every
+  acceptance criterion checkbox from `[ ]` to `[x]` (or `[!]`
+  for items cleanly deferred with a one-line inline reason),
+  optionally appending a 3–5 line implementation summary if
+  the card's Notes section invites one, computing before/after
+  SHA256 hashes, posting the update via `gh issue edit`, and
+  writing an audit entry. The audit payload includes
+  `{card_number, before_sha256, after_sha256, ac_toggle_count,
+  sections_changed}`. See matrix row 112 in
+  [`06-audit-log-schema.md`](./06-audit-log-schema.md).
+- **Inputs**: implementation diff; pre-submit verification
   outputs (for Automated Verification body); card body (for
-  link); spec docs (for link).
+  link and AC sync); spec docs (for link).
 - **Outputs**: open PR with the protocol-compliant body and
   trailing `<!-- board-superpowers:pr -->` marker (per
-  `board-protocol`); card transitioned to In Review (handled
-  by F-C12's caller-side glue).
+  `board-protocol`); card body updated with checked ACs;
+  card transitioned to In Review (handled by F-C12's
+  caller-side glue).
 - **Composes**: `superpowers:finishing-a-development-branch`
   / `gstack:/ship` (for the base body) +
   `consuming-card/references/pr-template.md` (for the
-  appended sections).
+  appended sections) + `gh issue edit` (card body sync).
 - **Maps to (canonical)**: Scrum Guide 2020 — Definition of
   Done per-increment; *The Phoenix Project* (Kim 2013) —
   hand-off contracts between work stations.
 - **Mode compatibility**: both.
-- **Autonomy**: A for the PR opening (Consumer's defining
-  output). Audit log entry written at PR submit with PR
-  number, branch, card-link.
+- **Autonomy**: A for the PR opening and the card body sync
+  (both are Consumer's defining output steps). Audit log
+  entry written at PR submit (matrix row 102) and separately
+  for the card body sync (matrix row 112).
 
 ###### F-C13. Review-cycle response
 
@@ -668,64 +683,103 @@ preserve enough state for human takeover when failure happens;
 write retro notes that aggregate into Producer's F-12 retro
 routine.
 
-###### F-C14. Termination + heartbeat
+###### F-C14. Termination, post-merge cleanup + heartbeat
 
 - **Capability**: terminate cleanly along one of three paths:
-  - **Success path**: PR merged → write retro note (the
-    "knowledge harvesting" half of `## Retro Notes`,
-    supplemented post-merge with review-cycle insights) →
-    self-delete worktree (`git worktree remove --force`) →
-    process exits.
-  - **Failure path** (debug-limit hit, irrecoverable
-    NEEDS_CONTEXT, or hard-refuse from F-C6): mark card
+  - **Success path (interactive)**: after the PR merges,
+    Consumer runs a four-part close-out (matrix row 113,
+    A-class): (1) verify `gh pr view --json state` returns
+    `MERGED` — if `OPEN`, abort and wait; if `CLOSED`
+    without merge, this is a failure-path exit using matrix
+    row 103, not 113; (2) verify the card's Status has
+    transitioned to `Done` via the GitHub webhook (30s
+    grace window; surface to architect if not flipped after
+    5 minutes rather than racing to flip manually); (3)
+    remove the local worktree (`git worktree remove`) and
+    delete the local claim branch; (4) write the close
+    audit entry (matrix row 113) with payload
+    `{card_number, pr_number, merged_at, worktree_removed:
+    true, branch_deleted: true}`. Supplement `## Retro
+    Notes` in the PR description with post-merge review-
+    cycle insights before exiting.
+  - **Success path (auto cron)**: when the architect has set
+    `post_merge_cleanup.auto_cron: true` in the repo's
+    `.board-superpowers/config.yml`, Consumer instead calls
+    `scripts/install-post-merge-cron.sh --card <N>` at
+    PR-submit time. The installed cron / launchd entry polls
+    `gh pr view --json state` every
+    `poll_interval_minutes` (default 15); on `MERGED` it
+    runs `scripts/post-merge-cleanup.sh` which performs the
+    same four-part close-out above and then self-uninstalls.
+    If the PR is still `OPEN` after `timeout_hours` (default
+    48) the cron self-uninstalls and surfaces a notice to
+    the architect. The auto-cron path is documented in full
+    at `consuming-card/references/post-merge-cleanup.md`.
+  - **Failure path** (debug-limit hit, irrecoverable blocker,
+    or hard-refuse on a cross-card touch): mark card
     `Blocked` + write failure-context note in card thread +
     **release the claim** (logical exclusivity returned) +
     **KEEP the worktree** (physical sandbox preserved for
-    human takeover) → process exits.
+    human takeover) → process exits. Uses matrix row 103.
   - **Crash path** (process died without clean exit):
     Producer detects via on-disk session-log mtime — for CC,
     `~/.claude/projects/<dir>/<session-id>.jsonl`; for
     Codex, `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`.
-    **Zero new infrastructure** — Consumer writes nothing
-    extra; the heartbeat IS Producer reading the platform's
-    session-log file mtime.
-  Mode-2 wake-up (Consumer suspended via F-C8, then resumed
-  by Producer): respects D-AUTONOMY-1 row 13 (Dispatch
-  Consumer = A); architect can override to R via
-  `autonomy_overrides:` if they want manual approval before
-  every Mode-2 wake-up.
-- **Inputs**: terminal state from F-C12 (PR opened) + later
-  signal of merge (success path) OR escalation signal (F-C6 /
-  F-C8 / unrecoverable BLOCKED from F-C4).
+    Consumer writes nothing extra; the heartbeat IS Producer
+    reading the platform's session-log file mtime.
+  Mode-2 wake-up (Consumer suspended, then resumed by
+  Producer): respects the matrix row for Dispatch Consumer
+  (A-class by default); architect can override to R via
+  `autonomy_overrides:` in `config.local.yml` if manual
+  approval before every Mode-2 wake-up is desired.
+- **Inputs**: terminal state from PR-submit (PR opened) +
+  later signal of merge (success path) OR escalation signal
+  (cross-card touch hard-refuse / irrecoverable blocker).
 - **Outputs** (per path):
-  - Success: card `Done` (via GitHub auto-close on merge),
-    worktree absent, retro note in PR description.
-  - Failure: card `Blocked`, claim released (the claim
-    branch may stay for forensic value or be cleaned by
-    architect), worktree present at the original path,
-    failure-context comment on card.
+  - Interactive success: card `Done` (GitHub auto-close on
+    merge), worktree absent, claim branch deleted, close
+    audit row written.
+  - Auto-cron success: same outcomes, triggered by the cron
+    script after merge detected.
+  - Failure: card `Blocked`, claim released, worktree
+    preserved, failure-context comment on card, row 103
+    audit entry.
   - Crash: nothing written by Consumer; Producer's preflight
     piggyback infers staleness from session-log mtime + GH
     timestamps.
-- **Composes**: `git worktree remove --force` (success) +
-  `transition-card.sh` to `Blocked` (failure) + `gh issue
-  comment` (failure note) + Producer-side reads of
-  `~/.claude/projects/...` / `~/.codex/sessions/...` (crash
-  detection, written by the platform; nothing for Consumer
-  to do).
+- **Composes**: `scripts/post-merge-cleanup.sh` (success,
+  either path) + `scripts/install-post-merge-cron.sh` (auto-
+  cron path only) + `scripts/transition-card.sh` to `Blocked`
+  (failure path) + `gh issue comment` (failure note) +
+  Producer-side reads of platform session-log files (crash
+  detection, platform-provided; Consumer writes nothing).
 - **Maps to (canonical)**: TPS *poka-yoke* (fail-safe design
-  on the failure path — preserving the worktree when
-  terminating is exactly "make the next operator's job
-  easy"). The mtime-based heartbeat is board-superpowers
-  original, derived from C-PLUGIN-2 (no daemon).
-- **Mode compatibility**: both. Mode-2-specific addition:
-  card stores Consumer's session-id (in body or comment, as
-  an existing artifact) so Producer's preflight can stat()
-  the right session-log file.
-- **Autonomy**: A for success-path termination (the trivial
-  follow-on to merge); R for failure-path Blocked
-  transition (per ADR-0006 row 6 — "interrupts in-flight
-  work"); N/A for crash (Consumer is dead).
+  on the failure path — preserving the worktree is exactly
+  "make the next operator's job easy"). The mtime-based
+  heartbeat is board-superpowers original, derived from the
+  no-daemon plugin constraint. The auto-cron opt-in mirrors
+  the Default + override + accountability pattern that every
+  governance dimension in this section follows (P8 in
+  `0001-positioning.md`).
+- **Cross-link**: matrix rows 113 (interactive + cron success)
+  and 103 (failure path) in
+  [`06-audit-log-schema.md`](./06-audit-log-schema.md). The
+  cron contract in full at
+  `consuming-card/references/post-merge-cleanup.md`.
+- **Mode compatibility**: both. Auto-cron path requires a
+  host that supports cron (macOS via launchd, Linux via
+  cron); the cron script detects the platform and installs
+  the appropriate scheduler entry. Mode-2-specific addition:
+  card stores Consumer's session-id so Producer's preflight
+  can stat() the right session-log file.
+- **Autonomy**: A for interactive success-path cleanup (matrix
+  row 113 — trivial follow-on to merge with settled pre-
+  conditions); A for each individual cron-triggered cleanup
+  run (the architect's prior opt-in via `config.yml` is the
+  R-class approval; individual runs inside the cron stay A);
+  R for failure-path Blocked transition (interrupts
+  in-flight work); N/A for crash path (Consumer is dead).
+  Audit log entry written at each terminal-state exit.
 
 #### 1.4.2 (reserved for additional Consumer specific roles)
 
