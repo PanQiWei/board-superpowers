@@ -13,7 +13,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "pymysql", specifier = ">=1.1" },
+    { name = "pymysql", specifier = ">=1.1.1" },
     { name = "pyyaml", specifier = ">=6.0" },
 ]
 

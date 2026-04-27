@@ -10,5 +10,7 @@ version = "0.3.0"
 requires-python = ">=3.9"
 dependencies = [
     "pyyaml>=6.0",
-    "pymysql>=1.1",
+    # PyMySQL lower bound 1.1.1 to exclude CVE-2024-36039 (SQL injection
+    # in pymysql 1.1.0 and earlier). The committed uv.lock pins 1.1.2+.
+    "pymysql>=1.1.1",
 ]
