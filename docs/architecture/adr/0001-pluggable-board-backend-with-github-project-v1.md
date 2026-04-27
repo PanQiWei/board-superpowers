@@ -66,9 +66,9 @@ The board layer is **pluggable behind a stable contract**.
 - Teams already on Linear or Jira can adopt board-superpowers
   without migrating boards — once the second adapter ships.
 - The plugin's positioning (P2a) gets a falsifiable architectural
-  anchor: if no second adapter is attempted within 6 months
-  (deadline 2026-10-25, see ADR-0005 Consequences), P2a's "present
-  commitment" framing is downgraded.
+  anchor: if no second adapter is attempted by v1 GA + 1 week (AI
+  cadence; see ADR-0005 Consequences as amended by ADR-0010),
+  P2a's "present commitment" framing is downgraded.
 - ADR-0002 (claim primitive) decouples cleanly from the board: git
   pushes are atomic on any git host; the board adapter only
   observes the resulting status transition.
@@ -82,10 +82,10 @@ The board layer is **pluggable behind a stable contract**.
 - Every new feature that touches board state must route through the
   BoardAdapter contract — not through `gh` directly. The existing
   scripts pre-date this commitment and will be ported behind the
-  contract via the **GitHubProjectAdapter wrapper port** (60-day
-  deadline; see ADR-0005 Consequences). Until then, the contract
-  ships as design intent and the implementation gap is documented
-  honestly.
+  contract via the **GitHubProjectAdapter wrapper port** (lands
+  before v1 GA; see ADR-0005 Consequences as amended by ADR-0010).
+  Until then, the contract ships as design intent and the
+  implementation gap is documented honestly.
 - The contract surface itself (ADR-0005) is now immutable-modulo-
   superseding-ADR. Any change to method signatures, type
   definitions, or error semantics requires a new ADR.

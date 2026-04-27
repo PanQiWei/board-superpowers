@@ -433,7 +433,7 @@ preparation:
 | If you change… | You must also update… |
 |----------------|----------------------|
 | `0001-positioning.md` premise (P1..P8) or non-goal | Every spec doc that cites the changed premise (grep `docs/architecture/` for `P<N>`). Promote to a new ADR if the premise materially shifts. |
-| ADR-0005 BoardAdapter contract surface | `0003-domain-model/03-aggregates-and-entities.md` § 3.6.3 (Anti-Corruption Layer); spec for any v1 script that calls the adapter (`board-canon` skill, future scripts). Per ADR-0005 Consequences, the GitHubProjectAdapter wrapper port has a 60-day landing deadline. |
+| ADR-0005 BoardAdapter contract surface | `0003-domain-model/03-aggregates-and-entities.md` § 3.6.3 (Anti-Corruption Layer); spec for any v1 script that calls the adapter (`board-canon` skill, future scripts). Per ADR-0005 Consequences (as amended by ADR-0010), the GitHubProjectAdapter wrapper port lands before v1 GA. |
 | ADR-0006 D-AUTONOMY-1 matrix (rows or A/R/N classification) | `0002-product-features-and-flows/03-producer-surface.md` + `04-consumer-surface.md` (every feature row that cites the matrix); `classifying-actions` skill spec; `auditing-actions` skill spec (`action_id` catalog); `0005-contracts/06-audit-log-schema.md`. |
 | ADR-0007 plugin-runtime constraint set (C-PLUGIN-1/-2/-3) | Every Producer / Consumer feature with verbs like *monitor*, *detect*, *trigger automatically*. The preflight-piggyback idiom citation. |
 | ADR-0008 plugin-to-plugin SKILL invocation | `0005-contracts/04-skill-contracts.md` (sibling-skill classification table); `consuming-card` skill spec (F-C4 fallback rule). |

@@ -57,7 +57,13 @@ bsp_require_cmd python3
 # validation-rules.md. This script enforces a subset; the full filler
 # detection is delegated to the SKILL body.
 
-VALIDATION_OUTPUT="$(python3 - <<'PY'
+# Pass BODY_FILE as the positional arg to `python3 -`. The arg MUST sit
+# between `python3 -` and the here-doc opener: bash treats tokens after
+# the closing here-doc delimiter as the *next* command, not as args to
+# the here-doc-receiving command. The previous "PY\n${BODY_FILE})" form
+# silently dropped the arg, producing IndexError on sys.argv[1] and a
+# spurious "Permission denied" as bash tried to execute the body file.
+VALIDATION_OUTPUT="$(python3 - "${BODY_FILE}" <<'PY'
 import re, sys
 body = open(sys.argv[1]).read()
 
@@ -96,7 +102,7 @@ if errors:
     sys.exit(1)
 print("PR body validation passed")
 PY
-"${BODY_FILE}")" || bsp_die "PR body validation failed — fix before retry"
+)" || bsp_die "PR body validation failed — fix before retry"
 
 bsp_log "${VALIDATION_OUTPUT}"
 

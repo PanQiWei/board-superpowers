@@ -71,8 +71,9 @@ Omit if no such notes apply.
 | [0002](./0002-claim-via-branch-push.md) | Atomic claim via remote branch push | accepted |
 | [0003](./0003-worktree-per-consumer.md) | One worktree per Consumer session | accepted |
 | [0004](./0004-composition-over-reimplementation.md) | Composition over reimplementation of TDD/QA | accepted |
-| [0005](./0005-board-adapter-contract.md) | v1 BoardAdapter contract surface | accepted |
+| [0005](./0005-board-adapter-contract.md) | v1 BoardAdapter contract surface | accepted; § Consequences amended by ADR-0010 |
 | [0006](./0006-producer-autonomy-boundary.md) | Producer autonomy boundary — autonomous-with-transparency, with explicit permission matrix | accepted |
 | [0007](./0007-plugin-runtime-derived-constraints.md) | Plugin-runtime-derived constraints — three constraints arising from CC / Codex plugin physics | proposed |
 | [0008](./0008-plugin-to-plugin-skill-invocation.md) | Plugin-to-plugin composition via SKILL invocation (vs subagent spawn / MCP / direct import) | accepted |
 | [0009](./0009-allow-sqlite-as-byo-audit-db.md) | Allow SQLite as a BYO audit DB scheme (supersedes ADR-0006 §5 partial) | accepted |
+| [0010](./0010-re-anchor-deadlines-ai-cadence.md) | Re-anchor ADR-0005 Consequences deadlines to v1 GA + project-wide AI cadence 100x convention (supersedes ADR-0005 § Consequences partial) | accepted |
