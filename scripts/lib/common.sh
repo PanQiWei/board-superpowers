@@ -327,6 +327,11 @@ bsp_audit_local_write() {
     local skill="${4:?}"
     local summary="${5:?}"
 
+    # Re-derive PATH defensively. Caller may have a stripped PATH; we need
+    # dirname / mkdir / python3 / git regardless. Append caller PATH so
+    # caller's overrides still win.
+    PATH="/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin${PATH:+:${PATH}}"
+
     local path
     path="$(bsp_audit_local_path "${repo_root}")"
 
