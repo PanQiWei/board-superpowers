@@ -42,7 +42,9 @@
 #                                                   # CLAUDE_PLUGIN_ROOT
 #                                                   # for testability
 #   bash scripts/bootstrap-host.sh --auto-install-uv  # non-interactive uv
-#                                                      # install (CI / pipe)
+#                                                      # install (CI / pipe;
+#                                                      # equivalent to setting
+#                                                      # BOARD_SP_AUTO_INSTALL_UV=1)
 #
 # Exit codes:
 #   0 — success (manifest written, refreshed, or already current).
@@ -174,7 +176,7 @@ iso_utc_now() {
 #           instruction on missing in non-interactive contexts.
 #   Tier 2 (interactive tty): prompt y/N, run official install script.
 #   Tier 3 (flag or env var): --auto-install-uv flag or
-#           BSP_AUTO_INSTALL_UV=1 — install without prompting (CI / pipe).
+#           BOARD_SP_AUTO_INSTALL_UV=1 — install without prompting (CI / pipe).
 # Sets UV_VERSION to the detected/installed version string.
 # Returns 0 on success, exits 1 on missing-and-non-interactive-or-decline.
 ensure_uv() {
@@ -185,9 +187,13 @@ ensure_uv() {
     fi
 
     # uv missing. Three modes.
-    if [ "${BSP_AUTO_INSTALL_UV:-}" = "1" ] || [ "${1:-}" = "--auto-install-uv" ]; then
+    # Convention: BOARD_SP_* prefix for all plugin-controlled env vars.
+    if [ "${BOARD_SP_AUTO_INSTALL_UV:-}" = "1" ] || [ "${1:-}" = "--auto-install-uv" ]; then
         bsp_log "uv missing — installing via official script (auto)"
-        curl -LsSf https://astral.sh/uv/install.sh | sh
+        if ! curl -LsSf https://astral.sh/uv/install.sh | sh; then
+            bsp_warn "uv install via official installer failed; check network/proxy or install manually via 'brew install uv' / 'pipx install uv', then re-run bootstrap-host.sh"
+            exit 1
+        fi
         # Re-source PATH after install (uv lands in ~/.local/bin or /opt/homebrew/bin).
         export PATH="${HOME}/.local/bin:/opt/homebrew/bin:${PATH}"
     elif [ -t 0 ] && [ -t 1 ]; then
@@ -196,7 +202,10 @@ ensure_uv() {
         read -r reply
         case "${reply}" in
             [yY]|[yY][eE][sS])
-                curl -LsSf https://astral.sh/uv/install.sh | sh
+                if ! curl -LsSf https://astral.sh/uv/install.sh | sh; then
+                    bsp_warn "uv install via official installer failed; check network/proxy or install manually via 'brew install uv' / 'pipx install uv', then re-run bootstrap-host.sh"
+                    exit 1
+                fi
                 export PATH="${HOME}/.local/bin:/opt/homebrew/bin:${PATH}"
                 ;;
             *)
@@ -295,18 +304,37 @@ if [ -f "${MANIFEST}" ] && [ "${FORCE}" -eq 0 ]; then
     EXISTING_VERSION="$(yaml_get "${MANIFEST}" last_seen_version)"
     EXISTING_TS="$(yaml_get "${MANIFEST}" host_bootstrapped_at)"
     EXISTING_SCHEMA="$(yaml_get "${MANIFEST}" schema_version)"
+    EXISTING_UV_VERSION="$(yaml_get "${MANIFEST}" uv_version)"
 
-    if [ "${EXISTING_VERSION}" = "${PLUGIN_VERSION}" ] && [ "${EXISTING_SCHEMA}" = "2" ]; then
+    # Fail-loud if the manifest was written by a newer-schema plugin.
+    # Per spec 03 § "schema_version migration policy": older plugin builds
+    # reading a newer-than-known schema MUST fail loudly.
+    if [ -n "${EXISTING_SCHEMA}" ]; then
+        # Numeric comparison requires a pure-integer value; strip any
+        # surrounding quotes that may have survived yaml_get.
+        SCHEMA_INT="${EXISTING_SCHEMA//\"/}"
+        if [ "${SCHEMA_INT}" -gt 2 ] 2>/dev/null; then
+            bsp_die "this manifest.yml was written by a newer plugin (schema_version=${EXISTING_SCHEMA}); you are on plugin v${PLUGIN_VERSION} (schema v2). Please upgrade your plugin."
+        fi
+    fi
+
+    # Idempotent fast path: version current, schema v2, AND uv_version
+    # unchanged. If uv was upgraded between runs, skip is NOT safe —
+    # we must refresh so uv_version stays accurate.
+    if [ "${EXISTING_VERSION}" = "${PLUGIN_VERSION}" ] \
+        && [ "${EXISTING_SCHEMA}" = "2" ] \
+        && [ "${EXISTING_UV_VERSION}" = "${UV_VERSION}" ]; then
         # Defensive: even on the no-write fast path, converge file
         # mode to 0644 in case a hand-edit (or umask drift) left the
         # file at 0600 / 0400 / etc. Cheap, idempotent.
         chmod 0644 "${MANIFEST}"
-        bsp_log "manifest current at ${MANIFEST} (last_seen_version=${PLUGIN_VERSION}); no write"
+        bsp_log "manifest current at ${MANIFEST} (last_seen_version=${PLUGIN_VERSION}, uv_version=${UV_VERSION}); no write"
         printf '%s\n' "${MANIFEST}"
         exit 0
     fi
 
-    # Version refresh or schema migration — preserve host_bootstrapped_at.
+    # Version refresh or schema migration or uv_version update —
+    # preserve host_bootstrapped_at.
     if [ -z "${EXISTING_TS}" ]; then
         # Defensive: if the file is malformed and the timestamp is
         # missing, regenerate one rather than write `""`.
@@ -317,6 +345,10 @@ if [ -f "${MANIFEST}" ] && [ "${FORCE}" -eq 0 ]; then
     # Inline mini-migration: log when upgrading from schema v1 → v2.
     if [ "${EXISTING_SCHEMA}" = "1" ]; then
         bsp_log "migrating manifest schema v1 → v2 (adding uv_version)"
+    fi
+
+    if [ "${EXISTING_UV_VERSION}" != "${UV_VERSION}" ] && [ -n "${EXISTING_UV_VERSION}" ]; then
+        bsp_log "refreshing uv_version: ${EXISTING_UV_VERSION} → ${UV_VERSION}"
     fi
 
     bsp_log "refreshing last_seen_version: ${EXISTING_VERSION:-<unset>} → ${PLUGIN_VERSION}"
