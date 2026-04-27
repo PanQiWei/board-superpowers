@@ -728,7 +728,7 @@ else
     audit_interactive_prompt
 fi
 
-# Derive RESOLVED_DB_URL for downstream steps (2f + 2g):
+# Derive RESOLVED_DB_URL for downstream steps (2g):
 #   - FLAG and env paths are captured directly from their vars.
 #   - credentials.yml path (new or pre-existing) is read from disk.
 #   - Interactive decline (BSP_AUDIT_DECLINED=1) → empty.
@@ -738,8 +738,49 @@ if [ -n "${AUDIT_DB_URL_FLAG}" ]; then
 elif [ -n "${BOARD_SP_AUDIT_DB_URL:-}" ]; then
     RESOLVED_DB_URL="${BOARD_SP_AUDIT_DB_URL}"
 elif [ "${BSP_AUDIT_DECLINED:-0}" != "1" ] && [ -f "${CREDENTIALS_FILE}" ]; then
-    # shellcheck disable=SC2034  # consumed by steps 2f and 2g below
     RESOLVED_DB_URL="$(credentials_yml_dsn "${CREDENTIALS_FILE}")"
+fi
+: "${RESOLVED_DB_URL}"  # suppress SC2034 — consumed by step 2g below
+
+# --- Step 2f — uv sync per-repo venv ------------------------------------
+#
+# Copies plugin-shipped pyproject.toml + uv.lock to
+# <repo>/.board-superpowers/ (only if not already present), then runs
+# `uv sync` to materialise the per-repo Python venv.
+#
+# On failure: rolls back ONLY the files this step copied (newly-created
+# pyproject.toml / uv.lock / partial .venv). credentials.yml from step
+# 2e is NOT touched — per Codex round-2 #14 fix discipline.
+
+TARGET_PYPROJECT="${REPO_ROOT}/.board-superpowers/pyproject.toml"
+TARGET_LOCK="${REPO_ROOT}/.board-superpowers/uv.lock"
+TEMPLATE_PYPROJECT="$(bsp_plugin_root)/scripts/templates/pyproject.toml"
+TEMPLATE_LOCK="$(bsp_plugin_root)/scripts/templates/uv.lock"
+
+# Track whether THIS step created the files (for rollback).
+COPIED_PYPROJECT=0
+COPIED_LOCK=0
+
+if [ ! -f "${TARGET_PYPROJECT}" ]; then
+    [ -f "${TEMPLATE_PYPROJECT}" ] || bsp_die "step 2f: plugin template missing: ${TEMPLATE_PYPROJECT}"
+    cp "${TEMPLATE_PYPROJECT}" "${TARGET_PYPROJECT}"
+    COPIED_PYPROJECT=1
+fi
+if [ ! -f "${TARGET_LOCK}" ] && [ -f "${TEMPLATE_LOCK}" ]; then
+    cp "${TEMPLATE_LOCK}" "${TARGET_LOCK}"
+    COPIED_LOCK=1
+fi
+
+# Run uv sync. On failure, roll back ONLY this step's writes; preserve
+# credentials.yml from step 2e (already-confirmed standalone outcome).
+if (cd "${REPO_ROOT}/.board-superpowers/" && uv sync 2>&1) >&2; then
+    bsp_log "step 2f: venv ready at ${REPO_ROOT}/.board-superpowers/.venv"
+else
+    bsp_warn "step 2f: uv sync failed; rolling back step-2f-created files"
+    [ "${COPIED_PYPROJECT}" = "1" ] && rm -f "${TARGET_PYPROJECT}"
+    [ "${COPIED_LOCK}" = "1" ] && rm -f "${TARGET_LOCK}"
+    rm -rf "${REPO_ROOT}/.board-superpowers/.venv"
+    bsp_die "step 2f: venv setup failed; investigate uv (network / proxy / lock conflict / disk full); credentials.yml from step 2e preserved; re-run bootstrap-project.sh after fix"
 fi
 
 # --- Step 4 — dual-file routing block injection --------------------------
