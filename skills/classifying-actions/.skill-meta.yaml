@@ -1,0 +1,5 @@
+version: v0.1.0
+layer: atomic
+type: reference
+mode: both
+bounded-context: audit
