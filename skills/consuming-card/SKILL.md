@@ -87,8 +87,9 @@ This skill does NOT re-implement TDD or planning — those are the canonical dis
 If the card hits a blocker mid-flight:
 
 1. Comment on the card naming the blocker.
-2. Propose to the architect: transition Status from `In Progress` to `Blocked` (mutating action — get acknowledgement first).
-3. After acknowledgement: run `gh project item-edit ... Status=Blocked` and append the audit-log entry.
+2. Invoke `board-superpowers:classifying-actions` with action_id 6 (Status transition to Blocked); receive A / R / N.
+3. If R: record the proposal via `board-superpowers:auditing-actions`, surface to the architect, wait for acknowledgement. On approve: run `gh project item-edit ... Status=Blocked` and invoke `board-superpowers:auditing-actions` to record the result. On decline: invoke `board-superpowers:auditing-actions` to record the decline and abort.
+4. If A: run the Status flip immediately, then invoke `board-superpowers:auditing-actions` to record the action.
 
 Otherwise leave the card in `In Progress` for the duration of the implementation. Do NOT churn the Status field on every commit — Status reflects the gross state of the work, not its internal progress.
 
@@ -162,18 +163,33 @@ The worktree cleanup is mandatory — leaving stale worktrees pollutes the workt
 
 ## How mutating actions are handled
 
-Every mutating action this skill performs (Status flips, card body writes, PR creates / comments, worktree deletes, branch deletes, audit-log writes) follows this discipline:
+This skill performs several mutating actions across the card lifecycle
+— claiming the card (action_id 100), editing the card body when
+acceptance criteria evolve (action_id 2), opening the PR (action_id
+102), responding to review cycles (action_id 105-111), and so on.
 
-1. **Propose** the action with a one-line description.
-2. **Wait** for explicit architect acknowledgement.
-3. **Act**.
-4. **Append an audit-log entry** to `~/.board-superpowers/repos/<normalized>/audit-local.jsonl` via `bsp_audit_local_write` (defined in `scripts/lib/common.sh`).
+For every mutating action this skill performs:
 
-Some actions may be classified as auto-act-OK by per-repo or per-user override rules in `.board-superpowers/config.yml`; until those overrides are configured, treat every action as requiring acknowledgement.
+1. Resolve the action's action_id (from
+   `board-superpowers:classifying-actions/references/action-id-catalog.md`).
+2. Invoke `board-superpowers:classifying-actions` with the action_id;
+   receive A / R / N.
+3. If A: act immediately, then invoke `board-superpowers:auditing-actions`
+   to record one audit entry.
+4. If R: invoke `board-superpowers:auditing-actions` to record the
+   proposal; surface to the architect; wait for acknowledgement. On
+   approve: act, then invoke `board-superpowers:auditing-actions` to
+   record the approval-and-result. On decline: invoke
+   `board-superpowers:auditing-actions` to record the decline; abort.
+5. If N: refuse and surface the block reason; no audit entry at N.
+
+The two atomic skills handle the matrix lookup, override merging,
+schema enforcement, and audit row writing. This skill describes the
+card lifecycle; those skills describe the governance contract.
 
 ## Spawned-subagent constraint (Producer-spawned Consumer mode)
 
-If this skill is running as a subagent that the Producer's `managing-board` skill spawned (rather than as the architect's direct session), it cannot itself spawn further subagents — Claude Code subagents have a depth-1 budget. In that mode:
+If this skill is running as a subagent that the Producer's `board-superpowers:managing-board` skill spawned (rather than as the architect's direct session), it cannot itself spawn further subagents — Claude Code subagents have a depth-1 budget. In that mode:
 
 - Every cross-plugin sub-skill invocation MUST be procedural (read the sibling SKILL.md content into this Consumer's own context, follow the procedure inline) — do NOT spawn a `superpowers:*` or `gstack:*` subagent.
 - For required sub-skills that themselves spawn subagents (verify each one's body for `Agent` tool / `subagent_type` references), surface a procedural fallback to the architect — see `references/handoff-to-superpowers.md`.
