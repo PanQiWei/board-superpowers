@@ -180,12 +180,13 @@ in the same PR.
 
 ---
 
-## Claude Code plugin-contract integration vars
+## Plugin-contract integration vars
 
-Set by the Claude Code runtime during plugin / hook execution.
-board-superpowers reads them; the plugin contract owns them.
-Renaming or removing either is upstream-driven (a CC release-note
-event), not board-superpowers-driven.
+Set by the platform runtime (Claude Code or Codex CLI) during
+plugin / hook execution. board-superpowers reads them; the
+plugin contract owns them. Renaming or removing any is upstream-
+driven (a CC or Codex release-note event), not board-superpowers-
+driven.
 
 ### `CLAUDE_PLUGIN_ROOT`
 
@@ -257,6 +258,59 @@ Codex side at v1).
 
 ---
 
+### `CLAUDE_SESSION_ID`
+
+| Property | Value |
+|----------|-------|
+| Format | Opaque string (Claude Code-assigned per session). |
+| Default | Set by Claude Code at session start. Unset under non-CC shells. |
+| Read by | `scripts/lib/common.sh` (`bsp_resolve_platform`, `bsp_resolve_session_id`); `scripts/audit-log-write.sh` (via `BSP_SESSION_ID` export); intake card-creation paths via `bsp_render_creator_trace_block` (per card #44). |
+| Validation | None — used as-is. |
+
+The canonical "session id" surface for Claude Code consumers.
+Provided to subprocesses via the shell environment (terminal env
+inheritance), so any script sourced from a CC-spawned shell sees
+it. Codex CLI's equivalent is `CODEX_THREAD_ID` — see entry below
+for the term-bridge rationale.
+
+#### Cited rationale
+
+- `scripts/lib/common.sh` (`bsp_resolve_platform`, `bsp_resolve_session_id`) — implementation.
+- `scripts/audit-log-write.sh` line 117 — primary caller (audit row writer).
+- `skills/board-canon/references/card-body-schema.md` § creator-trace — marker block consumer (lands in same PR).
+- Card #44 design — initial wiring.
+
+---
+
+### `CODEX_THREAD_ID`
+
+| Property | Value |
+|----------|-------|
+| Format | Opaque string (Codex CLI-assigned per session; Codex's terminology is "thread id"). |
+| Default | Set by Codex CLI from `rust-v0.125.0` onward (PR [openai/codex#10096](https://github.com/openai/codex/pull/10096), merged 2026-02-03). Unset on older Codex installs. |
+| Read by | Same callers as `CLAUDE_SESSION_ID` (the helpers fall through to `CODEX_THREAD_ID` when `CLAUDE_SESSION_ID` is unset). |
+| Validation | None — used as-is. |
+
+Term-bridge: Codex CLI calls this concept a "thread id"; the
+project's `audit_log.session_id` column and the `BSP_SESSION_ID`
+export use "session id". The helper `bsp_resolve_session_id()`
+collapses the two terms into one canonical value, so consumers
+see "session id" everywhere.
+
+When the architect's Codex install is older than `rust-v0.125.0`
+the var is unset; `bsp_resolve_session_id` then falls through to
+the PWD-derived fallback. `Created-by` will be `unknown` in this
+case — documented as expected fallback behavior, not an error.
+
+#### Cited rationale
+
+- [openai/codex#8923](https://github.com/openai/codex/issues/8923) — feature request that motivated the Codex-side env var.
+- [openai/codex#10096](https://github.com/openai/codex/pull/10096) — PR introducing `CODEX_THREAD_ID` injection.
+- `scripts/lib/common.sh` `bsp_resolve_platform` / `bsp_resolve_session_id` — fallback chain consumer.
+- Card #44 design — initial wiring.
+
+---
+
 ## Variables board-superpowers does NOT read (anti-cargo-cult)
 
 For the avoidance of doubt — these adjacent CC / Codex env vars
@@ -266,11 +320,10 @@ feature without checking the actual call sites.
 
 | Variable | Owner | Why board-superpowers doesn't read it |
 |----------|-------|---------------------------------------|
-| `CLAUDE_SESSION_ID` | CC | Mode-1/Mode-2 Consumer doesn't need its own session id at v1; transcripts are looked up via path conventions per [`07-path-conventions.md`](./07-path-conventions.md). When the Producer-side preflight piggyback writer lands, this becomes a real consumer. |
 | `CLAUDE_SKILL_DIR` | CC | Skills self-locate via their own `SKILL.md` lookup; no script needs the dir. |
 | `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` | CC | Mode-2 Consumer must NOT depend on `SendMessage` for correctness — see `MULTI_AGENT_DEVELOPMENT.md` "What this means for board-superpowers → 1. Mode-2 must close under C-PLUGIN-1". v1 codepath is gated by board state, not this flag. |
 | `CLAUDE_CODE_FORK_SUBAGENT` | CC | Forked subagents are interactive-only and Claude-only; out of v1 Mode-2 scope. |
-| `CODEX_*` | Codex | No Codex-specific path is wired in v1; portability is via `BASH_SOURCE` self-derivation, not env vars. |
+| `CODEX_*` (except `CODEX_THREAD_ID`, see entry above) | Codex | No other Codex-specific path is wired in v1; portability is via `BASH_SOURCE` self-derivation, not env vars. |
 
 Adding any of these to a `Read by` table above requires also
 updating the consumer code in the same PR. Per `AGENTS.md`
