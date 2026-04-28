@@ -3,9 +3,10 @@
 > Pin the shape of every Claude Code (and forward-looking Codex CLI)
 > hook board-superpowers registers: trigger event, stdin payload,
 > stdout / `additionalContext` format, sanitization rules, exit
-> codes, timeout. v1 wires `SessionStart` only; the format below is
-> forward-looking so future hook entry points have one place to
-> plug into.
+> codes, timeout. The plugin wires `SessionStart` (advisory) plus
+> `PreToolUse` and `PostToolUse` (the skills/AGENTS.md Process gate
+> enforcement pair); other events have one place to plug into when
+> a future card needs them.
 
 ---
 
@@ -29,7 +30,9 @@ future card.
 | Event | Status | Script | Purpose |
 |-------|--------|--------|---------|
 | `SessionStart` (`startup` matcher implicit) | active | `hooks/session-start.sh` | Layer 1 dep alert + first-time setup nudge |
-| All others | not registered at v1 | — | Reserved for future cards (e.g., a `Stop` hook for end-of-session retro nudge) |
+| `PreToolUse` (`Edit` / `Write` / `MultiEdit` matchers) | active | `hooks/pre-tool-use.sh` | skills/AGENTS.md Process gate — block file mutations under `skills/**` until `example-skills:skill-creator` is invoked in the session. Companion to `PostToolUse`. |
+| `PostToolUse` (`Skill` matcher) | active | `hooks/post-tool-use.sh` | Records `*skill-creator` skill invocations into a per-session flag file consumed by `pre-tool-use.sh`. |
+| All others | not registered | — | Reserved for future cards (e.g., a `Stop` hook for end-of-session retro nudge). |
 
 The 28+ Claude Code hook events available are enumerated in
 `PLUGIN_DEVELOPMENT.md` ("Hooks (`hooks/hooks.json`)" → "Available
@@ -306,14 +309,136 @@ The script's only dependency-resolution step at v1 is locating
 
 ### Cited rationale
 
-- `hooks/AGENTS.md` — invariants 1–4 (self-contained,
-  sanitize, never block, 10s budget).
+- `hooks/AGENTS.md` — invariants 1–5 (self-contained,
+  sanitize, never block on advisory hooks, 10s budget,
+  gate-blocking inversion for safety hooks).
 - `0002-product-features-and-flows/05-bootstrap-surface.md` §1.5
   three-layer alert strategy — Layer 1 is this hook.
 - ADR-0007 C-PLUGIN-2 — hooks are best-effort because there is no
   daemon to make them reliable.
 - `PLUGIN_DEVELOPMENT.md` "Hooks (`hooks/hooks.json`)" — the
   upstream `hookSpecificOutput.additionalContext` payload contract.
+
+---
+
+## `PreToolUse` gate hook — skills/AGENTS.md Process gate enforcement
+
+### Why this hook exists
+
+`AGENTS.md` (root) Doctrine #4 mandates that
+`example-skills:skill-creator` is invoked before any edit under
+`skills/`. Until this hook landed, enforcement was honor-system —
+the doctrine surfaced as a system-reminder when `skills/AGENTS.md`
+was lazy-loaded but the model could read past it while already in
+flow. Architect feedback recorded the same gap firing across at
+least three consecutive consumer sessions; the only structural
+recourse is a tool-level gate.
+
+### Trigger and matcher set
+
+The hook registers under three `PreToolUse` matchers:
+
+- `Edit` — every file Edit tool call.
+- `Write` — every file Write tool call.
+- `MultiEdit` — every multi-edit tool call.
+
+Each matcher invokes the same `hooks/pre-tool-use.sh` script, which
+filters internally on `tool_input.file_path`. Only paths matching
+`*/skills/*` or `skills/*` are gated; everything else exits 0
+immediately.
+
+### Companion `PostToolUse` hook
+
+`hooks/post-tool-use.sh` listens for `Skill` tool invocations. When
+`tool_input.skill` (or `skill_name`) ends with `skill-creator`
+(matching `example-skills:skill-creator` and any future
+namespace variants), the script writes a flag file at
+`${TMPDIR:-/tmp}/board-superpowers-sessions/<session_id>/skill-creator-invoked.flag`.
+The flag is per-session — restarted sessions re-fire the gate, which
+is correct (Doctrine #4 says the entry skill MUST be invoked
+**in this session**, not "ever").
+
+### Failure-mode trade-off (Invariant 5)
+
+Per `hooks/AGENTS.md` Invariant 3, advisory hooks (`SessionStart`)
+MUST exit 0 — blocking session start is worse than running
+unconfigured. The gate hook inverts this trade-off (per Invariant 5):
+**allowing ungated edits to skills/ is worse than blocking the
+edit**, because Doctrine #4 names that exact failure mode as
+non-recoverable in-session. The hook therefore exits 2 with a
+reason on stderr when the gate fires.
+
+The hook fails OPEN on its own internal errors — missing python3,
+malformed JSON payload, parse exceptions, write errors on the flag
+directory — because hook-internal failure should not punish the
+architect for a bug in the hook implementation. Only the gate's
+positive match (skill-creator confirmed not invoked) triggers
+exit 2.
+
+### Stdin payload
+
+```json
+{
+  "session_id": "<UUID-like string>",
+  "tool_name": "Edit | Write | MultiEdit | Skill | ...",
+  "tool_input": {
+    "file_path": "/path/to/file",      // for Edit/Write/MultiEdit
+    "skill": "<plugin>:<skill-name>"   // for Skill (PostToolUse)
+  }
+}
+```
+
+The hook sanitizes `session_id` defensively (rejects any character
+outside `[a-zA-Z0-9_-]`) before interpolating into the flag-file
+path; sanitization fails open (exit 0).
+
+### Stdout / stderr / exit codes
+
+| Path | Outcome | Exit code | stdout | stderr |
+|------|---------|-----------|--------|--------|
+| Edit/Write/MultiEdit on `skills/**`, flag absent | gate fires | 2 | (empty) | gate-explanation block |
+| Edit/Write/MultiEdit on `skills/**`, flag present | allowed | 0 | (empty) | (empty) |
+| Edit/Write/MultiEdit outside `skills/` | not gated | 0 | (empty) | (empty) |
+| Other tool name (e.g., `Read`, `Bash`) | not gated | 0 | (empty) | (empty) |
+| Malformed JSON / missing python3 / extraction error | fail-open | 0 | (empty) | (empty) |
+
+### Known gap — Bash escape hatch
+
+The hook gates `Edit / Write / MultiEdit` only. A motivated bypass
+via `Bash` (e.g., `bash -c 'cat > skills/foo.md'` or `sed -i`) is
+not blocked. Rationale for accepting the gap:
+
+- The system prompt already prefers Edit/Write over Bash mutations
+  ("Avoid using this tool to run `sed`, `awk`...; use Edit/Write
+  instead"). Bypass requires deliberate choice, not accident.
+- Gating Bash by command-string grep is brittle — a
+  command like `cd somewhere/skills/foo && touch bar.md` triggers
+  false positives.
+- Audit-log inspection (per `auditing-actions`) provides a
+  detection path for deliberate bypass.
+
+If the gap becomes load-bearing, a follow-up card adds a Bash
+matcher with a tighter heuristic (e.g., grep for `>\s*\S*skills/`
+or `--include skills/`).
+
+### State directory
+
+`${TMPDIR:-/tmp}/board-superpowers-sessions/<session_id>/`
+
+The directory is per-session and created on demand by
+`post-tool-use.sh`. It is NOT persistent — `/tmp` is wiped on host
+reboot. Persistence is intentionally absent: Doctrine #4's
+"in this session" requirement implies session-scoped state.
+
+### Cited rationale
+
+- `AGENTS.md` (root) Doctrine #4 — mandates the entry skill before
+  any edit under `skills/`.
+- `skills/AGENTS.md` "Process gate" — the implementation /
+  review-phase contract this hook enforces.
+- Memory `feedback_v1_release_gate_no_workarounds` — workarounds
+  must close before release; honor-system enforcement counts as
+  a workaround the gate hook removes.
 
 ---
 

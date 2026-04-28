@@ -25,8 +25,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 PLUGIN_ROOT="$(bsp_plugin_root)"
 HOOK_SCRIPT="${PLUGIN_ROOT}/hooks/session-start.sh"
+PRE_TOOL_HOOK="${PLUGIN_ROOT}/hooks/pre-tool-use.sh"
+POST_TOOL_HOOK="${PLUGIN_ROOT}/hooks/post-tool-use.sh"
 
-[ -f "${HOOK_SCRIPT}" ] || bsp_die "hook script not found: ${HOOK_SCRIPT}"
+[ -f "${HOOK_SCRIPT}" ]    || bsp_die "hook script not found: ${HOOK_SCRIPT}"
+[ -f "${PRE_TOOL_HOOK}" ]  || bsp_die "hook script not found: ${PRE_TOOL_HOOK}"
+[ -f "${POST_TOOL_HOOK}" ] || bsp_die "hook script not found: ${POST_TOOL_HOOK}"
 
 bsp_require_cmd python3
 
@@ -56,19 +60,39 @@ esac
 
 SNIPPET="$(python3 -c "
 import json, sys
+session_hook, pre_hook, post_hook = sys.argv[1], sys.argv[2], sys.argv[3]
 print(json.dumps({
     'hooks': {
         'SessionStart': [
             {
                 'type': 'command',
-                'command': f'bash {sys.argv[1]}',
+                'command': f'bash {session_hook}',
                 'timeout': 10,
+                'name': 'board-superpowers'
+            }
+        ],
+        'PreToolUse': [
+            {
+                'type': 'command',
+                'command': f'bash {pre_hook}',
+                'matcher': matcher,
+                'timeout': 5,
+                'name': 'board-superpowers'
+            }
+            for matcher in ('Edit', 'Write', 'MultiEdit')
+        ],
+        'PostToolUse': [
+            {
+                'type': 'command',
+                'command': f'bash {post_hook}',
+                'matcher': 'Skill',
+                'timeout': 5,
                 'name': 'board-superpowers'
             }
         ]
     }
 }, indent=2))
-" "${HOOK_SCRIPT}")"
+" "${HOOK_SCRIPT}" "${PRE_TOOL_HOOK}" "${POST_TOOL_HOOK}")"
 
 case "${MODE}" in
     print)
@@ -113,11 +137,12 @@ EOF
         fi
 
         # Merge into existing file. Use python to preserve other plugins'
-        # hooks, abort on board-superpowers entry already present.
-        python3 - "${TARGET}" "${HOOK_SCRIPT}" <<'PY'
+        # hooks; idempotently replace any existing board-superpowers entries
+        # across all three events (SessionStart + PreToolUse + PostToolUse).
+        python3 - "${TARGET}" "${HOOK_SCRIPT}" "${PRE_TOOL_HOOK}" "${POST_TOOL_HOOK}" <<'PY'
 import json, sys, os, shutil
 
-target, hook_script = sys.argv[1], sys.argv[2]
+target, session_hook, pre_hook, post_hook = sys.argv[1:5]
 with open(target) as f:
     try:
         data = json.load(f)
@@ -125,25 +150,34 @@ with open(target) as f:
         print(f"existing {target} is not valid JSON: {e}", file=sys.stderr)
         sys.exit(1)
 
-data.setdefault('hooks', {})
-data['hooks'].setdefault('SessionStart', [])
+# Define the full set of board-superpowers entries to install.
+bsp_entries = {
+    'SessionStart': [
+        {'type': 'command', 'command': f'bash {session_hook}',
+         'timeout': 10, 'name': 'board-superpowers'},
+    ],
+    'PreToolUse': [
+        {'type': 'command', 'command': f'bash {pre_hook}',
+         'matcher': matcher, 'timeout': 5,
+         'name': 'board-superpowers'}
+        for matcher in ('Edit', 'Write', 'MultiEdit')
+    ],
+    'PostToolUse': [
+        {'type': 'command', 'command': f'bash {post_hook}',
+         'matcher': 'Skill', 'timeout': 5,
+         'name': 'board-superpowers'},
+    ],
+}
 
-# Idempotency: if a board-superpowers entry already exists, replace it.
-existing = [h for h in data['hooks']['SessionStart']
-            if h.get('name') == 'board-superpowers']
-if existing:
-    print(f"replacing existing board-superpowers entry in {target}", file=sys.stderr)
-    data['hooks']['SessionStart'] = [
-        h for h in data['hooks']['SessionStart']
+data.setdefault('hooks', {})
+for event, entries in bsp_entries.items():
+    data['hooks'].setdefault(event, [])
+    # Idempotency: drop any existing board-superpowers entries for this event.
+    data['hooks'][event] = [
+        h for h in data['hooks'][event]
         if h.get('name') != 'board-superpowers'
     ]
-
-data['hooks']['SessionStart'].append({
-    'type': 'command',
-    'command': f'bash {hook_script}',
-    'timeout': 10,
-    'name': 'board-superpowers'
-})
+    data['hooks'][event].extend(entries)
 
 # Atomic write: stage to .tmp, then rename.
 tmp = target + '.tmp'
@@ -152,7 +186,7 @@ shutil.copy2(target, backup)
 with open(tmp, 'w') as f:
     json.dump(data, f, indent=2)
 os.replace(tmp, target)
-print(f"updated {target} (backup at {backup})", file=sys.stderr)
+print(f"updated {target} with 3 events (backup at {backup})", file=sys.stderr)
 PY
         bsp_log "registered. Test with: codex (open a fresh session)"
         ;;
@@ -168,18 +202,24 @@ import json, sys, os, shutil
 target = sys.argv[1]
 with open(target) as f:
     data = json.load(f)
-hooks = data.get('hooks', {}).get('SessionStart', [])
-before = len(hooks)
-hooks = [h for h in hooks if h.get('name') != 'board-superpowers']
-after = len(hooks)
-if before == after:
+hooks_block = data.get('hooks') or {}
+removed_count = 0
+for event in ('SessionStart', 'PreToolUse', 'PostToolUse'):
+    entries = hooks_block.get(event, [])
+    before = len(entries)
+    kept = [h for h in entries if h.get('name') != 'board-superpowers']
+    removed_count += before - len(kept)
+    if kept:
+        hooks_block[event] = kept
+    elif event in hooks_block:
+        # Empty after removal — drop the key entirely.
+        del hooks_block[event]
+if removed_count == 0:
     print(f"no board-superpowers entry found in {target}", file=sys.stderr)
     sys.exit(0)
-data['hooks']['SessionStart'] = hooks
-# If the SessionStart array is now empty, drop the key entirely.
-if not hooks:
-    del data['hooks']['SessionStart']
-if not data.get('hooks'):
+if hooks_block:
+    data['hooks'] = hooks_block
+elif 'hooks' in data:
     del data['hooks']
 backup = target + '.bak'
 shutil.copy2(target, backup)
@@ -187,7 +227,7 @@ tmp = target + '.tmp'
 with open(tmp, 'w') as f:
     json.dump(data, f, indent=2)
 os.replace(tmp, target)
-print(f"removed board-superpowers entry from {target} (backup at {backup})", file=sys.stderr)
+print(f"removed {removed_count} board-superpowers entry/entries from {target} (backup at {backup})", file=sys.stderr)
 PY
         ;;
 esac

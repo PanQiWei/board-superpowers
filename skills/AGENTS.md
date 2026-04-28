@@ -1,60 +1,81 @@
 # skills/ — skill-authoring contract
 
-> **Process gate — implementation phase** (creating a new skill
-> OR editing an existing skill — body, frontmatter, references,
-> `.skill-meta.yaml`, `evals/`, `scripts/`):
+> # ⛔ STOP — Process gate (read this completely before any edit)
 >
-> 1. **Read [`../SKILL_DEVELOPMENT.md`](../SKILL_DEVELOPMENT.md)
+> Editing **any file under `skills/`** triggers a Process gate that
+> requires `example-skills:skill-creator` to be invoked in this
+> session FIRST. The gate is enforced at two layers:
+>
+> - **Tool-level (hard).** `hooks/pre-tool-use.sh` blocks
+>   `Edit / Write / MultiEdit` on `skills/**` with exit code 2 +
+>   reason on stderr until `example-skills:skill-creator` runs in
+>   this session. The hook self-clears after a successful invocation
+>   via the companion `hooks/post-tool-use.sh`. Contract:
+>   [`../docs/architecture/0005-contracts/02-hook-contracts.md`](../docs/architecture/0005-contracts/02-hook-contracts.md)
+>   § "PreToolUse gate hook".
+> - **Doctrinal (binding).** AGENTS.md (root) Doctrine #4 prohibits
+>   skipping the entry skill, even when the work feels routine.
+>
+> **Sequence to clear the gate** (both implementation and
+> review phases):
+>
+> 1. **STOP** any plan to edit `skills/**`.
+> 2. **Acknowledge in your reply**: "About to/just touched
+>    skills/. Process gate fires; invoking
+>    example-skills:skill-creator now." If `skill-creator`
+>    already ran this session, swap "invoking" for "already
+>    invoked at <turn>".
+> 3. **Invoke `example-skills:skill-creator`** via the Skill
+>    tool. The skill carries cross-platform skill-authoring
+>    discipline (frontmatter optimization heuristics, Skeleton
+>    selection, Regime 1/2 testing scaffolding) that the body of
+>    [`../SKILL_DEVELOPMENT.md`](../SKILL_DEVELOPMENT.md)
+>    documents. After invocation the gate clears for the rest of
+>    this session.
+> 4. **Read [`../SKILL_DEVELOPMENT.md`](../SKILL_DEVELOPMENT.md)
 >    FIRST** — even if you read it in an earlier session.
->    Selective read of the section your work touches (skill graph
->    framing, three-tier frontmatter, body skeletons,
->    anti-patterns, testing regimes) is fine, but the read MUST
->    happen in **this** session before the first edit. "I already
->    know it" is forbidden — the doc may have changed and your
+>    Selective read of the touched sections (skill graph framing,
+>    three-tier frontmatter, body skeletons, anti-patterns,
+>    testing regimes) is fine, but the read MUST happen in
+>    **this** session before the first edit. "I already know it"
+>    is forbidden — the doc may have changed and your
 >    context-window may have decayed since the last read.
-> 2. **Invoke `example-skills:skill-creator`** — the canonical
->    entry skill for create / modify / improve work. It carries
->    the cross-platform skill-authoring discipline (frontmatter
->    optimization heuristics, Skeleton selection, Regime 1/2
->    testing scaffolding) that the body of `SKILL_DEVELOPMENT.md`
->    documents.
-> 3. **Update [`../SKILLS.md`](../SKILLS.md)** — if your change
->    adds / removes / renames / re-layers a skill, the catalog
->    entry MUST land in the same PR (paired-PR contract); when
->    feasible, in the same commit as the SKILL change or in an
->    immediately-preceding commit (paired-commit, the strict
->    reading of "edit FIRST" — see § "SKILLS.md edit-first
->    contract" below).
+> 5. **Update [`../SKILLS.md`](../SKILLS.md)** if your change
+>    adds / removes / renames / re-layers a skill, OR adds a new
+>    references file inside an existing skill (the catalog row
+>    lists references). The catalog row MUST land in the same PR
+>    (paired-PR contract); when feasible, in the same commit as
+>    the SKILL change or in an immediately-preceding commit
+>    (paired-commit, the strict reading of "edit FIRST" — see §
+>    "SKILLS.md edit-first contract" below).
 >
-> **Process gate — review phase** (independent review of a PR
-> touching `skills/`, including self-review during PR-prep):
+> **Review-phase additions** (independent review or self-review
+> during PR-prep). Steps 1-4 above still apply. In addition:
 >
-> 1. **Read [`../SKILL_DEVELOPMENT.md`](../SKILL_DEVELOPMENT.md)
->    FIRST** — same rule as implementation. Reviewers relying on
->    a pre-filtered checklist defeat the source-of-truth contract
->    (per memory `feedback_reviewer_prompt_reads_source_of_truth`).
->    Re-read the touched sections independently before forming
->    opinions.
-> 2. **Cross-check against [`../SKILLS.md`](../SKILLS.md)** —
->    verify the catalog entry matches the SKILL's actual
->    `.skill-meta.yaml` (layer / type / mode / bounded-context)
->    and `SKILL.md` (description / cross-skill refs / body length
->    vs the layer's budget).
-> 3. **Validate test-regime presence** — per
->    `SKILL_DEVELOPMENT.md` § "Testing skills", confirm the SKILL
->    has the appropriate test artifact: `evals/evals.json` for
->    output-shaped skills (Regime 2 — eval matrix); pressure-
->    scenario log for discipline-shaped skills (Regime 1 —
->    RED-GREEN-REFACTOR). A new skill landed without either is a
->    blocker, not a minor finding.
+> - **Cross-check against [`../SKILLS.md`](../SKILLS.md)** —
+>   verify the catalog entry matches the SKILL's actual
+>   `.skill-meta.yaml` (layer / type / mode / bounded-context)
+>   and `SKILL.md` (description / cross-skill refs / body length
+>   vs the layer's budget). Memory
+>   `feedback_reviewer_prompt_reads_source_of_truth` mandates
+>   that reviewers re-read source-of-truth sections independently
+>   instead of relying on the implementer's checklist.
+> - **Validate test-regime presence** — per
+>   `SKILL_DEVELOPMENT.md` § "Testing skills", confirm the SKILL
+>   has the appropriate test artifact: `evals/evals.json` for
+>   output-shaped skills (Regime 2 — eval matrix); pressure-
+>   scenario log for discipline-shaped skills (Regime 1 —
+>   RED-GREEN-REFACTOR). A new skill landed without either is a
+>   blocker, not a minor finding.
 >
-> **Cross-platform applicability**: both phases apply equally to
-> Claude Code and Codex CLI sessions. The project's contract is
-> single-source-of-truth in this `AGENTS.md` — Claude Code reads
-> it via the sibling `CLAUDE.md` shim's `@`-include; Codex CLI
-> reads `AGENTS.md` natively per its auto-load convention. There
-> is no separate Claude-Code-only or Codex-only rules file under
-> `skills/`; this one document governs both.
+> **Cross-platform applicability**: the gate applies equally to
+> Claude Code and Codex CLI sessions. The hook ships in
+> `hooks/hooks.json` (auto-discovered by Claude Code) and via
+> `scripts/register-codex-hooks.sh --install-user` (Codex CLI;
+> see [`../PLUGIN_DEVELOPMENT.md`](../PLUGIN_DEVELOPMENT.md) §
+> "Codex CLI" → "Hooks"). There is no separate Claude-Code-only
+> or Codex-only rules file under `skills/`; this one document
+> governs both.
 
 This contract is the per-directory operational checklist for
 the skill-authoring discipline. The full guide lives in
@@ -152,6 +173,12 @@ When adding / removing / renaming / re-layering any skill:
   presence, no Tier 3.
 - `scripts/verify-skill-metadata.sh` — yaml ↔ SKILLS.md
   catalog consistency.
+- `scripts/verify-skill-anti-patterns.sh` — A9 (project-internal
+  codes in SKILL.md) + A10 (phase narrative in skill files).
+- `tests/test-skills-edit-gate.sh` — gate hook hermetic regression
+  test (Edit / Write / MultiEdit blocked without skill-creator;
+  flag-file lifecycle through `pre-tool-use.sh` +
+  `post-tool-use.sh`).
 - `shellcheck -x` over any new / changed scripts in the skill
   directory (e.g., skill-bundled scripts under
   `<skill>/scripts/`).
