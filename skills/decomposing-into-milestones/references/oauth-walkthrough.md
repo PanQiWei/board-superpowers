@@ -2,6 +2,13 @@
 
 > **Companion to** `references/decomposition-patterns.md` (SPIDR + Cohn anti-patterns + business pattern catalog). Cross-link from `SKILL.md` § "Worked examples".
 > **Status**: serves both as `#35` AC #7 dry-run quality verification artifact AND as the canonical reference shape for new feature artifacts. Architects authoring synthesis output should mirror the structure shown here (input → identified capabilities → SPIDR axis selection → 5 cards with full bodies → INVEST + vertical-slicing gate tables → dep graph → batch summary).
+>
+> **Creator-trace placeholders**: each card body below shows a
+> `<!-- board-superpowers:creator-trace -->` block with `<platform>` and `<session-id>` placeholder
+> values. These placeholders are **NOT hand-filled in synthesis output** — the intake caller (Step 8
+> item 3 in `SKILL.md`) prepends the real values via `bsp_render_creator_trace_block` in
+> `scripts/lib/common.sh` at `gh issue create` time. See
+> `skills/board-canon/references/card-body-schema.md` § "Creator-trace marker".
 
 ## Input (fictional design artifact)
 
@@ -44,6 +51,10 @@ Read the input artifact and identify distinct user-visible capabilities:
 ### Card 1 — Google OAuth happy-path sign-in
 
 ```markdown
+<!-- board-superpowers:creator-trace -->
+**Created-by:** <platform>
+**Session-id:** <session-id>
+<!-- /board-superpowers:creator-trace -->
 <!-- thin-pointer -->
 **Spec**: docs/features/oauth-signin.md § 1 Google
 **Owner**: @architect
@@ -70,14 +81,18 @@ Users can sign in to the dashboard using their Google account from the sign-in p
 ## Notes
 Driver: P0 intake — sign-in friction blocks trial conversion. SPIDR Paths split: Google ships first as the highest-volume provider.
 
-<!-- board-superpowers:card -->
+<!-- board-superpowers:audit-trail -->
 **Audit trail**: query ~/.board-superpowers/repos/<normalized>/audit-local.jsonl by `card_number = N`.
-<!-- /board-superpowers:card -->
+<!-- /board-superpowers:audit-trail -->
 ```
 
 ### Card 2 — GitHub OAuth happy-path sign-in
 
 ```markdown
+<!-- board-superpowers:creator-trace -->
+**Created-by:** <platform>
+**Session-id:** <session-id>
+<!-- /board-superpowers:creator-trace -->
 <!-- thin-pointer -->
 **Spec**: docs/features/oauth-signin.md § 2 GitHub
 **Owner**: @architect
@@ -101,14 +116,18 @@ Users can sign in to the dashboard using their GitHub account from the sign-in p
 ## Notes
 SPIDR Paths split: second provider, smaller card because abstractions from Card 1 are reusable.
 
-<!-- board-superpowers:card -->
+<!-- board-superpowers:audit-trail -->
 **Audit trail**: query ~/.board-superpowers/repos/<normalized>/audit-local.jsonl by `card_number = N`.
-<!-- /board-superpowers:card -->
+<!-- /board-superpowers:audit-trail -->
 ```
 
 ### Card 3 — Sign-out
 
 ```markdown
+<!-- board-superpowers:creator-trace -->
+**Created-by:** <platform>
+**Session-id:** <session-id>
+<!-- /board-superpowers:creator-trace -->
 <!-- thin-pointer -->
 **Spec**: docs/features/oauth-signin.md § 3 Sign-out
 **Owner**: @architect
@@ -131,14 +150,18 @@ Users can sign out from any authenticated page; the session and OAuth refresh-to
 ## Notes
 Uniform across providers — same logic for Google + GitHub.
 
-<!-- board-superpowers:card -->
+<!-- board-superpowers:audit-trail -->
 **Audit trail**: query ~/.board-superpowers/repos/<normalized>/audit-local.jsonl by `card_number = N`.
-<!-- /board-superpowers:card -->
+<!-- /board-superpowers:audit-trail -->
 ```
 
 ### Card 4 — Error flows + rate limiting
 
 ```markdown
+<!-- board-superpowers:creator-trace -->
+**Created-by:** <platform>
+**Session-id:** <session-id>
+<!-- /board-superpowers:creator-trace -->
 <!-- thin-pointer -->
 **Spec**: docs/features/oauth-signin.md § 4 Error handling
 **Owner**: @architect
@@ -162,14 +185,18 @@ OAuth callback errors are surfaced to the user with actionable messages, and the
 ## Notes
 SPIDR Rules: rate-limit is a deferred rule that doesn't block happy path but defends against abuse.
 
-<!-- board-superpowers:card -->
+<!-- board-superpowers:audit-trail -->
 **Audit trail**: query ~/.board-superpowers/repos/<normalized>/audit-local.jsonl by `card_number = N`.
-<!-- /board-superpowers:card -->
+<!-- /board-superpowers:audit-trail -->
 ```
 
 ### Card 5 — Account linking for email-password users
 
 ```markdown
+<!-- board-superpowers:creator-trace -->
+**Created-by:** <platform>
+**Session-id:** <session-id>
+<!-- /board-superpowers:creator-trace -->
 <!-- thin-pointer -->
 **Spec**: docs/features/oauth-signin.md § 5 Account linking
 **Owner**: @architect
@@ -193,9 +220,9 @@ Existing email-password users can link an OAuth identity to their account from t
 ## Notes
 SPIDR Paths: a third path-like capability that touches the existing email-password authentication. Ships independently of Cards 1+2 once those are Done.
 
-<!-- board-superpowers:card -->
+<!-- board-superpowers:audit-trail -->
 **Audit trail**: query ~/.board-superpowers/repos/<normalized>/audit-local.jsonl by `card_number = N`.
-<!-- /board-superpowers:card -->
+<!-- /board-superpowers:audit-trail -->
 ```
 
 ## INVEST gate per card

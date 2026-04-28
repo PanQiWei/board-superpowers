@@ -121,15 +121,29 @@ means for board-superpowers" #3 for the full rationale.
 
 #### `using-board-superpowers` (v1-minimum)
 
-- **Role**: First touch. Runs the reliable dep gate, consumes
-  any hook-injected `INVOKE: <skill>` marker, routes to the
-  right molecular skill. Never does real work itself.
-- **Body target**: ≤ 200 lines.
+- **Role**: Manual page + first-touch router. Loaded every
+  session; provides full plugin orientation inline (10-skill
+  catalog, 6-state Card lifecycle, 5 bounded contexts,
+  on-disk state, routing tree) AND routes ambiguous sessions
+  or hook-injected `INVOKE:` markers to the right molecular
+  skill. Answers "what is this plugin / how does this work /
+  what skills exist / explain the architecture" inline.
+- **Body target**: Entry-layer 200-line baseline intentionally
+  exceeded (currently ~225 lines) to support the manual-page
+  double duty — agents in community consumer projects must
+  one-shot-ingest the routing context (10-skill catalog,
+  6-state lifecycle, 5 bounded contexts, on-disk state,
+  routing tree), so progressive disclosure cannot replace
+  inline content here. Keep additions justified by the same
+  one-shot-disclosure principle; spillover prose belongs in
+  `references/`.
 - **Triggers (`description` / `when_to_use` WHEN)**:
   `[board-card:#N]`, "set up board-superpowers",
   "what should I work on", "claim card N", "morning briefing",
-  "new requirement", "weekly retro", `INVOKE:` marker injected
-  by `SessionStart`.
+  "new requirement", "weekly retro",
+  "what is this plugin", "how does this work",
+  "what skills exist", "explain the architecture",
+  `INVOKE:` marker injected by `SessionStart`.
 - **Composes (downstream)**: every molecular skill below
   (routing target). When the routing target is deferred to
   v1-complete, the entry skill responds with a friendly
@@ -147,9 +161,20 @@ means for board-superpowers" #3 for the full rationale.
   [`docs/architecture/0002-product-features-and-flows/03-producer-surface.md`](./docs/architecture/0002-product-features-and-flows/03-producer-surface.md).
 - **Body target**: 300-400 lines.
 - **References folder**:
-  `references/{daily,intake,review-queue,triage}.md`
+  `references/{daily,intake,review-queue,triage,scope-shape-judgment,spec-first-checklist,skill-routing}.md`
   (retro / weekly-report / harness / hygiene deferred to
-  v1-complete).
+  v1-complete). The intake-routing trio
+  (`scope-shape-judgment` / `spec-first-checklist` /
+  `skill-routing`) lands alongside the extended
+  decision-tree in `intake.md`; together they encode the
+  shape + spec-first + sibling-routing judgments at
+  manager-mode intake. Anchored to four primary sources
+  (Cohn 2005 Planning Onion / Patton 2014 Story Map /
+  Cockburn 2004 Walking Skeleton / Denne 2003 MMF/MMR);
+  `skill-routing.md` is the manager-mode mirror of
+  `AGENTS.md` § "How to compose gstack and superpowers"
+  (paired same-PR per the change-impact-matrix row in
+  `docs/architecture/AGENTS.md`).
 - **Composes (atomic)**: `board-canon`,
   `enforcing-pr-contract` (Review Queue contract-violation
   check), `classifying-actions` + `auditing-actions` (every

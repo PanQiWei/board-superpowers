@@ -75,6 +75,21 @@ GitHub reads PR body keywords **at PR-open time** to register the PR↔Issue lin
 
 This is why `submit-pr.sh` is the **only sanctioned PR-open path** in the plugin's loop. Direct `gh pr create` (bypassing the script) misses the trailer auto-injection at OPEN time and silently breaks the auto-close chain — observed on PR #42 / card #34. Contract C makes this implicit invariant explicit and enforces it at script + review-queue layers.
 
+## Trailer preservation under body updates
+
+The PR↔Issue link registered at OPEN is **not frozen** — GitHub re-evaluates the PR body on every update (`gh pr edit --body-file`, web UI body edits, GraphQL `updatePullRequest`) and re-derives `closingIssuesReferences` from the current content. An update that strips the canonical trailer silently de-registers the link; the next merge then fires without the auto-close webhook chain. Once that merge has happened, retroactively re-appending the trailer does NOT replay the chain — the merge event reads link state at merge time, and a fresh trailer that was absent at merge time is no different from a hand-typed line for webhook-replay purposes.
+
+Observed in production: PR #47 / card #45 opened via `submit-pr.sh` with the trailer in place; commits `4c0110a` (chunk 4 retro update) and `4ac446f` (chunk 5 retro update) ran `gh pr edit --body-file` to expand the retro notes section and silently overwrote the trailer; the post-merge `closingIssuesReferences` GraphQL probe returned `[]`; Issue #45 had to be closed manually and ProjectV2 Status flipped manually per the `consuming-card` Step 12 stage (a) recovery path.
+
+The sanctioned post-OPEN body-update path is `bash scripts/submit-pr.sh --update-body --pr <PR-N> --body-file <path> --card <N>`. The subcommand:
+
+1. Fetches the PR's current body (`gh pr view --json body`).
+2. Refuses if the current body has no Closes/Fixes/Resolves keyword for the linked card — that signals the OPEN-time body never had the trailer (e.g., direct `gh pr create`), the webhook chain is unrecoverable, and silently re-injecting would be misleading audit-trail. Surfaces the manual recovery path in the error message.
+3. Otherwise: strips any tail-anchored canonical trailer block in the new body via `(?i)(?:\n+---\s*)?\n+[ \t]*(?:Close[ds]?|Fix(?:e[ds])?|Resolve[ds]?)\s+#<N>\b[^\n]*\s*\Z` (anchored to end-of-string via `\Z`, NOT `(?m)` + `$` which would match end-of-line and silently delete mid-body user prose; `\b` after `<N>` prevents `#530` from matching when `<N>` is `53`), then re-appends the canonical line. Idempotent under repeated invocation: every call produces exactly one trailer block regardless of whether the input body had zero, one, or many.
+4. Writes back via `gh pr edit --body-file`.
+
+Direct `gh pr edit --body-file` on a Consumer PR is treated as a contract violation by `consuming-card` Step 10. The Consumer's Step 10 "Common rationalizations to reject" table catches the most common slip ("I'll just use `gh pr edit` for a quick retro-note tweak").
+
 ## What submit-pr.sh does NOT check
 
 - Section ordering (reviewers care; the script doesn't)

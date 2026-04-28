@@ -97,5 +97,72 @@ retrospective's velocity-tracking half (per §1.1's
 "calendar cadence is incoherent at AI throughput") and keeps
 only the qualitative-learning half.
 
+#### 1.8.4 `Closes #<card>` trailer (Contract C)
+
+**Required on every Consumer PR.** The trailing
+`Closes #<card>.` line (or any of the 9 GitHub-sanctioned
+forms `close[ds]?` / `fix(?:e[ds])?` / `resolve[ds]?`,
+case-insensitive) is what tells GitHub to register the
+PR↔Issue link via the `closingIssuesReferences` GraphQL field
+and fire the merge → Issue-close → ProjectV2 Auto-close
+webhook chain on merge. Without it: Issue stays open after
+PR merge, ProjectV2 Auto-close workflow never triggers, and
+the Consumer falls into the manual recovery path described in
+the `consuming-card` Step 12 Stage (a) procedure
+(manual `gh issue close` + manual `gh project item-edit`,
+recorded as `recovery_path: "manual close + manual status flip"`
+in the audit row).
+
+`scripts/submit-pr.sh` injects the canonical
+`Closes #<card>` trailer idempotently at PR-OPEN time. The
+operational regex catalog and validator behavior live in the
+`enforcing-pr-contract` skill (§ "Contract C — PR↔Issue
+auto-close keyword" + `references/validation-rules.md`); this
+spec page describes the contract's place inside the PR body
+shape.
+
+##### Trailer preservation under body updates
+
+The closing-issue link registered at PR-OPEN is **not frozen**.
+GitHub re-evaluates the PR body on every update (`gh pr edit
+--body-file`, web UI body edits, GraphQL `updatePullRequest`)
+and re-derives `closingIssuesReferences` from the current
+content. A body update that strips the canonical trailer
+silently de-registers the link; if the PR then merges, the
+auto-close webhook chain does not fire and the linked Issue
+stays open. The merge event itself reads link state at merge
+time, so retroactively appending the trailer to an
+already-merged PR's body does not replay the chain — recovery
+must go through the manual path above.
+
+**Observed failure mode.** PR #47 (card #45 close-out) opened
+with the canonical trailer present; commits `4c0110a` (chunk
+4 retro update) and `4ac446f` (chunk 5 retro update) ran
+`gh pr edit --body-file` to expand retro notes and silently
+overwrote the trailer. The post-merge `closingIssuesReferences`
+GraphQL probe returned `[]`; Issue #45 had to be closed
+manually and ProjectV2 Status flipped manually per the
+`consuming-card` Step 12 Stage (a) recovery path.
+
+**Mitigation contract.** Every body update on an open Consumer
+PR routes through `scripts/submit-pr.sh --update-body --pr <N>
+--body-file <path>`. The subcommand strips any existing
+trailer matching the linked card number, then re-appends the
+canonical line — idempotent under repeated invocation, so
+retro-note expansion / reviewer-finding writeups never erode
+the link. The subcommand refuses to operate on PRs whose
+current body lacks the trailer entirely: re-injecting a
+trailer post-OPEN on those is misleading audit-trail and
+cannot be recovered into the auto-close chain (the merge that
+fires next will read whatever body is in place; a fresh
+trailer that wasn't there at any prior body version is no
+different from a hand-typed line). Direct
+`gh pr edit --body-file` on a Consumer PR is treated as a
+contract violation by `consuming-card` Step 10.
+
+GitHub's auto-close keyword reference:
+<https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-pull-request-to-an-issue#linking-a-pull-request-to-an-issue-using-a-keyword>.
+URL freshness: 2026-04-28.
+
 ---
 
