@@ -1,0 +1,37 @@
+{
+  "skill_name": "decomposing-into-milestones",
+  "schema_version": "skill-creator-v1",
+  "notes": "Test prompts only; assertions + benchmark runs land in a follow-up PR. Skill type is pattern (output-shaped per .skill-meta.yaml: turns design artifact → batch of INVEST-compliant Ready cards). Regime 2 — Eval matrix per SKILL_DEVELOPMENT.md § 'Testing skills'. Each prompt simulates a realistic decomposition input that exercises one or more of: SPIDR axis selection, vertical-slicing 4 anti-pattern refusal, INVEST 6-letter refusal, size calibration ceiling rule, cross-card dep graph construction.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Here's a design artifact for a feature: 'Add OAuth sign-in to the dashboard. Support Google + GitHub providers. Sign-in must show user avatar in header. Sign-out should revoke OAuth refresh tokens. New users via OAuth get a default profile populated from the provider. Existing email-password users can link an OAuth identity. Rate-limit OAuth callback errors (10 per hour per IP).' Decompose this into Ready cards on the board.",
+      "expected_output": "5 vertical-slice cards: (1) Google OAuth happy-path sign-in (M, terminal in chain), (2) GitHub OAuth happy-path sign-in (S, soft depends-on Card 1), (3) Sign-out flow uniformly across providers (XS, hard depends-on Card 1), (4) Error flows + rate-limit (S, hard depends-on Cards 1+2), (5) Account linking for email-password users (M, hard depends-on Cards 1+2). Each card body conforms to the converged schema (thin-pointer + Goal/AC/OoS/Dependencies/Notes + bottom marker `<!-- board-superpowers:card -->`). All 5 pass INVEST 6-letter gate (each merges-alone-improves-state for V; specific Acceptance criteria with concrete check commands for T) and clear all 4 vertical-slicing anti-patterns (no layer-only, no trailing wire-up, no solo-PO unbalanced, ≤1 spike per N cards). Output presented as single batch artifact for architect review (per Step 7), not 5 separate `gh issue create` proposals. Matches the worked example in references/decomposition-patterns.md § 'OAuth full walkthrough'.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I drafted these candidate cards for the dashboard auth refactor: (a) 'Add OAuth backend routes' — backend only, no UI; (b) 'Add OAuth sign-in button to header' — frontend only, calls non-existent backend; (c) 'Wire (a) and (b) together with end-to-end tests' — trailing integration card. Should I create these on the board?",
+      "expected_output": "Refuse all three. Surface vertical-slicing anti-pattern violations from references/decomposition-patterns.md § 'Five splitting mistakes': (a) is anti-pattern #2 (Technical layer decomposition, backend-only) — merges alone improve no user-visible state; (b) is anti-pattern #2 (frontend-only) — has nothing real to call until backend lands; (c) is anti-pattern category 'wire-them-up trailing card' — its existence means cards a+b each ship zero user value. Recommend reslicing using SPIDR axes: Paths (Google vs GitHub provider — each a vertical slice) or Interfaces (CLI vs UI — each a slice). Restart from Step 2 of the SKILL pipeline with the reslice candidates.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "I have a card body draft. Acceptance criteria reads: '- [ ] sign-in works well; - [ ] performance is reasonable; - [ ] tests pass'. Goal: 'Implement OAuth sign-in'. Estimate: M. Out of scope: 'figure out edge cases later'. Will this card pass the INVEST gate?",
+      "expected_output": "Refuse — multiple INVEST refusal conditions trigger. INVEST-T (Testable) fails on all 3 ACs: 'works well', 'reasonable', 'tests pass without naming which tests' are feeling-words / vague qualifiers per references/invest-checklist.md § 'T — Testable'. INVEST-N (Negotiable) fails: 'Implement OAuth sign-in' is a procedural Goal, not an outcome statement (should be 'Users can sign in with Google from the dashboard sign-in page' or similar). INVEST-E (Estimable) fails: 'figure out edge cases later' in Out of scope contains 'figure out' — unestimable per references/invest-checklist.md § 'E — Estimable'. Reframe per playbook: rewrite ACs as concrete post-conditions with check commands, restate Goal as user-visible outcome, replace 'figure out' with explicit deferred-vs-included split. Restart Step 2.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "I sized this candidate card and got Estimate L+ — about 1200 LOC across 18 files. The feature is 'Migrate the entire user authentication system from session cookies to JWT tokens, including login, sign-out, password reset, account creation, and admin user management'. I can't see how to split it further; everything seems coupled. What should I do?",
+      "expected_output": "Refuse — past L ceiling means it is not a single slice (per references/size-calibration.md § 'The ceiling rule'). 'Can't see how to split' is a misperception — find the SPIDR axis. Recommend split candidates: Paths (split per auth flow — login first, then sign-out, then password reset, then account creation, then admin — each a vertical slice that ships independently); OR Data (split per user-type subset — free-tier first, then paid, then enterprise); OR Rules (defer admin-overrides + 2FA rules to follow-up cards). At least one axis will reveal the seam. The 'everything seems coupled' framing usually means the slicing was attempted along the wrong axis — try the others. Restart Step 2 with the split halves.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "I have 3 candidate cards: (1) 'Add user profile page with avatar', (2) 'Add OAuth sign-in', (3) 'Sign-in flow shows avatar in header'. Cards 1 and 2 don't reference each other in their bodies, but Card 3 needs both 1 and 2 done first. Is this batch ready for Step 8 batch create?",
+      "expected_output": "Not ready — INVEST-I (Independent) refusal: hidden cross-card coupling. Card 3 has hard dependencies on Cards 1 and 2 but does not declare them in its `## Dependencies` section. Refuse the batch and require Card 3's body to add: '- depends-on: #<Card-1>' and '- depends-on: #<Card-2>'. Optionally add reverse mirrors on Cards 1 and 2: '- depended-on-by: #<Card-3>' (informational). Without explicit declaration, the Producer's Backlog → Ready transition gate (per ADR-0006 row 5 precondition + board-canon § 'State machine') cannot determine Card 3 is unready when Cards 1 or 2 are still in Backlog. Re-synthesize Step 7 batch with the dep graph corrected.",
+      "files": []
+    }
+  ]
+}
