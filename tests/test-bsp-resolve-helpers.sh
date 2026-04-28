@@ -39,7 +39,8 @@ test_session_codex() {
 }
 
 test_session_pwd_fallback() {
-  expected="${PWD//\//-}"
+  expected_hash="$(printf '%s' "$PWD" | shasum -a 256 | cut -c1-12)"
+  expected="pwd-${expected_hash}"
   result=$(env -i HOME="$HOME" PATH="$PATH" PWD="$PWD" \
     bash -c "source '$COMMON' && bsp_resolve_session_id")
   [ "$result" = "$expected" ] \
@@ -75,7 +76,8 @@ test_render_block_codex() {
 }
 
 test_render_block_unknown() {
-  expected_sid="${PWD//\//-}"
+  expected_hash="$(printf '%s' "$PWD" | shasum -a 256 | cut -c1-12)"
+  expected_sid="pwd-${expected_hash}"
   result=$(env -i HOME="$HOME" PATH="$PATH" PWD="$PWD" \
     bash -c "source '$COMMON' && bsp_render_creator_trace_block")
   echo "$result" | grep -qx '<!-- board-superpowers:creator-trace -->' \

@@ -94,7 +94,14 @@ session that created them.
 
 - `Session-id` — non-empty string, ≤ 128 characters, no whitespace.
   - Sourced from `bsp_resolve_session_id` in `scripts/lib/common.sh`.
-  - When platform env vars are unset, derives from `${PWD//\//-}`.
+  - **Format depends on platform**:
+    - Under `claude-code`: opaque CC session id (e.g., `session_abc123`).
+    - Under `codex-cli`: opaque Codex thread id (e.g., `t_xyz`).
+    - Under `unknown`: `pwd-<12-char-sha256-prefix>` — hashed to avoid
+      leaking absolute filesystem paths (username + HOME layout + project
+      path) into public GitHub issue bodies. Trade-off: loses forensic
+      readability of the underlying PWD; preserves uniqueness within a
+      host's PWD layout.
   - Equality with `audit_log.session_id` (matched by `card_number = N` in payload) is an architectural invariant (AC4 of card #44); see `tests/test-creator-trace-equality.sh` (lands later in this PR).
 
 ### Lifetime

@@ -299,8 +299,10 @@ see "session id" everywhere.
 
 When the architect's Codex install is older than `rust-v0.125.0`
 the var is unset; `bsp_resolve_session_id` then falls through to
-the PWD-derived fallback. `Created-by` will be `unknown` in this
-case — documented as expected fallback behavior, not an error.
+the PWD-derived hash (`pwd-<sha256-prefix>`, see
+`skills/board-canon/references/card-body-schema.md` § "Field
+constraints"). `Created-by` will be `unknown` in this case —
+documented as expected fallback behavior, not an error.
 
 #### Cited rationale
 

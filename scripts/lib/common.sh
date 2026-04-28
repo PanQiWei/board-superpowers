@@ -1275,20 +1275,45 @@ bsp_resolve_platform() {
 # it to the canonical "session id" used by the
 # audit_log.session_id column and the BSP_SESSION_ID export.
 #
-# Falls back to a PWD-derived string when no platform env var is
-# set, so audit rows still distinguish concurrent shells by cwd.
+# Priority:
+#   1. $CLAUDE_SESSION_ID  — set by Claude Code on every session.
+#   2. $CODEX_THREAD_ID    — set by Codex CLI >= rust-v0.125.0.
+#   3. PWD-hash fallback   — when neither platform env var is set
+#      (raw shell, older Codex install, or unsupported runtime).
+#
+# PWD-fallback is HASHED (sha256, first 12 hex chars) to prevent
+# leaking absolute filesystem paths (username + HOME layout +
+# project path) into public GitHub issue bodies via the
+# creator-trace marker block.
+#
+# Trade-off: hash form is NOT reversible — the underlying PWD
+# cannot be recovered from the value in the card body or audit row.
+# Uniqueness within a host's PWD layout is preserved (same shell +
+# same PWD always produces the same hash).
 #
 # IMPORTANT — PWD-fallback stability invariant (AC4):
 #   When the platform env vars are unset and the function falls
-#   back to ${PWD//\//-}, callers MUST NOT change directory
+#   back to the PWD hash, callers MUST NOT change directory
 #   between the intake-side call (writes session-id into card
 #   body) and the audit-write-side call (writes session-id into
 #   audit_log.session_id). Both calls must run in the same
-#   shell + same PWD for AC4 (card-body == audit-row session_id)
-#   to hold. In practice both happen back-to-back inside the
-#   same intake routine.
+#   shell + same PWD so shasum(PWD) is identical on both sides.
+#   In practice both happen back-to-back inside the same intake
+#   routine.
 bsp_resolve_session_id() {
-    printf '%s\n' "${CLAUDE_SESSION_ID:-${CODEX_THREAD_ID:-${PWD//\//-}}}"
+    if [ -n "${CLAUDE_SESSION_ID:-}" ]; then
+        printf '%s\n' "${CLAUDE_SESSION_ID}"
+    elif [ -n "${CODEX_THREAD_ID:-}" ]; then
+        printf '%s\n' "${CODEX_THREAD_ID}"
+    else
+        # PWD fallback — hashed to avoid leaking absolute paths into
+        # public GitHub issue bodies. Trade-off: loses forensic
+        # readability (cannot reverse-engineer pwd from hash) but
+        # preserves session-uniqueness within a host's PWD layout.
+        local hash
+        hash="$(printf '%s' "${PWD}" | shasum -a 256 | cut -c1-12)"
+        printf 'pwd-%s\n' "${hash}"
+    fi
 }
 
 # bsp_render_creator_trace_block — emit the creator-trace marker
