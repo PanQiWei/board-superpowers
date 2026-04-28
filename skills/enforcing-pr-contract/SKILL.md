@@ -1,6 +1,6 @@
 ---
 name: enforcing-pr-contract
-description: Use whenever a PR is being authored from a board-superpowers card claim, OR a PR is being reviewed against the board's contract. Enforces the three required sections — Automated Verification, Human Verification TODO, Retro Notes — and rejects filler content. Apply on the Consumer side at PR submission AND on the Producer side during review-queue triage. Apply even when the user doesn't explicitly mention "PR contract" — any time a PR body is being drafted, edited, or reviewed in this plugin's loop, this skill governs.
+description: Use whenever a PR is being authored from a board-superpowers card claim, OR a PR is being reviewed against the board's contract. Enforces the three-part PR contract — Contract A (PR body sections: Automated Verification + Human Verification TODO + Retro Notes), Contract B (linked card body acceptance criteria all in terminal state), Contract C (PR body contains `Closes|Fixes|Resolves #<N>` auto-close keyword at PR-OPEN time) — and rejects filler. Apply on the Consumer side at PR submission AND on the Producer side during review-queue triage. Apply even when the user doesn't explicitly mention "PR contract" — any time a PR body is being drafted, edited, or reviewed in this plugin's loop, this skill governs.
 when_to_use: Use whenever drafting, editing, validating, or reviewing a PR body for a card claimed via the consuming-card skill. Also when the Producer reviews open PRs in their review-queue routine.
 user-invocable: false
 ---

@@ -3,6 +3,6 @@
 # CI gate: scripts/verify-skill-metadata.sh.
 version: v0.1.0
 layer: molecular
-type: pattern
+type: discipline
 mode: both
 bounded-context: board

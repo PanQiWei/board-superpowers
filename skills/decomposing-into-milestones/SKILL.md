@@ -1,7 +1,7 @@
 ---
 name: decomposing-into-milestones
-description: Use when the user has a design artifact (brainstorming output, eng-review notes, requirements doc, intake batch) that needs to be turned into a coherent set of Ready cards on the board, OR when `managing-board`'s decomposition routine triggers a handoff. Typical phrasings include "decompose this feature", "split into cards", "break this into milestones", "拆解这个 feature", "拆成卡", "拆里程碑", "intake 后落卡", "decompose the eng-review output", "turn this design into cards". Apply this skill even when the user does NOT say "decompose" — any message that brings a multi-card-shaped requirement and asks for cards routes here. Do NOT use this skill for single-card edits, refactors with no new capability, or already-decomposed batches that just need creation — use `managing-board` intake routine for those.
-when_to_use: Use when the user says "decompose this feature", "拆解这个 feature", "split into cards", "break this into milestones", "拆成卡", "intake 后落卡", "turn this design into cards", "decompose eng-review output", or `managing-board`'s decomposition routine routed the work here. NOT for single-card edits or pure refactors with no new user-visible capability.
+description: Use when the user has a design artifact (brainstorming output, eng-review notes, requirements doc, intake batch) and asks for cards / milestones / a slice plan, OR when `managing-board`'s decomposition routine triggers a handoff. Typical phrasings include "decompose this feature", "split into cards", "break this into milestones", "拆解这个 feature", "拆成卡", "拆里程碑", "intake 后落卡", "decompose the eng-review output". Apply this skill even when the user does NOT say "decompose" — any message that brings a multi-card-shaped requirement routes here. Do NOT use this skill for single-card edits, refactors with no new capability, or already-decomposed batches that just need creation — use `managing-board` intake routine for those.
+when_to_use: Additional trigger vocabulary beyond `description`'s primary phrases — "milestone planning", "create the cards for X", "set up the work for X", "scope this out", "拆 sprint 工作", "本月路线图". Quick decision rule — a multi-capability artifact routes here; a single-capability one routes to `managing-board` intake.
 argument-hint: "[design-artifact-path | design-artifact-dir | -]"
 arguments: [artifact_path]
 ---
@@ -74,7 +74,11 @@ Argument shape determines mode:
 
 - `<path-to-file>` → read that file as the artifact.
 - `<path-to-dir>` → concatenate all `*.md` files in lexicographic order (cap at first 50 files; if more, surface to architect for narrowing).
-- `-` (or empty / no argument) → freeform mode: prompt the architect to paste the artifact in a multiline message, then proceed.
+- `-` (literal token) or empty / no argument → freeform mode. Cross-platform note: `-` is interpreted as a literal flag on BOTH Claude Code and Codex CLI; it is NOT a stdin redirection (Codex CLI passes positional args as literal strings, no shell redirection semantics). The skill recognizes the literal token `-` (or absent argument) and prompts the architect with the canonical template:
+
+  > "Paste your design artifact below. Multiline is fine; aim for ~50-500 lines (larger artifacts should be filed in a path argument first to avoid context-window pressure). End with the literal token `EOF` on its own line, OR send the message as-is if the artifact is short."
+
+  Read the architect's pasted reply and proceed with Step 2. If the architect indicates the artifact is too large to paste, abort the freeform pass and ask them to write the artifact to a temp file (e.g., `/tmp/<feature>-design.md`), then re-invoke the skill with that path.
 
 If the artifact is shorter than ~30 lines, surface to architect: this skill is for multi-card decompositions, not single-card intake — route back to `managing-board` intake.
 
@@ -249,29 +253,13 @@ Things that can go wrong during the pipeline and the recovery move for each.
 
 In all cases: write an audit row capturing the failure + recovery decision; the audit log is the trace of pipeline branches, not just successes.
 
-## Examples
+## Worked examples
 
-### Tiny worked example — 1-card decomposition
-
-A trivial input that yields a single card (no actual decomposition needed; included to anchor the schema):
-
-**Input artifact**:
-```
-Add a `--dry-run` flag to scripts/submit-pr.sh that prints the
-PR-body validation result without opening the PR.
-```
-
-**Output**: one card, body conforming to the converged schema:
-- thin-pointer `**Spec**: scripts/submit-pr.sh` + Owner + `**Estimate**: XS`
-- `## Goal`: "Running `scripts/submit-pr.sh --dry-run` prints PR-body validation result and exits 0 without invoking `gh pr create`."
-- `## Acceptance criteria`: 2 bullets (flag is parsed, validator runs, no gh call made)
-- `## Out of scope`: bypassing other validators
-- `## Dependencies`: none (terminal card)
-- `## Notes`: driver = avoid surprise PRs during regex testing
-- bottom marker `<!-- board-superpowers:card -->`
-
-The 1-card output is rare — most artifacts decompose to 3-8 cards. See `references/decomposition-patterns.md` § "OAuth full walkthrough" for a 5-card worked example.
-
-### Full-feature worked example
-
-For a 5-card vertical slice of a fictional OAuth sign-in feature, see `references/decomposition-patterns.md` § "OAuth full walkthrough". That section shows: input artifact, identified capabilities, SPIDR axis selection, INVEST checks per card, dep graph, sized cards, batch summary. Use it as the canonical reference shape when authoring synthesis output for new feature artifacts.
+The schema for a decomposed-card output is anchored in
+`references/card-schema.md`. A 5-card vertical-slice worked
+example for a fictional OAuth sign-in feature lives in
+`references/oauth-walkthrough.md` — input artifact + identified
+capabilities + SPIDR axis selection + INVEST checks per card +
+dep graph + sized cards + batch summary. Use it as the canonical
+reference shape when authoring synthesis output for new feature
+artifacts.

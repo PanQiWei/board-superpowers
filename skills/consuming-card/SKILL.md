@@ -195,13 +195,19 @@ Once the PR is merged the Consumer's responsibility is a four-part close-out (ac
    **Stage (a) — verify the PR↔Issue link itself exists**:
 
    ```bash
-   gh api graphql -f query='
-     query { repository(owner:"<owner>", name:"<repo>") {
-       pullRequest(number: <PR-N>) {
-         closingIssuesReferences(first: 10) { nodes { number } }
+   OWNER=$(gh repo view --json owner --jq .owner.login)
+   REPO=$(gh repo view --json name --jq .name)
+   gh api graphql -F owner="$OWNER" -F repo="$REPO" -F pr="<PR-N>" -f query='
+     query($owner:String!, $repo:String!, $pr:Int!) {
+       repository(owner:$owner, name:$repo) {
+         pullRequest(number:$pr) {
+           closingIssuesReferences(first: 10) { nodes { number } }
+         }
        }
-     }}' --jq '.data.repository.pullRequest.closingIssuesReferences.nodes'
+     }' --jq '.data.repository.pullRequest.closingIssuesReferences.nodes'
    ```
+
+   The owner/name are auto-derived from the current `gh repo view` context (no manual placeholder substitution); only `<PR-N>` needs replacement with the actual PR number.
 
    If the result is `[]` (empty), the PR↔Issue link itself was never registered — the `Closes #<N>` trailer was missing at PR-OPEN time. **The webhook chain cannot be retroactively replayed**. Manual recovery path:
 

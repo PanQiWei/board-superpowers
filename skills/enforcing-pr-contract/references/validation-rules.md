@@ -49,7 +49,7 @@ If the section is present, the same filler check runs against it. The section be
 # Contract C is enforced via idempotent injection, not a hard reject.
 import re
 keyword_re = re.compile(
-    r"(?im)^\s*(?:Closes|Fixes|Resolves|Close|Fix|Resolve)\s+#" +
+    r"(?im)^\s*(?:Close[ds]?|Fix(?:e[ds])?|Resolve[ds]?)\s+#" +
     re.escape(str(card_number)) + r"\b"
 )
 if keyword_re.search(body):
@@ -65,9 +65,9 @@ Match rules:
 - **Case-insensitive** (`(?i)` flag): `Closes #N`, `closes #N`, `CLOSES #N` all match.
 - **Multi-line** (`(?m)` flag): the keyword may appear on any line of the body, with optional leading whitespace.
 - **Card-number-specific**: a `Closes #99` doesn't satisfy Contract C for `--card 35` — the keyword's number must equal the card argument. Cross-referencing other cards (e.g., body says `Closes #99 (incidental fix); Resolves #35 (this card)`) IS valid because at least one keyword matches the linked card.
-- **Idempotent**: if the body already contains the matching keyword (e.g., the Consumer hand-wrote `Resolves #35` in the Retro Notes section), `submit-pr.sh` does NOT append a duplicate trailer. Only when no matching keyword exists does the trailer get injected.
+- **Idempotent**: if the body already contains the matching keyword (e.g., the Consumer hand-wrote `Resolved #35` in the Retro Notes section), `submit-pr.sh` does NOT append a duplicate trailer. Only when no matching keyword exists does the trailer get injected.
 
-GitHub recognizes additional keywords (`close`, `closed`, `fix`, `fixed`, `resolve`, `resolved`) that the regex above also matches via `Closes|Fixes|Resolves|Close|Fix|Resolve` (case-insensitive matches all conjugations). The regex is conservative — it accepts any sanctioned form.
+GitHub's documented sanctioned auto-close keywords are `close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`, `resolves`, `resolved` — 9 forms total (3 verb roots × 3 inflections each: base, third-person-`s`, past-tense-`d`/`ed`). The regex above covers all 9 via `Close[ds]?|Fix(?:e[ds])?|Resolve[ds]?` plus case-insensitivity. Reference: <https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-pull-request-to-an-issue#linking-a-pull-request-to-an-issue-using-a-keyword>.
 
 ## Critical timing — Contract C must fire at PR-OPEN time
 

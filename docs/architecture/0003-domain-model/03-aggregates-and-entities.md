@@ -70,9 +70,14 @@ claim, the architect verifies. Spans Board context.
   ClaimBranch name.
 - **Status** — typed enum from ADR-0005:
   `Backlog | Ready | In Progress | In Review | Done | Blocked`.
-- **Size** — `XS | S | M | L`. `XL` is invalid by design (§1.6.1
-  Small letter — exceeding L forces re-split before the card
-  lands).
+- **Estimate** — `XS | S | M | L`. `XL` is invalid by design
+  (§1.6.1 Small letter — exceeding L forces re-split before the
+  card lands). Realized in card body as the `**Estimate**:`
+  thin-pointer field (per §1.6.3 schema); persisted on the
+  GitHub-side via the `size:*` label set defined in
+  0005-contracts/05-github-artifact-schemas.md (the value-object
+  name `Estimate` and the label key `size:*` differ for label-
+  rename-cost reasons; both refer to the same concept).
 - **CardType** — derived from the `type:*` label
   (`feature | bug | chore | refactor | epic`).
 - **MilestoneRef** — 0-or-1 GitHub Milestone reference (§1.1

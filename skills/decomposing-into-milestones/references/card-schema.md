@@ -87,8 +87,8 @@ Empty form: `- (none — terminal card / first card in chain)`.
 
 Producer-to-Consumer signals. Used sparingly. Common shapes:
 
-- `## Execution Hints: ui` — triggers Consumer's F-C11 conditional QA gate (`/qa`).
-- `## Execution Hints: security` — triggers Consumer's F-C11 conditional security gate (`/cso`).
+- `## Execution Hints: ui` — triggers Consumer's conditional QA gate (the `/qa` browser-QA pass during PR pre-flight).
+- `## Execution Hints: security` — triggers Consumer's conditional security gate (the `/cso` audit pass during PR pre-flight).
 - `## Execution Hints: recommended-skill: superpowers:test-driven-development` — pin a particular implementation discipline.
 - Free-form gotcha note: `## Execution Hints: known-gotcha: gh CLI's --field flag has a colon-parsing bug — use --raw-field for values containing colons`.
 

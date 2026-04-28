@@ -117,10 +117,11 @@ bsp_log "${VALIDATION_OUTPUT}"
 #
 # This script idempotently injects the canonical `Closes #<N>` trailer
 # at PR-OPEN time:
-#   - if the body already contains `Closes|Fixes|Resolves #<CARD>`
-#     (case-insensitive, conjugations Close/Fix/Resolve also accepted),
-#     no second trailer is appended;
-#   - otherwise, the canonical trailer is appended once.
+#   - if the body already contains any of the 9 GitHub-sanctioned
+#     auto-close keyword forms (close / closes / closed / fix / fixes /
+#     fixed / resolve / resolves / resolved — all case-insensitive)
+#     referencing the linked card number, no second trailer is appended;
+#   - otherwise, the canonical `Closes #<CARD>` trailer is appended once.
 TMP_BODY="$(mktemp)"
 trap 'rm -f "${TMP_BODY}"' EXIT
 cp "${BODY_FILE}" "${TMP_BODY}"
@@ -129,8 +130,11 @@ if python3 - "${TMP_BODY}" "${CARD}" <<'PY'
 import re, sys
 body = open(sys.argv[1]).read()
 card = sys.argv[2]
+# Match all 9 GitHub-sanctioned forms — close|closes|closed|fix|fixes|
+# fixed|resolve|resolves|resolved. Built via 3 noun-roots × 3 inflections
+# (base / s / d|ed). See https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-pull-request-to-an-issue
 keyword_re = re.compile(
-    r"(?im)^\s*(?:Closes|Fixes|Resolves|Close|Fix|Resolve)\s+#" +
+    r"(?im)^\s*(?:Close[ds]?|Fix(?:e[ds])?|Resolve[ds]?)\s+#" +
     re.escape(card) + r"\b"
 )
 sys.exit(0 if keyword_re.search(body) else 1)
