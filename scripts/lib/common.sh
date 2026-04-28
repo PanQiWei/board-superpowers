@@ -321,7 +321,7 @@ sys.exit(1)
 #   On no match: no migration; just create the new path and append.
 
 bsp_audit_local_write() {
-    local repo_root="${1:?usage: bsp_audit_local_write <repo_root> <action_id> <class> <skill> <summary> [<mode>]}"
+    local repo_root="${1:?usage: bsp_audit_local_write <repo_root> <action_id> <class> <skill> <summary> [<mode>] [--event-uuid <uuid>] [--status <s>] [--retry-count <n>] [--pending-since <ts>]}"
     local action_id="${2:?}"
     local decision="${3:?}"
     local skill="${4:?}"
@@ -335,6 +335,24 @@ bsp_audit_local_write() {
     # bootstrap-pending (outbox row awaiting flush) / audit-dead-letter
     # (pending row exhausted retries / TTL).
     local mode="${6:-v1-minimum-degraded}"
+    shift $(( $# < 6 ? $# : 6 ))
+
+    # Optional outbox-shaped fields (#43 AC4 write). Empty by default; only
+    # emitted into the jsonl row when set. Caller (audit-log-write.sh in
+    # mode=bootstrap-pending branch) passes all four together.
+    local event_uuid="" status="" retry_count="" pending_since=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --event-uuid)    event_uuid="$2"; shift 2 ;;
+            --status)        status="$2"; shift 2 ;;
+            --retry-count)   retry_count="$2"; shift 2 ;;
+            --pending-since) pending_since="$2"; shift 2 ;;
+            *)
+                bsp_warn "bsp_audit_local_write: unknown arg '$1'"
+                return 2
+                ;;
+        esac
+    done
 
     # Per AC3 (#43): explicit mode whitelist. Unknown modes are rejected
     # (return 2) to prevent silent jsonl pollution by typos / outdated
@@ -476,20 +494,42 @@ v1-minimum-degraded|contract-violation|bootstrap-pending|audit-dead-letter) ;;
     mkdir -p "$(dirname "${path}")"
 
     bsp_require_cmd python3
-    python3 -c "
-import json, sys, time
+    BSP_REPO_ROOT="${repo_root}" \
+    BSP_ACTION_ID="${action_id}" \
+    BSP_DECISION="${decision}" \
+    BSP_SKILL="${skill}" \
+    BSP_SUMMARY="${summary}" \
+    BSP_MODE="${mode}" \
+    BSP_PATH="${path}" \
+    BSP_EVENT_UUID="${event_uuid}" \
+    BSP_STATUS="${status}" \
+    BSP_RETRY_COUNT="${retry_count}" \
+    BSP_PENDING_SINCE="${pending_since}" \
+    python3 -c '
+import json, os, time
 entry = {
-    'ts': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-    'repo_root': sys.argv[1],
-    'action_id': sys.argv[2],
-    'decision_class': sys.argv[3],
-    'skill': sys.argv[4],
-    'summary': sys.argv[5],
-    'mode': sys.argv[6],
+    "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    "repo_root": os.environ["BSP_REPO_ROOT"],
+    "action_id": os.environ["BSP_ACTION_ID"],
+    "decision_class": os.environ["BSP_DECISION"],
+    "skill": os.environ["BSP_SKILL"],
+    "summary": os.environ["BSP_SUMMARY"],
+    "mode": os.environ["BSP_MODE"],
 }
-with open(sys.argv[7], 'a') as f:
-    f.write(json.dumps(entry) + '\n')
-" "${repo_root}" "${action_id}" "${decision}" "${skill}" "${summary}" "${mode}" "${path}"
+# Outbox-shaped optional fields (#43 AC4 write). Emit only when set, so
+# legacy rows stay byte-identical to their pre-AC4 shape.
+if os.environ.get("BSP_EVENT_UUID"):
+    entry["event_uuid"] = os.environ["BSP_EVENT_UUID"]
+if os.environ.get("BSP_STATUS"):
+    entry["status"] = os.environ["BSP_STATUS"]
+rc = os.environ.get("BSP_RETRY_COUNT", "")
+if rc != "":
+    entry["retry_count"] = int(rc)
+if os.environ.get("BSP_PENDING_SINCE"):
+    entry["pending_since"] = os.environ["BSP_PENDING_SINCE"]
+with open(os.environ["BSP_PATH"], "a") as f:
+    f.write(json.dumps(entry) + "\n")
+'
 
     bsp_log "audit-local: ${decision}-class action ${action_id} (${skill}) → ${path}"
 }

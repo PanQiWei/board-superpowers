@@ -6,19 +6,28 @@
 # at least one row was written somewhere).
 #
 # Args:
-#   --action-id <int>             1-14 producer / 100-111 consumer
+#   --action-id <int>             1-14 producer / 100-113 consumer / 200-208 bootstrap
 #   --decision A|R|N
 #   --skill <name>
 #   --approval-stage auto|propose|approved|rejected
 #   --outcome success|failure
 #   --payload <json>
 #   [--repo-root <path>]          default: bsp_primary_repo_root from PWD
+#   [--mode <bootstrap-pending>]  outbox path (#43 AC4 write); writes a
+#                                 jsonl row with event_uuid + status=pending
+#                                 + retry_count=0 + pending_since and
+#                                 short-circuits the DB INSERT path. Only
+#                                 'bootstrap-pending' is permitted
+#                                 externally; other internal modes
+#                                 (no-db / contract-violation / etc.) are
+#                                 chosen by this script based on runtime
+#                                 conditions.
 #
 # Exit codes:
 #   0 — written (DB or jsonl)
 #   1 — contract violation (e.g., non-integer --action-id); a
 #       mode=contract-violation jsonl row is still written for forensics
-#   2 — bad args
+#   2 — bad args (including --mode value not in the external whitelist)
 
 set -euo pipefail
 
@@ -35,6 +44,7 @@ APPROVAL_STAGE=""
 OUTCOME=""
 PAYLOAD=""
 REPO_ROOT=""
+MODE=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -45,6 +55,7 @@ while [ $# -gt 0 ]; do
         --outcome)          OUTCOME="$2"; shift 2 ;;
         --payload)          PAYLOAD="$2"; shift 2 ;;
         --repo-root)        REPO_ROOT="$2"; shift 2 ;;
+        --mode)             MODE="$2"; shift 2 ;;
         *) bsp_warn "unknown arg: $1"; exit 2 ;;
     esac
 done
@@ -75,6 +86,62 @@ if ! [[ "${ACTION_ID}" =~ ^[0-9]+$ ]]; then
         "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
         "contract-violation"
     exit 1
+fi
+
+# --- --mode whitelist (caller-provided) ----------------------------------
+# Only 'bootstrap-pending' is allowed externally. All other modes
+# (no-db / degraded-* / contract-violation / audit-dead-letter) are
+# selected internally by this script based on runtime state. Rejecting
+# unknown caller-provided values keeps the outbox path's invariant
+# (status=pending + event_uuid + retry_count=0 + pending_since) tied to
+# exactly one named mode.
+if [ -n "${MODE}" ] && [ "${MODE}" != "bootstrap-pending" ]; then
+    bsp_warn "audit-log-write.sh: --mode value '${MODE}' not allowed (only 'bootstrap-pending' permitted externally)"
+    exit 2
+fi
+
+# --- opportunistic flush guard -------------------------------------------
+# Per #43 AC4 design: every audit-log-write call checks whether outbox
+# rows are pending and bg-forks the flush daemon when the 60s backoff
+# window has elapsed. The sentinel is touched after each
+# bootstrap-pending row write (below); audit-last-flush is owned by
+# audit-flush-pending.sh and updated each flush attempt. The
+# BSP_SKIP_GUARD env guard prevents the flush script from re-entering
+# itself when it invokes audit-log-write.sh internally.
+SENTINEL="${HOME}/.board-superpowers/audit-pending.sentinel"
+LAST_FLUSH_FILE="${HOME}/.board-superpowers/audit-last-flush"
+FLUSH_SCRIPT="${SCRIPT_DIR}/audit-flush-pending.sh"
+if [ -f "${SENTINEL}" ] && [ -x "${FLUSH_SCRIPT}" ] && [ -z "${BSP_SKIP_GUARD:-}" ]; then
+    NOW_SEC=$(date +%s)
+    LAST_FLUSH_SEC=$(cat "${LAST_FLUSH_FILE}" 2>/dev/null || echo 0)
+    case "${LAST_FLUSH_SEC}" in
+        ''|*[!0-9]*) LAST_FLUSH_SEC=0 ;;
+    esac
+    if [ $((NOW_SEC - LAST_FLUSH_SEC)) -gt 60 ]; then
+        echo "${NOW_SEC}" > "${LAST_FLUSH_FILE}"
+        BSP_SKIP_GUARD=1 bash "${FLUSH_SCRIPT}" --quiet >/dev/null 2>&1 &
+    fi
+fi
+
+# --- mode=bootstrap-pending outbox path ----------------------------------
+# When the caller is the bootstrap path (DB credentials not yet
+# resolvable), short-circuit the DB INSERT and write a single
+# outbox-shaped jsonl row tagged with event_uuid + status=pending.
+# Touch the sentinel so the next non-guarded audit-log-write call
+# (after the 60s backoff window) fires the flush daemon.
+if [ "${MODE}" = "bootstrap-pending" ]; then
+    EVENT_UUID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
+    PENDING_SINCE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
+        "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
+        "bootstrap-pending" \
+        --event-uuid "${EVENT_UUID}" \
+        --status "pending" \
+        --retry-count 0 \
+        --pending-since "${PENDING_SINCE}"
+    mkdir -p "$(dirname "${SENTINEL}")"
+    : > "${SENTINEL}"
+    exit 0
 fi
 
 # --- resolve venv (self-healing) ------------------------------------------
