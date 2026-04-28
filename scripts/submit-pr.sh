@@ -106,14 +106,44 @@ PY
 
 bsp_log "${VALIDATION_OUTPUT}"
 
-# --- Append claim trailer ------------------------------------------------
+# --- Contract C — PR↔Issue auto-close keyword (idempotent) -------------
+#
+# GitHub fires the PR-merge → Issue-close → ProjectV2 Auto-close webhook
+# chain ONLY when the PR body contains a `Closes #<N>` / `Fixes #<N>` /
+# `Resolves #<N>` keyword AT PR-OPEN TIME. Retroactively appending the
+# keyword after PR open does NOT retrigger the webhook (observed on PR
+# #42 / card #34 — direct `gh pr create` bypassed this script, missed
+# the trailer at OPEN time, broke the auto-close chain).
+#
+# This script idempotently injects the canonical `Closes #<N>` trailer
+# at PR-OPEN time:
+#   - if the body already contains `Closes|Fixes|Resolves #<CARD>`
+#     (case-insensitive, conjugations Close/Fix/Resolve also accepted),
+#     no second trailer is appended;
+#   - otherwise, the canonical trailer is appended once.
 TMP_BODY="$(mktemp)"
 trap 'rm -f "${TMP_BODY}"' EXIT
 cp "${BODY_FILE}" "${TMP_BODY}"
-{
-    printf '\n\n---\n'
-    printf 'Closes #%s — board-superpowers v0.2.0 claim trailer.\n' "${CARD}"
-} >> "${TMP_BODY}"
+
+if python3 - "${TMP_BODY}" "${CARD}" <<'PY'
+import re, sys
+body = open(sys.argv[1]).read()
+card = sys.argv[2]
+keyword_re = re.compile(
+    r"(?im)^\s*(?:Closes|Fixes|Resolves|Close|Fix|Resolve)\s+#" +
+    re.escape(card) + r"\b"
+)
+sys.exit(0 if keyword_re.search(body) else 1)
+PY
+then
+    bsp_log "Contract C — close-keyword for #${CARD} already present, skipping trailer injection"
+else
+    bsp_log "Contract C — injecting canonical Closes #${CARD} trailer at PR-OPEN time"
+    {
+        printf '\n\n---\n'
+        printf 'Closes #%s — board-superpowers v0.4.0 claim trailer.\n' "${CARD}"
+    } >> "${TMP_BODY}"
+fi
 
 # --- Open the PR ---------------------------------------------------------
 bsp_log "opening PR (base=${BASE}, card=#${CARD})"
