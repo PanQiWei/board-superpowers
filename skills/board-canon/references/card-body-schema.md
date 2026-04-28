@@ -56,3 +56,40 @@ The marker is **protocol, not decoration**. Tooling (managing-board's Review Que
 The legacy form `<!-- bsp-bottom-marker:do-not-edit -->` (used in board-superpowers v0.1.0 - v0.3.0) is deprecated; v0.4.0 onwards uses the idiomatic `<!-- board-superpowers:card -->` form for **all newly created cards**. Existing cards from prior versions retain their original marker for historical fidelity — they are NOT retroactively rewritten. Plugin tooling does not key strictly on the idiomatic form; both markers are recognized as board-superpowers cards. A card may incidentally migrate to the idiomatic marker when its Consumer runs Step 9.5 (PR-submit pre-flight card body sync, action_id 112) on a card the Consumer is actively claiming, but never via a back-channel batch rewrite.
 
 Rationale: Producer/Consumer governance is **prospective** — the R-class machinery in `classifying-actions` constrains what a session may MUTATE going forward, not what it must REWRITE in the world's prior state. Retroactive rewrites of older cards would also pollute the audit-trail with anachronistic edit events that confuse forensic queries.
+
+## Creator-trace marker
+
+Cards created **after card #44 lands** carry a machine-managed
+marker block recording the platform and session id of the
+session that created them.
+
+### Schema
+
+```
+<!-- board-superpowers:creator-trace -->
+**Created-by:** <platform>
+**Session-id:** <session-id>
+<!-- /board-superpowers:creator-trace -->
+```
+
+### Field constraints
+
+- `Created-by` — exactly one of:
+  - `claude-code` — session ran under Claude Code (CLI / desktop / web / IDE)
+  - `codex-cli` — session ran under OpenAI Codex CLI ≥ rust-v0.125.0
+  - `unknown` — neither platform env var was set; PWD-fallback in effect
+
+- `Session-id` — non-empty string, ≤ 128 characters, no whitespace.
+  - Sourced from `bsp_resolve_session_id` in `scripts/lib/common.sh`.
+  - When platform env vars are unset, derives from `${PWD//\//-}`.
+  - Equality with `audit_log.session_id` (matched by `card_number = N` in payload) is an architectural invariant (AC4 of card #44); see `tests/test-creator-trace-equality.sh` (lands later in this PR).
+
+### Lifetime
+
+- One-time-write at NEW card intake (post-card-#44 land).
+- Hand-edits inside the marker are rejected by `enforcing-pr-contract` filler-detection.
+- Cards created BEFORE card #44 lands do NOT carry the marker and are NOT retrofitted (per #44 AC3 No-retrofit policy).
+
+### Self-non-retrofit (#44)
+
+This card itself does NOT carry the marker; its forensic trace lives in the `action_id = 1` audit_log row matching `card_number = 44`.
