@@ -1,0 +1,8 @@
+# board-superpowers skill metadata (machine-readable, single source of truth).
+# Schema: SKILL_DEVELOPMENT.md § "board-superpowers metadata convention".
+# CI gate: scripts/verify-skill-metadata.sh.
+version: v0.1.0
+layer: molecular
+type: pattern
+mode: both
+bounded-context: board
