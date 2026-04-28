@@ -494,6 +494,10 @@ cross-cutting checks that span multiple subdirectories.
 - `scripts/verify-skill-frontmatter.sh` — Tier 1 + Tier 2 +
   no-Tier-3 compliance per SKILL.md.
 - `shellcheck -x scripts/**/*.sh hooks/*.sh` — full pass.
+- `bash tests/e2e/test-bootstrap-audit-e2e.sh` — fresh-repo
+  bootstrap audit end-to-end (#43 AC6); covers outbox emit →
+  jsonl → fast-path flush → DB transition; SQLite only
+  (PG/MySQL container deferred).
 - Manual smoke: open a fresh CC session, type each of the 8
   shipped skills' trigger phrases, verify auto-trigger.
 
