@@ -16,6 +16,8 @@
 #
 # Exit codes:
 #   0 — written (DB or jsonl)
+#   1 — contract violation (e.g., non-integer --action-id); a
+#       mode=contract-violation jsonl row is still written for forensics
 #   2 — bad args
 
 set -euo pipefail
@@ -59,6 +61,21 @@ for v in ACTION_ID DECISION SKILL APPROVAL_STAGE OUTCOME PAYLOAD; do
 done
 
 [ -z "${REPO_ROOT}" ] && REPO_ROOT="$(bsp_primary_repo_root "${PWD}" 2>/dev/null || echo "${PWD}")"
+
+# Integer validation — MUST happen before any mode/DB branching.
+# Per design.md §3.2 + Codex blocker fix: non-integer action_id is a contract
+# violation distinguishable from DB outage. The check must be pre-mode-branch
+# so future --mode flags (e.g. AC4 bootstrap-pending which bypasses DB) cannot
+# circumvent it. Defense in depth — the Python heredoc still does
+# int(BSP_ACTION_ID) downstream, but that path is now unreachable for
+# non-integers because the shell-side rejection runs first.
+if ! [[ "${ACTION_ID}" =~ ^[0-9]+$ ]]; then
+    bsp_warn "contract violation: --action-id is not integer: ${ACTION_ID}"
+    bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
+        "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
+        "contract-violation"
+    exit 1
+fi
 
 # --- resolve venv (self-healing) ------------------------------------------
 VENV_PYTHON=""
