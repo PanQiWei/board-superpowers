@@ -1,25 +1,45 @@
 #!/usr/bin/env bash
-# scripts/submit-pr.sh — open a PR with three-section contract enforced.
+# scripts/submit-pr.sh — open a PR with three-section contract enforced,
+# OR update an open PR's body while preserving the canonical Closes
+# trailer (Contract C).
 #
-# Called by consuming-card skill (F-C12). Validates that the in-memory PR
-# body contains the three required sections per
-# docs/architecture/0002-product-features-and-flows/08-pr-contract.md
-# AND per the enforcing-pr-contract atomic skill.
+# Called by consuming-card skill — Step 10 (PR open) and any retro-note
+# expansion / reviewer-finding writeup that updates the body after PR
+# open. Validates the three-section shape per
+# docs/architecture/0002-product-features-and-flows/08-pr-contract.md and
+# the enforcing-pr-contract atomic skill.
 #
 # Three required sections (order matters for review):
 #   ## Automated Verification    (required, non-empty, ≥ 1 checked or unchecked item)
 #   ## Human Verification TODO   (optional, but if present must not be filler)
 #   ## Retro Notes               (required when reusable lessons exist; explicit "n/a" allowed)
 #
+# Modes:
+#   create (default)    Open a new PR.
+#   --update-body       Update an existing PR's body. Idempotently strips
+#                       any tail-anchored Closes/Fixes/Resolves #<CARD>
+#                       block and re-appends the canonical trailer, so
+#                       post-OPEN body edits do not tear down the
+#                       PR↔Issue link GitHub keys its merge → Issue-close
+#                       webhook chain on. Refuses if the PR's CURRENT
+#                       body has no matching trailer at all — that means
+#                       the OPEN-time body never had it (e.g., PR opened
+#                       via direct `gh pr create`), so the chain is
+#                       unrecoverable for it and silently re-injecting
+#                       would mislead the audit trail (manual recovery
+#                       per consuming-card Step 12 stage a).
+#
 # Args:
-#   --title <text>       PR title (≤ 70 chars, action-style)
+#   --title <text>       PR title (create mode; ≤ 70 chars, action-style)
 #   --body-file <path>   Path to a markdown file containing the PR body
-#   --base <branch>      Base branch for the PR (default: main)
-#   --card <N>           Card number — referenced in the auto-generated trailer
+#   --base <branch>      Base branch for the PR (create mode; default: main)
+#   --card <N>           Card number — referenced in the trailer
+#   --update-body        Switch to update-body mode (no value)
+#   --pr <N>             PR number (required in update-body mode)
 #
 # Exit codes:
-#   0 — PR opened
-#   1 — body validation failed / gh failure / bad args
+#   0 — PR opened (create) / body updated (update-body)
+#   1 — validation failed / gh failure / bad args
 
 set -euo pipefail
 
@@ -28,28 +48,108 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
 . "${SCRIPT_DIR}/lib/common.sh"
 
+MODE="create"
 TITLE=""
 BODY_FILE=""
 BASE="main"
 CARD=""
+PR=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
-        --title)     TITLE="$2";     shift 2 ;;
-        --body-file) BODY_FILE="$2"; shift 2 ;;
-        --base)      BASE="$2";      shift 2 ;;
-        --card)      CARD="$2";      shift 2 ;;
+        --title)       TITLE="$2";     shift 2 ;;
+        --body-file)   BODY_FILE="$2"; shift 2 ;;
+        --base)        BASE="$2";      shift 2 ;;
+        --card)        CARD="$2";      shift 2 ;;
+        --pr)          PR="$2";        shift 2 ;;
+        --update-body) MODE="update-body"; shift ;;
         *) bsp_die "unknown arg: $1" ;;
     esac
 done
 
-[ -n "${TITLE}" ]     || bsp_die "missing --title"
 [ -n "${BODY_FILE}" ] || bsp_die "missing --body-file"
 [ -n "${CARD}" ]      || bsp_die "missing --card"
 [ -f "${BODY_FILE}" ] || bsp_die "body file not found: ${BODY_FILE}"
 
 bsp_require_cmd gh
 bsp_require_cmd python3
+
+# --- update-body mode ---------------------------------------------------
+#
+# The Contract C trailer (Closes/Fixes/Resolves #<CARD>) is what GitHub
+# uses to register the PR↔Issue link in `closingIssuesReferences`. The
+# link is re-derived on every body update — `gh pr edit` overwriting
+# the trailer (e.g., a retro-note expansion that drops the trailing
+# block) silently de-registers the link, and the next merge fires
+# without the auto-close webhook chain. Once that has happened, the
+# Issue must be closed manually and ProjectV2 Status flipped manually
+# (consuming-card Step 12 stage a).
+#
+# This branch is the sanctioned update path: it strips ONLY the
+# tail-anchored canonical block (mid-body Closes-style references in
+# user prose are preserved), re-appends the canonical trailer, and
+# writes back via `gh pr edit`. Repeated invocations against bodies
+# that lack the trailer accumulate exactly one canonical block.
+#
+# Refuses when the CURRENT body has no matching trailer for the linked
+# card — that diagnoses a PR that never had the trailer at OPEN, for
+# which silently re-injecting would imply a webhook recovery that
+# GitHub does not provide.
+
+if [ "${MODE}" = "update-body" ]; then
+    [ -n "${PR}" ] || bsp_die "missing --pr (required in --update-body mode)"
+
+    CURRENT_BODY="$(gh pr view "${PR}" --json body --jq '.body')"
+
+    if ! CARD="${CARD}" CURRENT_BODY="${CURRENT_BODY}" python3 - <<'PY'
+import os, re, sys
+body = os.environ['CURRENT_BODY']
+card = os.environ['CARD']
+keyword_re = re.compile(
+    r'(?im)^\s*(?:Close[ds]?|Fix(?:e[ds])?|Resolve[ds]?)\s+#' +
+    re.escape(card) + r'\b'
+)
+sys.exit(0 if keyword_re.search(body) else 1)
+PY
+    then
+        bsp_die "PR #${PR} current body has no Closes/Fixes/Resolves #${CARD} trailer — the PR↔Issue auto-close webhook chain is unrecoverable for this PR. Manual recovery required (see consuming-card Step 12 stage a). Refusing to silently re-inject (would mislead audit trail)."
+    fi
+
+    NEW_BODY="$(mktemp)"
+    trap 'rm -f "${NEW_BODY}"' EXIT
+
+    CARD="${CARD}" python3 - "${BODY_FILE}" > "${NEW_BODY}" <<'PY'
+import os, re, sys
+body = open(sys.argv[1]).read()
+card = os.environ['CARD']
+# Strip ONLY the tail-anchored canonical trailer block (separator +
+# auto-close keyword line for THIS card). Mid-body Closes-style
+# references inside user prose are preserved — they are not the
+# canonical trailer and stripping them would lose user content.
+trailer_block_re = re.compile(
+    r'(?im)(?:\n+---\s*)?\n+[ \t]*(?:Close[ds]?|Fix(?:e[ds])?|Resolve[ds]?)\s+#' +
+    re.escape(card) +
+    r'[^\n]*\s*$'
+)
+while True:
+    stripped = trailer_block_re.sub('', body)
+    if stripped == body:
+        break
+    body = stripped
+body = body.rstrip()
+sys.stdout.write(body)
+sys.stdout.write('\n\n---\n')
+sys.stdout.write('Closes #' + card + ' — board-superpowers v0.4.0 claim trailer.\n')
+PY
+
+    bsp_log "updating PR #${PR} body (idempotent Closes #${CARD} trailer)"
+    gh pr edit "${PR}" --body-file "${NEW_BODY}"
+    exit 0
+fi
+
+# --- create mode (default) ----------------------------------------------
+
+[ -n "${TITLE}" ] || bsp_die "missing --title"
 
 # --- Validate PR body shape ---------------------------------------------
 #
