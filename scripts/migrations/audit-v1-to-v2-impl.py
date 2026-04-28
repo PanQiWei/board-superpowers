@@ -10,14 +10,23 @@ Exit codes:
   0 — migration applied (or already at v2)
   1 — migration failed
   2 — unsupported scheme (caller should pre-check)
+
+Robustness note (#43 followup-2): all three dialect branches pass an
+explicit migrated_at value when bumping audit_schema_meta to version 2,
+rather than relying on the column's schema-side DEFAULT. A user (or a
+future schema rev) might drop the DEFAULT clause; the migration must
+not partial-apply (column added, schema_meta unchanged) just because
+NOT NULL fired during the version bump.
 """
 import os
 import sys
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 url_str = os.environ['BSP_AUDIT_DB_URL']
 url = urlparse(url_str)
 scheme = url.scheme
+NOW_ISO = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 if scheme in ('sqlite', 'sqlite3'):
     import sqlite3
@@ -48,7 +57,10 @@ if scheme in ('sqlite', 'sqlite3'):
     if not cur.fetchone():
         cur.execute("CREATE UNIQUE INDEX audit_event_uuid_uniq ON audit_log(event_uuid)")
 
-    cur.execute("INSERT OR REPLACE INTO audit_schema_meta (id, version) VALUES (1, 2)")
+    cur.execute(
+        "INSERT OR REPLACE INTO audit_schema_meta (id, version, migrated_at) VALUES (1, 2, ?)",
+        (NOW_ISO,),
+    )
     conn.commit()
     conn.close()
     print("audit-v1-to-v2: SQLite migration applied")
@@ -73,7 +85,8 @@ elif scheme in ('postgresql', 'postgres'):
         cur.execute("ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS event_uuid TEXT")
         cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS audit_event_uuid_uniq ON audit_log(event_uuid)")
         cur.execute(
-            "INSERT INTO audit_schema_meta (id, version) VALUES (1, 2) "
+            "INSERT INTO audit_schema_meta (id, version, migrated_at) "
+            "VALUES (1, 2, CURRENT_TIMESTAMP) "
             "ON CONFLICT (id) DO UPDATE SET version=2, migrated_at=CURRENT_TIMESTAMP"
         )
     conn.commit()
@@ -120,7 +133,8 @@ elif scheme in ('mysql', 'mysql+pymysql'):
             cur.execute("CREATE UNIQUE INDEX audit_event_uuid_uniq ON audit_log(event_uuid)")
 
         cur.execute(
-            "INSERT INTO audit_schema_meta (id, version) VALUES (1, 2) "
+            "INSERT INTO audit_schema_meta (id, version, migrated_at) "
+            "VALUES (1, 2, CURRENT_TIMESTAMP(3)) "
             "ON DUPLICATE KEY UPDATE version=2, migrated_at=CURRENT_TIMESTAMP(3)"
         )
     conn.commit()

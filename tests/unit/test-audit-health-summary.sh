@@ -60,4 +60,46 @@ echo "Output (Test 3 future-window): ${OUTPUT3}"
 echo "${OUTPUT3}" | grep -qE '0 of 0|no.*audit|nothing to report|no rows in window' \
     || { echo "FAIL: filter by start_ts didn't isolate to fresh window; got: ${OUTPUT3}"; exit 1; }
 
+# --- Test 4 — DSN unreachable + jsonl has pending rows -------------------
+# Regression for #43 followup-1: when DSN is configured but the DB
+# query returns 0 (unreachable / table missing / throw), the summary
+# MUST surface the jsonl backlog instead of "nothing to report".
+JSONL_DIR="${HOME}/.board-superpowers/repos/test-repo-followup1"
+mkdir -p "${JSONL_DIR}"
+JSONL="${JSONL_DIR}/audit-local.jsonl"
+PENDING_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+sleep 1
+TEST4_START_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+sleep 1
+NEW_PENDING_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# Write 3 pending bootstrap rows in window + 1 outside (older) + 1 with
+# action_id outside 200..208 (must NOT be counted)
+{
+    printf '{"ts":"%s","action_id":"200","status":"pending","mode":"bootstrap-pending","event_uuid":"u-200"}\n' "${NEW_PENDING_TS}"
+    printf '{"ts":"%s","action_id":"205","status":"pending","mode":"bootstrap-pending","event_uuid":"u-205"}\n' "${NEW_PENDING_TS}"
+    printf '{"ts":"%s","action_id":"208","status":"pending","mode":"bootstrap-pending","event_uuid":"u-208"}\n' "${NEW_PENDING_TS}"
+    printf '{"ts":"%s","action_id":"200","status":"pending","mode":"bootstrap-pending","event_uuid":"u-200-old"}\n' "${PENDING_TS}"
+    printf '{"ts":"%s","action_id":"100","status":"pending","mode":"bootstrap-pending","event_uuid":"u-100"}\n' "${NEW_PENDING_TS}"
+} > "${JSONL}"
+# Point at a non-existent SQLite DB to simulate DSN-unreachable (so DB query throws).
+export BOARD_SP_AUDIT_DB_URL="sqlite:////${TMPDIR}/no-such-dir/unreachable.db"
+OUTPUT4=$(bsp_audit_health_summary "${TEST4_START_TS}" 2>&1)
+echo "Output (Test 4 DSN-unreachable+jsonl-pending): ${OUTPUT4}"
+echo "${OUTPUT4}" | grep -qE '3 remain in jsonl' \
+    || { echo "FAIL: expected '3 remain in jsonl' for DSN-unreachable+3-pending; got: ${OUTPUT4}"; exit 1; }
+echo "${OUTPUT4}" | grep -qE 'check connectivity|DB query returned 0' \
+    || { echo "FAIL: expected DB-query-zero hint; got: ${OUTPUT4}"; exit 1; }
+
+# --- Test 5 — DSN unset + jsonl has pending rows -------------------------
+# Regression for #43 followup-1: even with DSN unset the summary should
+# surface the jsonl backlog (was previously a quiet "0 of 9 ... jsonl only").
+unset BOARD_SP_AUDIT_DB_URL
+OUTPUT5=$(bsp_audit_health_summary "${TEST4_START_TS}" 2>&1)
+echo "Output (Test 5 DSN-unset+jsonl-pending): ${OUTPUT5}"
+echo "${OUTPUT5}" | grep -qE '3 remain in jsonl' \
+    || { echo "FAIL: expected '3 remain in jsonl' for DSN-unset+3-pending; got: ${OUTPUT5}"; exit 1; }
+
+# Cleanup test 4/5 jsonl so it doesn't leak to other test scripts.
+rm -rf "${JSONL_DIR}"
+
 echo "PASS"

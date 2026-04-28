@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS audit_schema_meta (
     migrated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- v2 schema baseline (fresh init); existing v1 DBs migrate via scripts/migrations/audit-v1-to-v2.sh (Task 4b)
-INSERT INTO audit_schema_meta (id, version) VALUES (1, 2)
+-- v2 schema baseline (fresh init); existing v1 DBs migrate via scripts/migrations/audit-v1-to-v2.sh (Task 4b).
+-- migrated_at is passed explicitly so the INSERT works even when a user
+-- has dropped the column-side DEFAULT (#43 followup-2 robustness).
+INSERT INTO audit_schema_meta (id, version, migrated_at) VALUES (1, 2, CURRENT_TIMESTAMP)
     ON CONFLICT (id) DO UPDATE SET version = 2, migrated_at = CURRENT_TIMESTAMP;

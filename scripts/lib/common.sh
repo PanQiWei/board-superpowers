@@ -1339,12 +1339,20 @@ PY
 #   - bsp_log line on stderr (no stdout output by design — caller
 #     should not depend on parse-able output).
 #
-# Behavior matrix:
-#   - audit_db_url unset             → "0 of 9 ... no DB configured (jsonl only)"
-#   - venv unavailable               → "9 bootstrap rows; venv unavailable (cannot query DB; check jsonl)"
-#   - DB query returns N (>=1)       → "${N} of 9 bootstrap audit rows landed in DB; $((9-N)) remain in jsonl"
-#   - DB query returns 0             → "0 of 0 bootstrap audit rows since <start_ts> (no rows in window; nothing to report)"
-#     (distinguishes "all failed" from "nothing happened in this window")
+# Behavior matrix (post-#43-followup-1: jsonl scan is independent of DB
+# reachability — DB-side query is anchored on start_ts; jsonl-side scan
+# counts pending bootstrap rows across all per-repo audit-local.jsonl
+# files. Both feed every report so a DSN-configured-but-unreachable run
+# still surfaces the pending backlog instead of "nothing to report"):
+#   - audit_db_url unset, jsonl pending=0   → "0 of 9 ... no DB configured (jsonl only)"
+#   - audit_db_url unset, jsonl pending=N   → "0 of 9 ... N remain in jsonl (no DB configured)"
+#   - venv unavailable, jsonl pending=N     → "0 of 9 ... N remain in jsonl (venv unavailable, cannot query DB)"
+#   - DB returns >=1 row                    → "${N} of 9 ... ${jsonl_pending} remain in jsonl"
+#   - DB returns 0, jsonl pending=N         → "0 of N ... N remain in jsonl (DB query returned 0; check connectivity)"
+#   - DB returns 0, jsonl pending=0         → "0 of 0 bootstrap audit rows since <start_ts> (no rows in window; nothing to report)"
+#
+# jsonl scan needs only host python3 stdlib (os, json, glob) — works
+# even when the per-repo venv is not yet provisioned.
 #
 # Returns: 0 always (summary is observational; caller never aborts on it).
 
@@ -1354,8 +1362,50 @@ bsp_audit_health_summary() {
     local audit_db_url
     audit_db_url="$(bsp_resolve_audit_db_url 2>/dev/null || true)"
 
+    # Step 1: jsonl scan — count pending bootstrap rows across all
+    # per-repo audit-local.jsonl. This is independent of audit_db_url
+    # state and uses host python3 stdlib only (no venv dependency), so
+    # it runs even in degraded scenarios (DSN unreachable, venv missing,
+    # DB configured but query throws).
+    local jsonl_pending=0
+    if command -v python3 >/dev/null 2>&1; then
+        jsonl_pending="$(BSP_START_TS="${start_ts}" python3 - <<'PY' 2>/dev/null || echo 0
+import os, json, glob
+start_ts = os.environ.get('BSP_START_TS', '')
+home = os.path.expanduser('~/.board-superpowers/repos')
+count = 0
+for path in glob.glob(os.path.join(home, '*', 'audit-local.jsonl')):
+    try:
+        with open(path) as f:
+            for line in f:
+                try:
+                    r = json.loads(line)
+                except Exception:
+                    continue
+                try:
+                    aid_int = int(r.get('action_id', ''))
+                except (ValueError, TypeError):
+                    continue
+                if 200 <= aid_int <= 208 \
+                    and r.get('status') == 'pending' \
+                    and r.get('ts', '') >= start_ts:
+                    count += 1
+    except Exception:
+        continue
+print(count)
+PY
+)"
+        case "${jsonl_pending}" in
+            ''|*[!0-9]*) jsonl_pending=0 ;;
+        esac
+    fi
+
     if [ -z "${audit_db_url}" ]; then
-        bsp_log "audit health: 0 of ${TOTAL} bootstrap audit rows landed in DB; no DB configured (jsonl only)"
+        if [ "${jsonl_pending}" -gt 0 ]; then
+            bsp_log "audit health: 0 of ${TOTAL} bootstrap audit rows landed in DB; ${jsonl_pending} remain in jsonl (no DB configured)"
+        else
+            bsp_log "audit health: 0 of ${TOTAL} bootstrap audit rows landed in DB; no DB configured (jsonl only)"
+        fi
         return 0
     fi
 
@@ -1363,7 +1413,7 @@ bsp_audit_health_summary() {
     repo_root="$(bsp_primary_repo_root "${PWD}" 2>/dev/null || echo "${PWD}")"
     venv_python="$(bsp_ensure_venv "${repo_root}" 2>/dev/null || true)"
     if [ -z "${venv_python}" ]; then
-        bsp_log "audit health: ${TOTAL} bootstrap rows; venv unavailable (cannot query DB; check jsonl)"
+        bsp_log "audit health: 0 of ${TOTAL} bootstrap audit rows landed in DB; ${jsonl_pending} remain in jsonl (venv unavailable, cannot query DB)"
         return 0
     fi
 
@@ -1435,23 +1485,29 @@ PY
     esac
 
     if [ "${db_rows}" = 0 ]; then
-        # Distinguish "no rows in window" (start_ts after all rows;
-        # nothing happened) from "all failed". With anchored start_ts
-        # zero rows usually means nothing happened in this window;
-        # emit a quieter summary so the caller doesn't read it as
-        # "all 9 lost".
-        bsp_log "audit health: 0 of 0 bootstrap audit rows since ${start_ts} (no rows in window; nothing to report)"
+        if [ "${jsonl_pending}" -gt 0 ]; then
+            # DB query returned zero but jsonl scan found pending rows
+            # — DSN may be unreachable / table missing / query throwing.
+            # Surface the backlog so the architect doesn't see a quiet
+            # "nothing to report" while N rows actually remain unflushed.
+            bsp_log "audit health: 0 of ${jsonl_pending} bootstrap audit rows landed in DB; ${jsonl_pending} remain in jsonl (DB query returned 0; check connectivity)"
+        else
+            # Both DB and jsonl are empty in this window — truly nothing
+            # happened. Quiet line so the caller doesn't read it as a
+            # "9 lost" alarm.
+            bsp_log "audit health: 0 of 0 bootstrap audit rows since ${start_ts} (no rows in window; nothing to report)"
+        fi
         return 0
     fi
 
-    local remaining=$((TOTAL - db_rows))
-    if [ "${remaining}" -lt 0 ]; then
-        # Defensive: more than 9 rows in range is unexpected (would
-        # mean another concurrent bootstrap), but we still emit a
-        # clean line.
-        remaining=0
-    fi
-    bsp_log "audit health: ${db_rows} of ${TOTAL} bootstrap audit rows landed in DB; ${remaining} remain in jsonl"
+    # db_rows > 0: TOTAL is the canonical 9 (bootstrap action_id range
+    # cardinality). jsonl_pending captures any rows the flush worker
+    # has not yet drained — these are NOT counted in db_rows but ARE
+    # in flight. Reporting the literal jsonl_pending rather than
+    # ${TOTAL} - ${db_rows} avoids the historical bug where re-emits
+    # (e.g., bootstrap re-run after a partial failure) made the
+    # subtraction go negative.
+    bsp_log "audit health: ${db_rows} of ${TOTAL} bootstrap audit rows landed in DB; ${jsonl_pending} remain in jsonl"
     return 0
 }
 

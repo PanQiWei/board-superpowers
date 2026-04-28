@@ -60,4 +60,37 @@ RC=0
 sqlite3 "${DB}" "INSERT INTO audit_log (timestamp,project,session_id,actor_role,action_id,payload,outcome,approval_stage,event_uuid) VALUES ('2026-01-03','p/1','s3','consumer',202,'{}','success','auto','test-uuid-1')" 2>/dev/null || RC=$?
 [ "${RC}" != 0 ] || { echo "FAIL: duplicate event_uuid INSERT should fail post-migration"; exit 1; }
 
+# --- Assert 7 — robustness against schema_meta without DEFAULT (#43 followup-2)
+# The migration must not partial-apply (column added, schema_meta
+# unchanged) when audit_schema_meta.migrated_at lacks a DEFAULT clause.
+# Build a fresh v1-shape DB with NO DEFAULT on migrated_at.
+DB2="${TMPDIR}/v1-no-default.db"
+sqlite3 "${DB2}" <<'SQL'
+CREATE TABLE audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    project TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    actor_role TEXT NOT NULL,
+    action_id INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    approval_stage TEXT NOT NULL
+);
+CREATE TABLE audit_schema_meta (
+    id INTEGER PRIMARY KEY CHECK (id=1),
+    version INTEGER NOT NULL,
+    migrated_at TEXT NOT NULL
+);
+INSERT INTO audit_schema_meta (id, version, migrated_at) VALUES (1, 1, '2026-01-01T00:00:00Z');
+SQL
+
+export BOARD_SP_AUDIT_DB_URL="sqlite:////${DB2}"
+bash "${ROOT}/scripts/migrations/audit-v1-to-v2.sh" \
+    || { echo "FAIL: migration must not depend on schema-side DEFAULT for migrated_at"; exit 1; }
+[ "$(sqlite3 "${DB2}" 'SELECT version FROM audit_schema_meta WHERE id=1')" = 2 ] \
+    || { echo "FAIL: schema_meta did not advance to v2 (no-DEFAULT regression)"; exit 1; }
+sqlite3 "${DB2}" 'PRAGMA table_info(audit_log)' | grep -q event_uuid \
+    || { echo "FAIL: event_uuid column missing post-migration in no-DEFAULT mode"; exit 1; }
+
 echo "PASS"
