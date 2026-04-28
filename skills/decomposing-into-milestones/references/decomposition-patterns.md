@@ -5,6 +5,21 @@
 > - Cohn, "Five Story-Splitting Mistakes and How to Stop Making Them" — <https://www.mountaingoatsoftware.com/blog/five-story-splitting-mistakes-and-how-to-stop-making-them>
 > Both are Mountain Goat Software canonical sources. **Hamburger method** and **Lawrence patterns** are widely cited in the community but were NOT found at primary URLs in this research pass — treat as community supplement, not Cohn-canon.
 
+> **Upward pointer — when this file is invoked**: this skill
+> (`decomposing-into-milestones`) is routed to from the
+> manager-side intake when shape judgment lands at "multi-card"
+> or "milestone-grouped". The shape decision lives at
+> [`skills/managing-board/references/scope-shape-judgment.md`](../../managing-board/references/scope-shape-judgment.md)
+> Table 1; the manager skill's intake also clears spec-first
+> preconditions ([`spec-first-checklist.md`](../../managing-board/references/spec-first-checklist.md))
+> and picks the sibling skill ([`skill-routing.md`](../../managing-board/references/skill-routing.md))
+> before the artifact reaches this skill. If the manager
+> skill attaches a "walking-skeleton hint" (per Cockburn —
+> brand-new feature surface), the vertical-slicing gate in
+> § "Five splitting mistakes" below enforces the hint via the
+> existing layer-only and trailing-wire-up refusals; no
+> separate hint-handling logic is needed.
+
 ## SPIDR — primary
 
 Cohn's 5 canonical split patterns, derived from his analysis of 1000+ user stories across teams he coached. SPIDR is **not** a replacement for Lawrence patterns; it is Cohn's own empirically-derived 5-set.
