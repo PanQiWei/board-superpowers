@@ -176,6 +176,45 @@ else
 fi
 rm -rf "${TMPDIR_K}"
 
+printf '\nScenario L — pre-tool-use emits canonical permissionDecision JSON on stdout\n'
+TMPDIR_L="$(mktemp -d)"
+SID_L="sess-l-$$"
+PAYLOAD_L="$(printf '{"session_id":"%s","tool_name":"Edit","tool_input":{"file_path":"/repo/skills/foo.md"}}' "${SID_L}")"
+GATE_OUTPUT="$(TMPDIR="${TMPDIR_L}" printf '%s' "${PAYLOAD_L}" | bash "${PRE}" 2>/dev/null || true)"
+if printf '%s' "${GATE_OUTPUT}" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+out = data.get("hookSpecificOutput") or {}
+ok = (out.get("hookEventName") == "PreToolUse"
+      and out.get("permissionDecision") == "deny"
+      and isinstance(out.get("permissionDecisionReason"), str)
+      and out.get("permissionDecisionReason"))
+sys.exit(0 if ok else 1)
+' 2>/dev/null; then
+    printf '  PASS — stdout JSON shape matches CC canonical PreToolUse contract\n'
+    PASS=$((PASS + 1))
+else
+    printf '  FAIL — stdout JSON does not match CC canonical contract\n' >&2
+    printf '  (got: %s)\n' "${GATE_OUTPUT}" >&2
+    FAIL=$((FAIL + 1))
+fi
+rm -rf "${TMPDIR_L}"
+
+printf '\nScenario M — post-tool-use defensive scan finds skill-creator in alternative field names\n'
+# The Skill tool input field name is not canonically documented. The
+# defensive scan looks at every string value in tool_input — should
+# match regardless of whether the field is "skill", "skill_name",
+# "name", or arbitrary future variants.
+for field_name in skill skill_name name spice future_field_name; do
+    TMPDIR_M="$(mktemp -d)"
+    SID_M="sess-m-${field_name}-$$"
+    PAYLOAD_M="$(printf '{"session_id":"%s","tool_name":"Skill","tool_input":{"%s":"example-skills:skill-creator"}}' "${SID_M}" "${field_name}")"
+    TMPDIR="${TMPDIR_M}" check "post-tool-use scan via field=${field_name}" \
+        run_post_with_payload "${PAYLOAD_M}"
+    check "  flag created via field=${field_name}" flag_exists "${TMPDIR_M}" "${SID_M}"
+    rm -rf "${TMPDIR_M}"
+done
+
 # --- Summary --------------------------------------------------------------
 printf '\n--- summary: %d pass, %d fail ---\n' "${PASS}" "${FAIL}"
 if [ "${FAIL}" -gt 0 ]; then

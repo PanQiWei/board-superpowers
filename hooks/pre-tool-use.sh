@@ -84,28 +84,37 @@ if [ -f "${FLAG_FILE}" ]; then
     exit 0
 fi
 
-# Gate fires. Emit reason on stderr and exit 2 to block the tool call.
-# CC propagates stderr content to the model when the hook exits 2,
-# per docs/architecture/0005-contracts/02-hook-contracts.md § "Exit codes".
-cat >&2 <<'REASON'
-skills/AGENTS.md Process gate fires.
+# Gate fires. Emit canonical CC PreToolUse permissionDecision JSON on
+# stdout (per <https://code.claude.com/docs/en/hooks.md> § "PreToolUse")
+# AND legacy exit-2 + stderr as a belt-and-suspenders fallback for older
+# CC versions / Codex CLI. The canonical mechanism is:
+#
+#   {"hookSpecificOutput": {
+#     "hookEventName": "PreToolUse",
+#     "permissionDecision": "deny",
+#     "permissionDecisionReason": "<reason>"
+#   }}
+#   exit 0
+#
+# The deprecated mechanism (still accepted) is exit 2 + stderr. We emit
+# both because the hook ships across CC versions and (potentially)
+# Codex CLI without a way to detect which one is reading it.
 
-You are about to edit a file under skills/, but example-skills:skill-creator
-has NOT been invoked in this session. Per AGENTS.md (root) Doctrine #4,
-the entry skill is mandatory before any edit under skills/ — even when
-the work feels routine.
+REASON_TEXT='skills/AGENTS.md Process gate fires. You are about to edit a file under skills/, but example-skills:skill-creator has NOT been invoked in this session. Per AGENTS.md Doctrine #4, the entry skill is mandatory before any edit under skills/. To clear: invoke example-skills:skill-creator via the Skill tool, then re-attempt the edit. The gate self-clears once skill-creator runs in this session.'
 
-How to clear the gate:
-  1. Invoke example-skills:skill-creator via the Skill tool.
-  2. Re-attempt this Edit / Write / MultiEdit.
+# Canonical: stdout JSON with permissionDecision: deny.
+python3 -c '
+import json, sys
+print(json.dumps({
+    "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": sys.argv[1]
+    }
+}))
+' "${REASON_TEXT}"
 
-The gate self-clears once skill-creator is invoked in this session.
+# Legacy: same reason on stderr for exit-2 readers.
+printf '%s\n' "${REASON_TEXT}" >&2
 
-Why this hook exists: Doctrine #4 was previously honor-system; the gate
-fired only as a system-reminder that the model could read past while
-already in flow. This hook turns the doctrine into a tool-level
-enforcement (board-superpowers v0.4.x ship gate-blocking PreToolUse;
-contract documented at docs/architecture/0005-contracts/02-hook-contracts.md
-§ "PreToolUse gate hook").
-REASON
 exit 2

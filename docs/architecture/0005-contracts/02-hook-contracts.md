@@ -439,6 +439,46 @@ reboot. Persistence is intentionally absent: Doctrine #4's
 - Memory `feedback_v1_release_gate_no_workarounds` — workarounds
   must close before release; honor-system enforcement counts as
   a workaround the gate hook removes.
+- Canonical CC PreToolUse output schema —
+  <https://code.claude.com/docs/en/hooks.md> § "PreToolUse"
+  documents `hookSpecificOutput.permissionDecision: "deny"` as
+  the modern block mechanism; exit 2 + stderr is the legacy path
+  ("older pattern, still works"). The hook emits both for
+  belt-and-suspenders compatibility across CC versions.
+
+### Codex parity gap — gate enforcement
+
+The gate hook pair (`pre-tool-use.sh` + `post-tool-use.sh`)
+is **Claude Code only**. Codex CLI does not get tool-level
+enforcement; the gate degrades to doctrinal text in
+`skills/AGENTS.md` "⛔ STOP" block. Three reasons:
+
+1. **No `Skill` tool in Codex.** Codex skills are loaded by the
+   runtime, not invoked as a model-facing tool. There is no
+   `Skill` tool call to PostToolUse-hook into, so the flag-file
+   lifecycle (the `Skill` invocation writes the flag, the Edit
+   reads it) cannot complete on Codex.
+2. **Deadlock risk.** If `pre-tool-use.sh` were registered on
+   Codex without a working `post-tool-use.sh` companion, every
+   Edit / Write into `skills/` would block forever — there is
+   no path to clear the flag.
+3. **`tool_input` schema divergence.** Codex's `apply_patch` tool
+   does not expose `file_path` the way CC's `Edit` does. Even if
+   the matcher fired (via Codex's `apply_patch | Edit | Write`
+   normalization), the path-extraction would silently fail and
+   the gate would fail-open — no enforcement in practice.
+
+`scripts/register-codex-hooks.sh` therefore registers
+`SessionStart` only on Codex. Earlier rollouts that briefly
+included PreToolUse / PostToolUse entries are auto-cleaned on
+the next install (the merge logic drops any existing
+board-superpowers entries from those events).
+
+If Codex eventually exposes a Skill-equivalent tool that fires
+PostToolUse, this gap closes; until then, doctrinal text + the
+`example-skills:skill-creator` skill body itself (which can
+include its own opt-in self-reporting) are the enforcement on
+Codex.
 
 ---
 

@@ -25,12 +25,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 PLUGIN_ROOT="$(bsp_plugin_root)"
 HOOK_SCRIPT="${PLUGIN_ROOT}/hooks/session-start.sh"
-PRE_TOOL_HOOK="${PLUGIN_ROOT}/hooks/pre-tool-use.sh"
-POST_TOOL_HOOK="${PLUGIN_ROOT}/hooks/post-tool-use.sh"
 
-[ -f "${HOOK_SCRIPT}" ]    || bsp_die "hook script not found: ${HOOK_SCRIPT}"
-[ -f "${PRE_TOOL_HOOK}" ]  || bsp_die "hook script not found: ${PRE_TOOL_HOOK}"
-[ -f "${POST_TOOL_HOOK}" ] || bsp_die "hook script not found: ${POST_TOOL_HOOK}"
+# Codex parity gap (intentional): Codex CLI has no Skill tool that
+# fires PostToolUse — the skills are loaded by Codex's runtime, not
+# called as a model-facing tool. So the gate's flag-file lifecycle
+# (post-tool-use.sh writes flag on Skill, pre-tool-use.sh reads flag
+# on Edit/Write) cannot complete on Codex; the gate would block
+# without ever clearing. We therefore do NOT register PreToolUse +
+# PostToolUse on the Codex side. The Process gate stays
+# doctrine-only (skills/AGENTS.md "⛔ STOP" block) on Codex; CC users
+# get tool-level enforcement via hooks/hooks.json. See
+# docs/architecture/0005-contracts/02-hook-contracts.md § "Codex
+# parity gap — gate enforcement".
+
+[ -f "${HOOK_SCRIPT}" ] || bsp_die "hook script not found: ${HOOK_SCRIPT}"
 
 bsp_require_cmd python3
 
@@ -60,39 +68,19 @@ esac
 
 SNIPPET="$(python3 -c "
 import json, sys
-session_hook, pre_hook, post_hook = sys.argv[1], sys.argv[2], sys.argv[3]
 print(json.dumps({
     'hooks': {
         'SessionStart': [
             {
                 'type': 'command',
-                'command': f'bash {session_hook}',
+                'command': f'bash {sys.argv[1]}',
                 'timeout': 10,
-                'name': 'board-superpowers'
-            }
-        ],
-        'PreToolUse': [
-            {
-                'type': 'command',
-                'command': f'bash {pre_hook}',
-                'matcher': matcher,
-                'timeout': 5,
-                'name': 'board-superpowers'
-            }
-            for matcher in ('Edit', 'Write', 'MultiEdit')
-        ],
-        'PostToolUse': [
-            {
-                'type': 'command',
-                'command': f'bash {post_hook}',
-                'matcher': 'Skill',
-                'timeout': 5,
                 'name': 'board-superpowers'
             }
         ]
     }
 }, indent=2))
-" "${HOOK_SCRIPT}" "${PRE_TOOL_HOOK}" "${POST_TOOL_HOOK}")"
+" "${HOOK_SCRIPT}")"
 
 case "${MODE}" in
     print)
@@ -137,12 +125,14 @@ EOF
         fi
 
         # Merge into existing file. Use python to preserve other plugins'
-        # hooks; idempotently replace any existing board-superpowers entries
-        # across all three events (SessionStart + PreToolUse + PostToolUse).
-        python3 - "${TARGET}" "${HOOK_SCRIPT}" "${PRE_TOOL_HOOK}" "${POST_TOOL_HOOK}" <<'PY'
+        # hooks, abort on board-superpowers entry already present.
+        # Codex registration covers SessionStart only — see top-of-file
+        # rationale "Codex parity gap" for why PreToolUse + PostToolUse
+        # are not registered on Codex.
+        python3 - "${TARGET}" "${HOOK_SCRIPT}" <<'PY'
 import json, sys, os, shutil
 
-target, session_hook, pre_hook, post_hook = sys.argv[1:5]
+target, hook_script = sys.argv[1], sys.argv[2]
 with open(target) as f:
     try:
         data = json.load(f)
@@ -150,34 +140,39 @@ with open(target) as f:
         print(f"existing {target} is not valid JSON: {e}", file=sys.stderr)
         sys.exit(1)
 
-# Define the full set of board-superpowers entries to install.
-bsp_entries = {
-    'SessionStart': [
-        {'type': 'command', 'command': f'bash {session_hook}',
-         'timeout': 10, 'name': 'board-superpowers'},
-    ],
-    'PreToolUse': [
-        {'type': 'command', 'command': f'bash {pre_hook}',
-         'matcher': matcher, 'timeout': 5,
-         'name': 'board-superpowers'}
-        for matcher in ('Edit', 'Write', 'MultiEdit')
-    ],
-    'PostToolUse': [
-        {'type': 'command', 'command': f'bash {post_hook}',
-         'matcher': 'Skill', 'timeout': 5,
-         'name': 'board-superpowers'},
-    ],
-}
-
 data.setdefault('hooks', {})
-for event, entries in bsp_entries.items():
-    data['hooks'].setdefault(event, [])
-    # Idempotency: drop any existing board-superpowers entries for this event.
-    data['hooks'][event] = [
-        h for h in data['hooks'][event]
+data['hooks'].setdefault('SessionStart', [])
+
+# Idempotency: if a board-superpowers entry already exists, replace it.
+existing = [h for h in data['hooks']['SessionStart']
+            if h.get('name') == 'board-superpowers']
+if existing:
+    print(f"replacing existing board-superpowers entry in {target}", file=sys.stderr)
+    data['hooks']['SessionStart'] = [
+        h for h in data['hooks']['SessionStart']
         if h.get('name') != 'board-superpowers'
     ]
-    data['hooks'][event].extend(entries)
+
+data['hooks']['SessionStart'].append({
+    'type': 'command',
+    'command': f'bash {hook_script}',
+    'timeout': 10,
+    'name': 'board-superpowers'
+})
+
+# Defensive cleanup: previous register-codex-hooks.sh versions briefly
+# also registered PreToolUse + PostToolUse on Codex. Those entries are
+# now known to deadlock the Process gate (no Skill tool on Codex →
+# flag never written → gate never clears). Remove them on every
+# install to drain any pre-existing rollouts.
+for stale_event in ('PreToolUse', 'PostToolUse'):
+    if stale_event in data['hooks']:
+        kept = [h for h in data['hooks'][stale_event]
+                if h.get('name') != 'board-superpowers']
+        if kept:
+            data['hooks'][stale_event] = kept
+        else:
+            del data['hooks'][stale_event]
 
 # Atomic write: stage to .tmp, then rename.
 tmp = target + '.tmp'
@@ -186,7 +181,7 @@ shutil.copy2(target, backup)
 with open(tmp, 'w') as f:
     json.dump(data, f, indent=2)
 os.replace(tmp, target)
-print(f"updated {target} with 3 events (backup at {backup})", file=sys.stderr)
+print(f"updated {target} (backup at {backup})", file=sys.stderr)
 PY
         bsp_log "registered. Test with: codex (open a fresh session)"
         ;;
@@ -204,6 +199,10 @@ with open(target) as f:
     data = json.load(f)
 hooks_block = data.get('hooks') or {}
 removed_count = 0
+# Drain SessionStart entries (the canonical Codex registration target)
+# AND any stale PreToolUse / PostToolUse entries from a prior rollout
+# that briefly registered them — those are known-broken on Codex
+# (Codex parity gap; see top-of-file rationale).
 for event in ('SessionStart', 'PreToolUse', 'PostToolUse'):
     entries = hooks_block.get(event, [])
     before = len(entries)

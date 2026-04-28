@@ -29,11 +29,24 @@ The plugin wires three events:
 | Event | Script | Role |
 |-------|--------|------|
 | `SessionStart` (`startup` matcher) | `session-start.sh` | Layer 1 dep alert + intent injection (advisory; never blocks). |
-| `PreToolUse` (`Edit` / `Write` / `MultiEdit` matchers) | `pre-tool-use.sh` | skills/AGENTS.md Process gate enforcement. Blocks file mutations under `skills/**` until `example-skills:skill-creator` is invoked in the session. Inverts the "never block" stance — see Invariant 5. |
-| `PostToolUse` (`Skill` matcher) | `post-tool-use.sh` | Companion to the gate hook. Records `*skill-creator` invocations into a per-session flag file under `${TMPDIR:-/tmp}/board-superpowers-sessions/<session_id>/skill-creator-invoked.flag`. |
+| `PreToolUse` (`Edit` / `Write` / `MultiEdit` matchers) | `pre-tool-use.sh` | skills/AGENTS.md Process gate enforcement (CC-only — see Codex parity gap below). Blocks file mutations under `skills/**` until `example-skills:skill-creator` is invoked in the session. Inverts the "never block" stance — see Invariant 5. Canonical block path is `hookSpecificOutput.permissionDecision: "deny"` JSON on stdout (with belt-and-suspenders exit 2 + stderr legacy path). |
+| `PostToolUse` (`Skill` matcher, CC-only) | `post-tool-use.sh` | Companion to the gate hook. Records `*skill-creator` invocations into a per-session flag file under `${TMPDIR:-/tmp}/board-superpowers-sessions/<session_id>/skill-creator-invoked.flag`. The Skill-tool input field is not canonically documented; the hook scans every string value in `tool_input` for a value ending in `skill-creator` to stay robust against field-name variation. |
 
 Other events (`Stop`, `UserPromptSubmit`, etc.) are not yet active
 but must use the same payload pattern when added later.
+
+**Codex parity gap — gate hook pair is CC-only**: Codex CLI has
+no `Skill` model-facing tool to PostToolUse-hook into, so the
+flag-file lifecycle cannot complete on Codex. Registering
+PreToolUse on Codex without a working PostToolUse companion would
+deadlock every `skills/` edit. `scripts/register-codex-hooks.sh`
+therefore writes only `SessionStart` to `~/.codex/hooks.json`;
+earlier rollouts that briefly registered the gate pair on Codex
+get auto-cleaned by the merge logic on the next install. The
+gate degrades to doctrinal text in `skills/AGENTS.md` for Codex
+sessions. Full rationale + recovery path:
+[`../docs/architecture/0005-contracts/02-hook-contracts.md`](../docs/architecture/0005-contracts/02-hook-contracts.md)
+§ "Codex parity gap — gate enforcement".
 
 Full per-event contract:
 [`../docs/architecture/0005-contracts/02-hook-contracts.md`](../docs/architecture/0005-contracts/02-hook-contracts.md).

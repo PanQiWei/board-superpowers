@@ -68,14 +68,21 @@
 >   RED-GREEN-REFACTOR). A new skill landed without either is a
 >   blocker, not a minor finding.
 >
-> **Cross-platform applicability**: the gate applies equally to
-> Claude Code and Codex CLI sessions. The hook ships in
-> `hooks/hooks.json` (auto-discovered by Claude Code) and via
-> `scripts/register-codex-hooks.sh --install-user` (Codex CLI;
-> see [`../PLUGIN_DEVELOPMENT.md`](../PLUGIN_DEVELOPMENT.md) §
-> "Codex CLI" → "Hooks"). There is no separate Claude-Code-only
-> or Codex-only rules file under `skills/`; this one document
-> governs both.
+> **Cross-platform applicability — partial**: the **doctrinal**
+> gate (this STOP block + AGENTS.md Doctrine #4) applies equally
+> to Claude Code and Codex CLI. The **tool-level** gate
+> (`hooks/pre-tool-use.sh` + `hooks/post-tool-use.sh`) is
+> **Claude Code only** — Codex has no `Skill` model-facing tool
+> to observe `skill-creator` invocations through, so the flag-file
+> lifecycle cannot complete on Codex. Registering the hook pair
+> on Codex without a working flag-write path would deadlock every
+> `skills/` edit. Codex sessions get the doctrinal gate only;
+> CC sessions get both layers. Full rationale:
+> [`../docs/architecture/0005-contracts/02-hook-contracts.md`](../docs/architecture/0005-contracts/02-hook-contracts.md)
+> § "Codex parity gap — gate enforcement". `scripts/register-codex-hooks.sh
+> --install-user` writes only `SessionStart` on Codex; earlier
+> rollouts that briefly included the gate pair are auto-cleaned
+> on next install.
 
 This contract is the per-directory operational checklist for
 the skill-authoring discipline. The full guide lives in
