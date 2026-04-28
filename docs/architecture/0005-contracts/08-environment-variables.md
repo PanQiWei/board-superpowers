@@ -3,8 +3,8 @@
 > Pin every environment variable board-superpowers reads — name,
 > format, default, which scripts / hooks read it, and the originating
 > ADR / feature spec / `AGENTS.md` section. Plus the
-> `CLAUDE_PLUGIN_ROOT` / `CLAUDE_PROJECT_DIR` integration variables
-> from the Claude Code plugin contract.
+> plugin-contract integration variables (CC + Codex CLI) the runtime
+> sets for us.
 >
 > Rationale lives in the cited ADR / feature spec / `PLUGIN_DEVELOPMENT.md`
 > section. Shape lives here.
@@ -262,9 +262,9 @@ Codex side at v1).
 
 | Property | Value |
 |----------|-------|
-| Format | Opaque string (Claude Code-assigned per session). |
+| Format | Opaque string (Claude Code-assigned per session) |
 | Default | Set by Claude Code at session start. Unset under non-CC shells. |
-| Read by | `scripts/lib/common.sh` (`bsp_resolve_platform`, `bsp_resolve_session_id`); `scripts/audit-log-write.sh` (via `BSP_SESSION_ID` export); intake card-creation paths via `bsp_render_creator_trace_block` (per card #44). |
+| Read by | `scripts/lib/common.sh` (`bsp_resolve_platform`, `bsp_resolve_session_id`, `bsp_render_creator_trace_block` — landed earlier in this PR); `scripts/audit-log-write.sh` line 117 (via `BSP_SESSION_ID` export); intake card-creation paths invoke the render helper at `gh issue create` time. |
 | Validation | None — used as-is. |
 
 The canonical "session id" surface for Claude Code consumers.
@@ -286,9 +286,9 @@ for the term-bridge rationale.
 
 | Property | Value |
 |----------|-------|
-| Format | Opaque string (Codex CLI-assigned per session; Codex's terminology is "thread id"). |
-| Default | Set by Codex CLI from `rust-v0.125.0` onward (PR [openai/codex#10096](https://github.com/openai/codex/pull/10096), merged 2026-02-03). Unset on older Codex installs. |
-| Read by | Same callers as `CLAUDE_SESSION_ID` (the helpers fall through to `CODEX_THREAD_ID` when `CLAUDE_SESSION_ID` is unset). |
+| Format | Opaque string (Codex CLI-assigned per session; Codex's terminology is "thread id") |
+| Default | Set by Codex CLI from `rust-v0.125.0` onward (PR [openai/codex#10096](https://github.com/openai/codex/pull/10096)). Unset on older Codex installs. |
+| Read by | `scripts/lib/common.sh` (`bsp_resolve_platform`, `bsp_resolve_session_id` — fallback chain when `CLAUDE_SESSION_ID` is unset); downstream consumers same as `CLAUDE_SESSION_ID`. |
 | Validation | None — used as-is. |
 
 Term-bridge: Codex CLI calls this concept a "thread id"; the
@@ -307,7 +307,6 @@ case — documented as expected fallback behavior, not an error.
 - [openai/codex#8923](https://github.com/openai/codex/issues/8923) — feature request that motivated the Codex-side env var.
 - [openai/codex#10096](https://github.com/openai/codex/pull/10096) — PR introducing `CODEX_THREAD_ID` injection.
 - `scripts/lib/common.sh` `bsp_resolve_platform` / `bsp_resolve_session_id` — fallback chain consumer.
-- Card #44 design — initial wiring.
 
 ---
 
