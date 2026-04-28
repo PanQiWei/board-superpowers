@@ -18,6 +18,9 @@ These are the values that `audit-log-write.sh` writes for new entries.
 | `degraded-db-unavailable` | audit_db_url is configured but the DB rejected the connection (network, auth, DDL not applied). Transient — next successful write goes to DB. |
 | `degraded-uv-missing` | The host doesn't have uv installed. Recovery: run bootstrap-host.sh. |
 | `degraded-venv-create-failed` | uv is installed but `uv sync` failed (offline / proxy / lock conflict / disk full). Recovery: investigate uv error and re-run. |
+| `contract-violation` | Caller passed a non-integer `action_id`; `audit-log-write.sh` rejects pre-DB-branch (Task 2 / AC2 of #43) and writes the offending row to jsonl with this mode for post-mortem inspection. Recovery: fix the caller's `action_id` to an integer; the jsonl row needs manual migration or a human INSERT into the DB. |
+| `bootstrap-pending` | Bootstrap-time outbox: audit row written to jsonl with `status: pending` while bootstrap is still in flight (DB / venv may not yet be ready). Recovery: auto-flushed by the bootstrap end fast-path (`bootstrap-project.sh`), the opportunistic guard inside `audit-log-write.sh`, or the `SessionStart` observer prompt that surfaces remaining pending rows. |
+| `audit-dead-letter` | A `bootstrap-pending` row exhausted its retry budget (`retry_count ≥ 5`) OR exceeded the TTL (`pending_since > 24h`). Manual investigation required; the `SessionStart` hook emits a dep-alert with the row count so the architect notices. |
 
 ## Legacy mode field value
 
@@ -39,7 +42,9 @@ if entry.get('mode') == 'v1-minimum-degraded':
     # legacy entry: not classified by failure cause
     ...
 elif entry.get('mode') in ('no-db', 'degraded-db-unavailable',
-                           'degraded-uv-missing', 'degraded-venv-create-failed'):
+                           'degraded-uv-missing', 'degraded-venv-create-failed',
+                           'contract-violation', 'bootstrap-pending',
+                           'audit-dead-letter'):
     # current: failure-cause classified
     ...
 ```

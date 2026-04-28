@@ -803,6 +803,14 @@ callers do not duplicate.
 | `degraded-db-unavailable` | audit_db_url set but DB rejected connection (network / auth / DDL not applied) |
 | `degraded-uv-missing` | host doesn't have uv installed (architect must run bootstrap-host.sh) |
 | `degraded-venv-create-failed` | uv installed but `uv sync` failed (network / proxy / lock conflict / disk full) |
+| `contract-violation` | Caller passed non-integer `action_id`; `audit-log-write.sh` rejects pre-DB-branch (#43 AC2) and writes the offending row to jsonl for post-mortem |
+| `bootstrap-pending` | Bootstrap-time outbox row awaiting flush — written while bootstrap is still in flight (DB / venv may not yet be ready). Auto-flushed by the bootstrap end fast-path / opportunistic guard / SessionStart observer prompt |
+| `audit-dead-letter` | `bootstrap-pending` row exhausted retry budget (`retry_count ≥ 5`) OR exceeded TTL (`pending_since > 24h`); SessionStart hook surfaces row count via dep-alert for manual investigation |
+
+`bsp_audit_local_write` (in `scripts/lib/common.sh`) enforces this
+enum as an explicit allowlist plus the legacy `v1-minimum-degraded`
+value; unknown modes are rejected with `return 2` before any
+side effects.
 
 ### Cited rationale
 

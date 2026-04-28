@@ -330,8 +330,24 @@ bsp_audit_local_write() {
     # for back-compat with callers (e.g., bootstrap scripts) that haven't
     # been updated to pass an explicit mode. New callers (audit-log-write.sh)
     # pass one of the v0.3.0 enum values: no-db / degraded-db-unavailable /
-    # degraded-uv-missing / degraded-venv-create-failed.
+    # degraded-uv-missing / degraded-venv-create-failed. v0.4.0 adds three
+    # more: contract-violation (caller passed non-integer action_id) /
+    # bootstrap-pending (outbox row awaiting flush) / audit-dead-letter
+    # (pending row exhausted retries / TTL).
     local mode="${6:-v1-minimum-degraded}"
+
+    # Per AC3 (#43): explicit mode whitelist. Unknown modes are rejected
+    # (return 2) to prevent silent jsonl pollution by typos / outdated
+    # callers. The whitelist runs BEFORE any side effects (mkdir / write
+    # / log) so a rejected call leaves no trace.
+    case "${mode}" in
+        no-db|degraded-db-unavailable|degraded-uv-missing|degraded-venv-create-failed|\
+v1-minimum-degraded|contract-violation|bootstrap-pending|audit-dead-letter) ;;
+        *)
+            bsp_warn "bsp_audit_local_write: unknown mode '${mode}' (allowed: no-db, degraded-db-unavailable, degraded-uv-missing, degraded-venv-create-failed, v1-minimum-degraded, contract-violation, bootstrap-pending, audit-dead-letter)"
+            return 2
+            ;;
+    esac
 
     # Re-derive PATH defensively. Caller may have a stripped PATH; we need
     # dirname / mkdir / python3 / git regardless. Append caller PATH so
