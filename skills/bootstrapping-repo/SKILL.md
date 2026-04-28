@@ -79,6 +79,8 @@ For every mutating action this skill performs, follow the 5-step governance sequ
 
 Bootstrap is mostly R-class (see "Why bootstrap is mostly R-class" above). Architects can promote specific rows to A via `autonomy_overrides:`.
 
+**Bootstrap audit rows (200-208) are outbox-shaped**: all 9 emissions invoke `audit-log-write.sh --mode bootstrap-pending` (see § "Outbox emission protocol" below). The auditing-actions skill's payload templates carry the integer action_id; this skill's invocation must include the `--mode bootstrap-pending` flag so the row goes to the jsonl outbox rather than a direct DB INSERT (the audit_log table is not guaranteed to exist during the bootstrap window).
+
 ### Action ID catalog (bootstrap actions)
 
 The 9 mutating bootstrap actions are integer-tracked in the
@@ -103,6 +105,27 @@ The 9 mutating bootstrap actions are integer-tracked in the
 For the full default class (A/R) of each action_id, consult the
 `action-id-catalog.md` file inside the
 `board-superpowers:classifying-actions` skill's `references/`.
+
+### Outbox emission protocol (bootstrap-only)
+
+**All 9 bootstrap audit emissions MUST pass `--mode bootstrap-pending` to
+`audit-log-write.sh`.** This routes the row through the outbox path
+(jsonl暂存 with `status: pending` + `event_uuid` + `retry_count: 0` +
+`pending_since`) instead of attempting a direct DB INSERT during the
+bootstrap window — necessary because the `audit_log` table itself may
+not yet exist (step 2g creates it) and earlier sub-steps (2e
+credentials, 2f venv) are prerequisites of step 2g. The flush worker
+(`audit-flush-pending.sh`) reconciles outbox rows into the DB at
+bootstrap end (fast-path), via the audit-log-write.sh opportunistic
+guard, or via the SessionStart hook observer dep-alert. See
+[`docs/architecture/0005-contracts/06-audit-log-schema.md`](../../docs/architecture/0005-contracts/06-audit-log-schema.md)
+§ "Migration model" + § "Bootstrap rows — 200–208" for the full
+contract.
+
+Producer rows (1-14) and Consumer rows (100-113) do NOT use
+`--mode bootstrap-pending` — they emit directly via the standard
+DB-or-jsonl-fallback path. Only bootstrap rows (200-208) are
+outbox-shaped.
 
 ## Procedure
 
