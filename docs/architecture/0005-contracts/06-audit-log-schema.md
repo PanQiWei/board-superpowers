@@ -739,13 +739,30 @@ for mysql); re-runs safe.
 
 ---
 
-## jsonl fallback mode-field
+## jsonl fallback row schema
 
 When audit-log-write.sh degrades to jsonl (instead of writing to the
-configured RDBMS), the entry's `mode` field carries one of these values
-identifying the degradation cause. SPOT: only `bsp_audit_local_write`
-in `scripts/lib/common.sh` writes this field; SKILL bodies and other
-callers do not duplicate.
+configured RDBMS), each JSON line has the following top-level fields:
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `ts` | string (ISO 8601 UTC) | Wall-clock time the entry was written |
+| `repo_root` | string | Absolute path of the repository root |
+| `session_id` | string | Session identifier from `bsp_resolve_session_id`; parallels the SQLite path's `session_id` column. Present from v0.4.x onward (chunk 15 fix). Legacy rows written before this fix lack the field — readers must handle its absence. |
+| `action_id` | string | Matrix row id (same values as RDBMS `action_id`) |
+| `decision_class` | string | `A`, `R`, or `N` (per ADR-0006 D-AUTONOMY-1) |
+| `skill` | string | Originating skill name |
+| `summary` | string | Human-readable summary including `approval=`, `outcome=`, and `payload=` tokens |
+| `mode` | string | Degradation cause (see "jsonl fallback mode-field" below) |
+
+SPOT: only `bsp_audit_local_write` in `scripts/lib/common.sh` writes
+jsonl rows; SKILL bodies and other callers do not duplicate this schema.
+
+## jsonl fallback mode-field
+
+The entry's `mode` field identifies the degradation cause. SPOT: only
+`bsp_audit_local_write` in `scripts/lib/common.sh` writes this field;
+SKILL bodies and other callers do not duplicate.
 
 ### Legacy values (read-back compatibility only)
 

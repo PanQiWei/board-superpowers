@@ -175,8 +175,12 @@ if [ -f "${HOME}/.board-superpowers/credentials.yml" ] \
   audit_path="sqlite:${DB_PATH}"
 elif [ -f "${JSONL}" ]; then
   # --- jsonl fallback path ---
-  # The jsonl schema has no top-level session_id column; extract from
-  # the payload={...} JSON embedded in the summary field.
+  # Read session_id from the row's top-level session_id field (added in
+  # chunk 15 fix). The payload-embedded session_id workaround has been
+  # removed; this assertion is now substantive (row.session_id is written
+  # independently by bsp_audit_local_write from bsp_resolve_session_id,
+  # while expected is computed in test shell, and body_sid round-trips
+  # through GitHub).
   audit_sid=$(tail -200 "${JSONL}" \
     | python3 -c "
 import sys, json, re
@@ -193,7 +197,7 @@ for line in reversed(sys.stdin.readlines()):
     if str(row.get('action_id', '')) != '1':
         continue
     summary = row.get('summary', '')
-    m = re.search(r'payload=(\{.*\})\s*\$', summary)
+    m = re.search(r'payload=(\{.*\})', summary)
     if not m:
         continue
     try:
@@ -201,11 +205,11 @@ for line in reversed(sys.stdin.readlines()):
     except Exception:
         continue
     if payload.get('card_number') == card_num:
-        print(payload.get('session_id', ''))
+        print(row.get('session_id', ''))
         break
 ") \
     || fail "jsonl python parse failed"
-  [ -n "${audit_sid}" ] || fail "session_id not found in jsonl for card #${card_num} action_id=1 (payload missing session_id?)"
+  [ -n "${audit_sid}" ] || fail "session_id not found in jsonl top-level field for card #${card_num} action_id=1"
   audit_path="jsonl:${JSONL}"
 else
   fail "neither SQLite credentials.yml nor jsonl audit log is reachable"

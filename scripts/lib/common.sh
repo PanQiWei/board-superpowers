@@ -459,21 +459,30 @@ bsp_audit_local_write() {
 
     mkdir -p "$(dirname "${path}")"
 
+    # Resolve session_id for the jsonl row, mirroring the SQLite path's
+    # session_id column (audit-log-write.sh line 117). BSP_SESSION_ID may
+    # not be exported when this function is called from the venv-missing or
+    # no-db fallback paths (both exit before line 117), so we fall through
+    # to bsp_resolve_session_id to derive a consistent value.
+    local session_id
+    session_id="${BSP_SESSION_ID:-$(bsp_resolve_session_id)}"
+
     bsp_require_cmd python3
     python3 -c "
 import json, sys, time
 entry = {
     'ts': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
     'repo_root': sys.argv[1],
-    'action_id': sys.argv[2],
-    'decision_class': sys.argv[3],
-    'skill': sys.argv[4],
-    'summary': sys.argv[5],
-    'mode': sys.argv[6],
+    'session_id': sys.argv[2],
+    'action_id': sys.argv[3],
+    'decision_class': sys.argv[4],
+    'skill': sys.argv[5],
+    'summary': sys.argv[6],
+    'mode': sys.argv[7],
 }
-with open(sys.argv[7], 'a') as f:
+with open(sys.argv[8], 'a') as f:
     f.write(json.dumps(entry) + '\n')
-" "${repo_root}" "${action_id}" "${decision}" "${skill}" "${summary}" "${mode}" "${path}"
+" "${repo_root}" "${session_id}" "${action_id}" "${decision}" "${skill}" "${summary}" "${mode}" "${path}"
 
     bsp_log "audit-local: ${decision}-class action ${action_id} (${skill}) → ${path}"
 }
