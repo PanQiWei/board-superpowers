@@ -154,8 +154,24 @@ draft":
    [`board-superpowers:classifying-actions`](../../classifying-actions/SKILL.md),
    default is A but the architect can override via
    `autonomy_overrides:` to demand R for card creation.
-3. After acknowledgement: `gh issue create --title <title>
-   --body <body>` then add to project + set
+3. After acknowledgement, prepend the creator-trace marker
+   block to the body before `gh issue create`:
+
+   ```bash
+   creator_trace="$(bsp_render_creator_trace_block)"
+   body="${creator_trace}
+   ${body}"
+   gh issue create --title "<title>" --body "${body}"
+   ```
+
+   The `bsp_render_creator_trace_block` helper is defined in
+   `scripts/lib/common.sh` and emits a
+   `<!-- board-superpowers:creator-trace -->` block capturing
+   the platform and session-id at create time. See
+   [`skills/board-canon/references/card-body-schema.md`](../../board-canon/references/card-body-schema.md)
+   § "Creator-trace marker" for field constraints.
+
+   Then add to project + set
    `Status = Backlog → Ready` per
    [`board-superpowers:board-canon`](../../board-canon/SKILL.md)
    § "State machine".

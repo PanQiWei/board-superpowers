@@ -114,7 +114,7 @@ INSERT_RC=0
 BSP_REPO_ROOT="${REPO_ROOT}" \
 BSP_AUDIT_DB_URL="${AUDIT_DB_URL}" \
 BSP_PROJECT="${PROJECT_NAME}" \
-BSP_SESSION_ID="${CLAUDE_SESSION_ID:-${PWD//\//-}}" \
+BSP_SESSION_ID="$(bsp_resolve_session_id)" \
 BSP_ACTOR_ROLE="$( [ "${SKILL}" = "consuming-card" ] && echo consumer || echo producer )" \
 BSP_ACTION_ID="${ACTION_ID}" \
 BSP_PAYLOAD="${PAYLOAD}" \

@@ -459,21 +459,30 @@ bsp_audit_local_write() {
 
     mkdir -p "$(dirname "${path}")"
 
+    # Resolve session_id for the jsonl row, mirroring the SQLite path's
+    # session_id column (audit-log-write.sh line 117). BSP_SESSION_ID may
+    # not be exported when this function is called from the venv-missing or
+    # no-db fallback paths (both exit before line 117), so we fall through
+    # to bsp_resolve_session_id to derive a consistent value.
+    local session_id
+    session_id="${BSP_SESSION_ID:-$(bsp_resolve_session_id)}"
+
     bsp_require_cmd python3
     python3 -c "
 import json, sys, time
 entry = {
     'ts': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
     'repo_root': sys.argv[1],
-    'action_id': sys.argv[2],
-    'decision_class': sys.argv[3],
-    'skill': sys.argv[4],
-    'summary': sys.argv[5],
-    'mode': sys.argv[6],
+    'session_id': sys.argv[2],
+    'action_id': sys.argv[3],
+    'decision_class': sys.argv[4],
+    'skill': sys.argv[5],
+    'summary': sys.argv[6],
+    'mode': sys.argv[7],
 }
-with open(sys.argv[7], 'a') as f:
+with open(sys.argv[8], 'a') as f:
     f.write(json.dumps(entry) + '\n')
-" "${repo_root}" "${action_id}" "${decision}" "${skill}" "${summary}" "${mode}" "${path}"
+" "${repo_root}" "${session_id}" "${action_id}" "${decision}" "${skill}" "${summary}" "${mode}" "${path}"
 
     bsp_log "audit-local: ${decision}-class action ${action_id} (${skill}) → ${path}"
 }
@@ -1235,4 +1244,99 @@ PY
 
     printf '%s\n' "${default_class}"
     return 0
+}
+
+# bsp_resolve_platform — return the platform identifier for the
+# current session, derived from environment variables exposed by
+# Claude Code or Codex CLI.
+#
+# Output: "claude-code" | "codex-cli" | "unknown"
+#
+# Resolution order (first non-empty wins):
+#   1. CLAUDE_SESSION_ID (set by Claude Code at session start)
+#   2. CODEX_THREAD_ID   (set by Codex CLI >= rust-v0.125.0,
+#                         per openai/codex#10096)
+#
+# Cited rationale:
+#   - docs/architecture/0005-contracts/08-environment-variables.md
+#   - openai/codex#8923 / openai/codex#10096
+bsp_resolve_platform() {
+    if [ -n "${CLAUDE_SESSION_ID:-}" ]; then
+        printf '%s\n' 'claude-code'
+    elif [ -n "${CODEX_THREAD_ID:-}" ]; then
+        printf '%s\n' 'codex-cli'
+    else
+        printf '%s\n' 'unknown'
+    fi
+}
+
+# bsp_resolve_session_id — return the session identifier for the
+# current session.  Codex's terminology is "thread id"; we bridge
+# it to the canonical "session id" used by the
+# audit_log.session_id column and the BSP_SESSION_ID export.
+#
+# Priority:
+#   1. $CLAUDE_SESSION_ID  — set by Claude Code on every session.
+#   2. $CODEX_THREAD_ID    — set by Codex CLI >= rust-v0.125.0.
+#   3. PWD-hash fallback   — when neither platform env var is set
+#      (raw shell, older Codex install, or unsupported runtime).
+#
+# PWD-fallback is HASHED (sha256, first 12 hex chars) to prevent
+# leaking absolute filesystem paths (username + HOME layout +
+# project path) into public GitHub issue bodies via the
+# creator-trace marker block.
+#
+# Trade-off: hash form is NOT reversible — the underlying PWD
+# cannot be recovered from the value in the card body or audit row.
+# Uniqueness within a host's PWD layout is preserved (same shell +
+# same PWD always produces the same hash).
+#
+# IMPORTANT — PWD-fallback stability invariant (AC4):
+#   When the platform env vars are unset and the function falls
+#   back to the PWD hash, callers MUST NOT change directory
+#   between the intake-side call (writes session-id into card
+#   body) and the audit-write-side call (writes session-id into
+#   audit_log.session_id). Both calls must run in the same
+#   shell + same PWD so shasum(PWD) is identical on both sides.
+#   In practice both happen back-to-back inside the same intake
+#   routine.
+bsp_resolve_session_id() {
+    if [ -n "${CLAUDE_SESSION_ID:-}" ]; then
+        printf '%s\n' "${CLAUDE_SESSION_ID}"
+    elif [ -n "${CODEX_THREAD_ID:-}" ]; then
+        printf '%s\n' "${CODEX_THREAD_ID}"
+    else
+        # PWD fallback — hashed to avoid leaking absolute paths into
+        # public GitHub issue bodies. Trade-off: loses forensic
+        # readability (cannot reverse-engineer pwd from hash) but
+        # preserves session-uniqueness within a host's PWD layout.
+        local hash
+        hash="$(printf '%s' "${PWD}" | shasum -a 256 | cut -c1-12)"
+        printf 'pwd-%s\n' "${hash}"
+    fi
+}
+
+# bsp_render_creator_trace_block — emit the creator-trace marker
+# block (with currently-resolved values) to stdout. Intake-path
+# callers prepend the output to a card body before `gh issue create`,
+# keeping each call site a one-liner.
+#
+# Output (4 lines):
+#   <!-- board-superpowers:creator-trace -->
+#   **Created-by:** <platform>
+#   **Session-id:** <session-id>
+#   <!-- /board-superpowers:creator-trace -->
+#
+# Marker pair is machine-managed; hand edits inside the markers
+# are rejected by enforcing-pr-contract filler-detection.
+bsp_render_creator_trace_block() {
+    local platform session_id
+    platform="$(bsp_resolve_platform)"
+    session_id="$(bsp_resolve_session_id)"
+    cat <<EOF
+<!-- board-superpowers:creator-trace -->
+**Created-by:** ${platform}
+**Session-id:** ${session_id}
+<!-- /board-superpowers:creator-trace -->
+EOF
 }

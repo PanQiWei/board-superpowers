@@ -150,7 +150,7 @@ Render a text-only dep graph in the outline narrative (Step 7) using ASCII or in
 
 Produce a single artifact for architect review:
 
-1. **Per-card body** — one full body per card, formatted to the converged schema (thin-pointer block + Goal / Acceptance criteria / Out of scope / Dependencies / Notes + optional Execution Hints + bottom marker `<!-- board-superpowers:card -->`).
+1. **Per-card body** — one full body per card, formatted to the converged schema (thin-pointer block + Goal / Acceptance criteria / Out of scope / Dependencies / Notes + optional Execution Hints + bottom marker `<!-- board-superpowers:audit-trail -->`).
 2. **Outline narrative** — a single paragraph naming the N cards, the dep graph, the recommended ordering, and any soft / hard cross-card constraints.
 3. **Batch summary** — total card count, size distribution (e.g., "1 XS, 3 S, 2 M"), expected total LOC range.
 
@@ -162,7 +162,17 @@ The batch creation is a mutating action governed by the atomic SKILLs:
 
 1. Resolve `action_id = 1` (Producer matrix row 1: "Create cards (decomposition output)").
 2. Invoke `board-superpowers:classifying-actions` with action_id 1 → returns A/R/N decision (default A; project-level autonomy_overrides may demote to R).
-3. If A: batch `gh issue create` per Step 7's bodies → `gh project item-add` for each → flip Status to `Ready`.
+3. If A: for each card body, prepend `bsp_render_creator_trace_block` output (see
+   `scripts/lib/common.sh`) before running `gh issue create`, then `gh project item-add` +
+   flip Status to `Ready`. Prepend pattern:
+   ```bash
+   creator_trace="$(bsp_render_creator_trace_block)"
+   body="${creator_trace}
+   ${body}"
+   gh issue create --title "<title>" --body "${body}"
+   ```
+   See `skills/board-canon/references/card-body-schema.md` § "Creator-trace marker" for field
+   constraints.
 4. If R: surface the Step 7 artifact to the architect; wait for ack; on approve, run step 3.
 5. Invoke `board-superpowers:auditing-actions` with `action_id=1, decision_class=A|R, summary` carrying the batch metadata: `{batch_size: N, card_numbers: [...], total_loc_estimate: X, source_artifact_sha256: ...}`.
 6. Hand the batch back to `managing-board` to close out the intake (the board now has the new Ready cards; `managing-board` resumes its intake routine).
@@ -206,7 +216,7 @@ Before invoking Step 8 (batch create), every card in the batch MUST satisfy:
 - [ ] Passes INVEST 6-letter gate (per `references/invest-checklist.md`).
 - [ ] Is a vertical slice (zero cards in the batch are layer-only or wire-up-only).
 - [ ] Sized within `XS|S|M|L` (no card exceeds the L ceiling).
-- [ ] Card body matches the converged schema exactly (thin-pointer block + 5 visible sections + optional Execution Hints + idiomatic bottom marker `<!-- board-superpowers:card -->`).
+- [ ] Card body matches the converged schema exactly (thin-pointer block + 5 visible sections + optional Execution Hints + idiomatic bottom marker `<!-- board-superpowers:audit-trail -->`).
 - [ ] Cross-card dep graph is complete (every `depends-on` is declared on the dependent card; every reverse dependency mirrored as `depended-on-by` on the prerequisite).
 - [ ] Acceptance criteria are operationalized (no "feels good" / "works well" / "tests pass" without naming which tests).
 - [ ] Out of scope explicitly delineated (no implicit "we'll figure out later").
@@ -217,7 +227,9 @@ This skill performs one mutating action: batch card creation (`action_id = 1`). 
 
 1. Resolve `action_id = 1` (from `action-id-catalog.md` inside `board-superpowers:classifying-actions`).
 2. Invoke `board-superpowers:classifying-actions` with that action_id; receive a decision: A (auto), R (requires approval), or N (forbidden).
-3. If A: act → invoke `board-superpowers:auditing-actions` to record one entry covering the whole batch.
+3. If A: for each card body, prepend `bsp_render_creator_trace_block` output before `gh issue create`
+   (same pattern as Step 8 item 3 above), then invoke `board-superpowers:auditing-actions` to record
+   one entry covering the whole batch.
 4. If R:
    a. invoke `board-superpowers:auditing-actions` to record the proposal.
    b. surface the Step 7 artifact to the architect.
