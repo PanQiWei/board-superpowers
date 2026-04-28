@@ -232,12 +232,20 @@ Which subsystem does this stage configure? Nine values
   `host-shared` (uv binary), `repo-git`
   (`pyproject.toml` + `uv.lock`), and `repo-clone`
   (`.venv/`).
-- **`M3` — GitHub Project integration.** The
-  BoardAdapter's contract with the GitHub Project (13
-  standard Issue labels, 6-option Status field schema).
-  All M3 stages have `external` locality. (BoardAdapter
-  is the abstraction that makes future Linear / Jira
-  adapters possible per ADR-0005.)
+- **`M3` — Board operations (BoardAdapter-driven).**
+  Operations against the selected board backend (labels,
+  Status field schema, etc.). All M3 stages have
+  `external` locality and dispatch through the
+  BoardAdapter abstraction (ADR-0005), **not** through a
+  hard-coded backend. Each M3 stage declares an
+  `applicable_when: board_capability: <name>` predicate;
+  the stage runs only when the selected backend (per
+  M10) declares it supports that capability. v0.5.0's
+  GitHub-Project-v2 adapter declares
+  `[ensure-labels, status-field-schema]`; future Linear
+  / Jira adapters declare overlapping or different
+  capability sets, and M3 stages re-route automatically
+  via the lifecycle's `not-applicable` state.
 - **`M4` — Audit logging.** BYO RDBMS / SQLite audit-log
   subsystem (per-repo credentials + schema + flush +
   health reporting). **All M4 stages are per-repo** —
@@ -360,8 +368,8 @@ contract" below.
 | `m2.host.install-uv` | uv installer | Detect / install `uv` Python tool host-wide via `astral.sh/uv/install.sh` or PATH probe | M2 | automated | host-shared | both | `heavy`, `network-required` | v0.3.0 | — | `scripts/bootstrap-host.sh` |
 | `m2.repo.copy-uv-templates` | uv templates | Copy plugin's `pyproject.toml` + `uv.lock` from `<plugin>/scripts/templates/` into `<repo>/.board-superpowers/` | M2 | automated | repo-git | both | — | v0.3.0 | `m1.repo.write-state-yml` | `scripts/bootstrap-project.sh` |
 | `m2.repo.sync-venv` | venv sync | Run `uv sync` to materialize `<repo>/.board-superpowers/.venv/` from the copied lock | M2 | automated | repo-clone | both | `heavy` | v0.3.0 | `m2.host.install-uv`, `m2.repo.copy-uv-templates` | `scripts/bootstrap-project.sh` |
-| `m3.repo.ensure-labels` | standard labels | Ensure 13 standard GitHub Issue labels exist on the repo (idempotent via `gh` CLI); only runs when `kanban_backend == github-project-v2` | M3 | automated | external | both | — | v0.1.0-minimum | `m10.repo.choose-kanban-backend` | `scripts/setup-labels.sh` |
-| `m3.repo.validate-status-field` | status field validation | Validate the GitHub Project's 6-option Status field schema; agentic only on failure (guide architect to GitHub UI); only runs when `kanban_backend == github-project-v2` | M3 | agentic | external | both | `confirm-only`, `agentic-on-failure` | v0.1.0-minimum | `m10.repo.choose-kanban-backend` | `SKILL: bootstrapping-repo` (failure path) / `scripts/validate-status-field.sh` (read path) |
+| `m3.repo.ensure-labels` | standard labels | Ensure 13 standard board labels exist (calls `BoardAdapter.ensure_labels()`; current GitHub-Project-v2 adapter delegates to `gh` CLI). `applicable_when: board_capability=ensure-labels` (any backend declaring this capability participates) | M3 | automated | external | both | — | v0.1.0-minimum | `m10.repo.choose-kanban-backend` | `scripts/setup-labels.sh` |
+| `m3.repo.validate-status-field` | status field validation | Validate the board's Status field schema (calls `BoardAdapter.validate_status_field()`); agentic only on failure. `applicable_when: board_capability=status-field-schema` | M3 | agentic | external | both | `confirm-only`, `agentic-on-failure` | v0.1.0-minimum | `m10.repo.choose-kanban-backend` | `SKILL: bootstrapping-repo` (failure path) / `scripts/validate-status-field.sh` (read path) |
 | `m4.repo.acquire-dsn` | audit DSN | Acquire BYO RDBMS DSN; write per-repo `credentials.yml` (chmod 0600); first-time agentic, re-use automated | M4 | agentic | repo-shared | both | `confirm-only` (re-use path is automated) | v0.3.0 (host-shared); per-repo since vX.0.0 (this redesign) | `m1.repo.write-state-yml` | `SKILL: bootstrapping-repo` (first-time) / `scripts/bootstrap-project.sh` (re-use) |
 | `m4.repo.apply-audit-ddl` | audit DDL | Apply audit-log DDL to the resolved DB (3-dialect dispatch via `audit-init.sh`) | M4 | automated | external | both | — | v0.3.0 | `m4.repo.acquire-dsn` | `scripts/audit-init.sh` |
 | `m4.repo.flush-pending-audit` | audit flush | Replay `mode=bootstrap-pending` rows from jsonl into DB (idempotent via UNIQUE event_uuid) | M4 | automated | external | both | — | v0.3.0 | `m4.repo.apply-audit-ddl` | `scripts/audit-flush-pending.sh` |
@@ -731,6 +739,141 @@ hash match — forcing a fresh `gh api` call. TTL per stage
 is declared in the registry (default 86400 = 24h,
 overridable per-stage).
 
+### Settings modular layering (in-file structure)
+
+The four `settings.yml` files (one per non-`external`
+locality) each carry **two top-level data structures plus
+file-level metadata**, mirroring the VSCode settings.json /
+Helm values.yaml / Kubernetes ConfigMap convention of
+**single file, namespaced module sections**:
+
+```yaml
+# example: ~/.board-superpowers/settings.yml (host-shared)
+schema_version: 1                        # FILE-level schema version
+plugin_version: v0.5.0                   # plugin version that last wrote
+host_bootstrapped_at: 2026-04-28T...
+
+# Section 1 — flat lifecycle source-of-truth (machine view)
+stages_completed:
+  - stage_id: m1.host.create-state-dir
+    status: completed
+    generation: 1
+    target_state_hash: a1b2...
+    target_state: { ... }
+    target_state_schema_version: 1
+    completed_at: 2026-04-28T14:23:05Z
+    plugin_version: v0.5.0
+  - stage_id: m9.host.register-codex-hooks
+    ...
+
+# Section 2 — module-namespaced config-items projection (architect view)
+modules:
+  m1_plugin_runtime:
+    schema_version: 1                    # MODULE-level independent schema
+    # M1 has no architect-facing config items
+  m2_python_runtime:
+    schema_version: 1
+    uv_version: "0.4.20"
+  m8_autonomy:
+    schema_version: 1
+    presets_chosen: [allow-pr-creation]
+  m9_hook_registration:
+    schema_version: 1
+    codex_hooks_registered: true
+```
+
+The two-section split:
+
+- **`stages_completed[]`** — flat list of stage entries with
+  the three-layer fingerprint per ADR-0013. Hook reads this
+  for lifecycle diff (machine-optimized; cheap fast-path on
+  `generation` int compare).
+- **`modules.<id>`** — namespaced config-item projection.
+  Architect-friendly view; each module's section holds **only
+  the architect-facing config items** of that module's
+  stages. SKILL writes both sections atomically on stage
+  completion (mktemp + mv); architect-readable reads always
+  prefer `modules.<id>`.
+
+### Why both sections, not just one
+
+Two equally valid sources of truth would invite drift; one
+authoritative + one derived doesn't. The redesign picks
+**`stages_completed[]` as authoritative** (the full
+fingerprint lives there); `modules.<id>` is **derived**
+(re-written deterministically by SKILL whenever a stage's
+target_state changes). Architects who hand-edit `modules.<id>`
+trigger validation: SKILL's next pass detects the divergence
+between projection and source-of-truth and prompts the
+architect to either re-elicit the stage (lifecycle re-run)
+or revert the manual edit. This mirrors how Helm rejects
+divergence between `values.yaml` and chart-default values:
+projection editing has to pass through the chart's interface,
+not directly mutate values storage.
+
+### Per-module schema versioning
+
+Each `modules.<id>.schema_version` evolves **independently**
+of:
+
+- The **file-level** `schema_version` at the top of
+  `settings.yml`. (File-level only changes when the
+  flat-section `stages_completed[]` entry shape changes,
+  which is rare — additive only per
+  `0005-contracts/03-config-schemas.md` migration policy.)
+- **Other modules'** `schema_version`s. M4 changing its
+  audit DDL bumps `m4_audit.schema_version` only;
+  `m8_autonomy.schema_version` stays put.
+
+Module schema bump → all that module's stages' `target_state`
+shape changes → their `compute_target_state()` returns new
+shape → their `target_state_hash` changes → lifecycle flips
+those stages to `stale` → SKILL re-runs them (with
+human-readable structural diff for the architect).
+
+### Module naming convention
+
+`modules.<id>` follows the rule:
+
+```
+m{module_number}_{module_name_in_snake_case}
+```
+
+Examples:
+
+- `m4_audit` (M4 — Audit logging)
+- `m7_routing` (M7 — Agent routing)
+- `m8_autonomy` (M8 — Autonomy overrides)
+- `m10_kanban` (M10 — BoardAdapter selection)
+
+The number prefix preserves Axis-C module identity; the snake-case
+suffix is the architect-readable name. CI validation
+(per ADR-0014) ensures the convention is honored at
+load time.
+
+### Future-module inclusion procedure
+
+When a future plugin version (vN+1) introduces a new module:
+
+1. Add the new module's stages to `scripts/stages-registry.yml`
+   under unique `stage_id`s (`m11.host.…` / `m12.repo.…` /
+   etc.).
+2. Define the new module's settings projection schema in
+   `scripts/stages-registry.schema.json` under
+   `definitions/modules/m11_<name>` (per ADR-0014's
+   JSON-Schema gate).
+3. Implement the per-stage Python helpers in
+   `scripts/stages_lib/<stage_id>.py`.
+4. **No SKILL or hook code changes are required.** The
+   prompt-renderer + lifecycle engine consume the registry
+   declaratively; new modules land via registry-only edits.
+
+This procedure is the architectural contract that makes
+"plugin extension by registry edit" the **only** path for
+new architect-facing features. Any new module that bypasses
+the protocol re-introduces the bespoke-UX cost the redesign
+exists to eliminate.
+
 ## Repo identity
 
 Repo identity is **GitHub-based**: the host-local per-repo
@@ -910,6 +1053,8 @@ fields elaborated in supporting prose elsewhere are marked
 | `external_ttl_seconds` **(prose, external stages only)** | non-negative int | external only | TTL for external-stage validation cache. Default 86400 (24h). |
 | `kind` **(table, M7 only)** | enum `required` \| `optional` | M7 only | M7 routing-block kind tag (per architect direction). Surfaced as `kind=required` / `kind=optional` in the table's `flags` column. |
 | `block_max_bytes` **(prose, M7 only)** | non-negative int | M7 only | Per-block size cap (default 4096 bytes). Honors Codex 32 KiB AGENTS.md budget — see § "Functional modules" M7. |
+| `applicable_when` **(prose)** | predicate (declarative or callable) | no | Conditional applicability gate. When evaluated against current settings the predicate yields true → stage participates in lifecycle as normal; false → lifecycle returns `not-applicable` and the stage is silently skipped (no marker, no execution). Three forms: (1) declarative `{setting_path: <dot.path>, one_of: [<values>]}` — most stages use this; (2) declarative capability check `{board_capability: <name>}` — for stages that require a BoardAdapter capability (resolves through M10's selected backend's capability declarations); (3) Python predicate reference `applicable_when_fn: <module.callable>` — escape hatch for complex conditions. The predicate is evaluated by the hook (cheap — settings lookup + small comparisons); never by SKILL. |
+| `module_section_path` **(prose)** | string | no | If the stage's `target_state` should be projected into the settings file's `modules.<id>` section (per § "Settings modular layering"), this names the dotted path. SKILL writes both `stages_completed[].target_state` and `modules.<this_path>` synchronously on completion; reading is allowed from either (architect-facing reads prefer the projection). Default: `modules.<derived from module>` (e.g., `m4.repo.acquire-dsn` → `modules.m4_audit`). |
 
 ### Canonicalization invariant for hash stability
 
@@ -932,7 +1077,7 @@ hash stability and gets caught by CI.
 
 ### What the lifecycle model asks of each stage
 
-The 4-state lifecycle reads the registry + per-stage status
+The 5-state lifecycle reads the registry + per-stage status
 file entries to compute each stage's current state. Each
 stage MUST provide:
 
@@ -949,7 +1094,13 @@ stage MUST provide:
   time to confirm the outcome actually landed (especially
   for `external`-locality stages where local files lie).
 
-These five together form the **stage's contract with the
+Each stage MAY also provide:
+
+- An `applicable_when` predicate (or capability check) —
+  conditional gate that resolves to `not-applicable` when
+  false. Cheap to evaluate (hook-side); never blocks for IO.
+
+These together form the **stage's contract with the
 lifecycle model**. A stage that fakes any of them silently
 breaks the diff-and-replay mechanism. The
 `stages-registry.schema.json` validates the declarative
@@ -958,7 +1109,7 @@ must round-trip a known input → output).
 
 ## Stage lifecycle states
 
-Each stage's recorded state is one of four values, computed
+Each stage's recorded state is one of **five** values, computed
 deterministically by the unified check script per session
 start. The model uses a **three-layer comparison stack**
 borrowed from Kubernetes' `metadata.generation` /
@@ -992,10 +1143,11 @@ state applies — no fuzzy matching, no manual override.
 
 | State | Definition | Detection rule |
 |-------|------------|----------------|
-| **never-run** | This stage has never been recorded as completed on this `(host, repo)` pair. | No entry with this `stage_id` exists in the relevant status file. |
+| **never-run** | This stage has never been recorded as completed on this `(host, repo)` pair, AND the stage's `applicable_when` predicate evaluates true (or is absent). | No entry with this `stage_id` exists in the relevant status file; `applicable_when` (if present) → true. |
 | **completed** | Last recorded run succeeded **and** the recorded fingerprint matches the current plugin version's expectation. | Entry exists; `entry.generation == registry[stage_id].generation` (fast-path) AND `entry.target_state_hash == current_target_state_hash` (verify). Both equal → up-to-date; no re-run needed. |
 | **stale** | Last recorded run succeeded, but the current plugin version's expected target state has drifted (schema bump, content change, dep upgrade, executor change). | Entry exists; either `entry.generation != registry[stage_id].generation` OR (generation equal but) `entry.target_state_hash != current_target_state_hash`. SKILL re-runs the stage on next session start; structural diff between recorded `target_state` and current `target_state` is surfaced for diagnostics. |
 | **deprecated** | The stage existed in a prior plugin version but is no longer in the current registry. The recorded entry is preserved as history but no longer drives any execution. | `entry.stage_id ∉ current_registry`. The status file keeps the entry indefinitely (or until a manual prune); the check script ignores it for diff-computation purposes. |
+| **not-applicable** | The stage exists in the current registry but its `applicable_when` predicate evaluates false against current settings (e.g., `m3.repo.ensure-labels` is not-applicable when `kanban_backend ≠ github-project-v2`). The stage is silently skipped without re-prompt. | `applicable_when` predicate evaluates false. The hook does not emit a marker for not-applicable stages; SKILL does not execute them. If `applicable_when` later evaluates true (architect changed `kanban_backend`), state flips back to `never-run` (no historical entry) or `completed` (if entry exists from a prior applicable window). |
 
 Plus two **transient SKILL-only states** (set by the SKILL
 mid-execution; treated as effectively `never-run` /
@@ -1312,7 +1464,39 @@ Resolved (as discussion progresses, decisions move down to the
 - **M5 stage `m5.repo.set-wip-limit` is in-scope** — new
   agentic stage prompting architect for per-repo WIP limit
   (default 5; numeric-range 1-20). Persists into
-  `settings.local.yml:wip_limit` per repo-clone locality.
+  `settings.local.yml:modules.m5_repo_configuration.wip_limit`
+  per repo-clone locality.
+- **5th lifecycle state `not-applicable` introduced** —
+  alongside never-run / completed / stale / deprecated.
+  Triggered when a stage's `applicable_when` predicate
+  evaluates false. Hook does not emit a marker; SKILL does
+  not execute. Architect changing settings (e.g., kanban
+  backend) re-evaluates predicates next session, flipping
+  affected stages back to never-run / completed.
+- **`applicable_when` predicate field added to stage
+  registry** — per § "Stage registry contract" Column /
+  field semantics. Three forms: declarative
+  `setting_path + one_of`, declarative
+  `board_capability`, or escape-hatch
+  `applicable_when_fn` Python ref. Hook-side cheap
+  evaluation (no IO).
+- **M3 stages dispatch through BoardAdapter capabilities,
+  not backend names** — `m3.repo.ensure-labels` and
+  `m3.repo.validate-status-field` declare
+  `applicable_when: {board_capability: <name>}`; M3 module
+  is renamed "Board operations (BoardAdapter-driven)".
+  Resolves the implicit GitHub-Project-v2 hard-coding in
+  v0.4.0 stages. Per ADR-0005 (BoardAdapter contract) +
+  G4 (parity) + new BoardAdapter capability dispatch ADR.
+- **Settings file internal layout uses two-section split
+  with module namespacing** — flat `stages_completed[]`
+  (machine-optimized lifecycle source of truth) +
+  `modules.<id>` (architect-readable projection). Each
+  module section carries its own independent
+  `schema_version` for module-local schema migration.
+  Mirrors VSCode settings.json / Helm values.yaml
+  industry pattern. Resolved by § "Settings modular
+  layering".
 - **Repo identity is `<owner>-<repo>` from `origin` URL** —
   with `_path-...` fallback for local-only repos. Resolved by
   § "Repo identity". Triggers I-13 invariant revision.
@@ -1474,11 +1658,37 @@ Resolved (as discussion progresses, decisions move down to the
     encodes the sequential per-stage flow + the five-element
     config item protocol that future plugin features must
     honor when adding new architect-input items.
-14. Companion ADRs land in the same series (extends ADR-0012..0019
-    to also cover): (i) Architect UX + config item protocol
-    (the five-element contract); (j) settings.yml rename;
-    (k) M10 BoardAdapter selection module + M5 wip-limit
-    stage (these may be one or two ADRs depending on cohesion
-    judgement at write time).
+14. Companion ADRs in the same series, in addition to the
+    eight already drafted (ADR-0012 — ADR-0019):
+    - (i) **In-place updates** to ADR-0013 (5-state lifecycle
+      adds `not-applicable`), ADR-0014 (`applicable_when` +
+      `module_section_path` columns; settings file
+      two-section split + per-module schema_version),
+      ADR-0016 (`platforms` × `applicable_when`
+      composition rules — `platforms` is the special-cased
+      coarse predicate, `applicable_when` is the fine
+      predicate; both must be true for the stage to
+      participate).
+    - (j) **New ADR-0020** — Stage applicability +
+      `not-applicable` lifecycle state + `applicable_when`
+      predicate forms (declarative setting-path,
+      board-capability, Python escape hatch).
+    - (k) **New ADR-0021** — Settings modular layering
+      (two-section split + module namespacing + per-module
+      schema_version + future-module inclusion procedure).
+    - (l) **New ADR-0022** — BoardAdapter capability
+      dispatch (M3 stages route through
+      `BoardAdapter.<capability>()` interfaces; capability
+      declaration as part of adapter contract; M3 module
+      renamed "Board operations (BoardAdapter-driven)").
+      Cross-references ADR-0005 (BoardAdapter contract).
+    - (m) **New ADR-0023** — Architect UX + config item
+      protocol (sequential per-stage flow + 5-element
+      protocol: schema declaration / detection / interaction
+      / persistence / re-prompt trigger).
+    - (n) **New ADR-0024** — settings.yml rename + the
+      `m5.repo.set-wip-limit` and `m10.repo.choose-kanban-backend`
+      stages (may bundle as one ADR or split if review
+      finds them logically separable).
 15. This `-redesign.md` file removed; content lives in
     `05-bootstrap-surface.md`.
