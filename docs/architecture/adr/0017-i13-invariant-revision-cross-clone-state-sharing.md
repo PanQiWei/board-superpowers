@@ -218,7 +218,7 @@ prefix guarantees no accidental collision with a real
 - [ADR-0012](./0012-unified-check-script-trigger-model.md) —
   Unified check-script trigger model; partitioned status files
   this ADR governs the physical location of.
-- ADR-0013 — Declarative state schema + 4-state lifecycle
+- ADR-0013 — Declarative state schema + 5-state lifecycle
   (sibling, plain text placeholder until landed); defines the
   `repo-shared` locality whose physical home this ADR specifies.
 - ADR-0014 — Stage registry contract (sibling, plain text

@@ -34,7 +34,7 @@ each module's payload as a versioned contract:
    M7 block growing unbounded can push architect content past
    the limit and corrupt routing with no failure signal.
 
-The stage-registry shape (ADR-0014) plus the 4-state lifecycle
+The stage-registry shape (ADR-0014) plus the 5-state lifecycle
 (ADR-0013) give M7 a place to expose its internal structure as
 multiple registry rows. This ADR formalizes that restructuring.
 
@@ -204,7 +204,7 @@ future-ADR question; first cut errs safe.
 
 - ADR-0012 — Unified check-script trigger model. The
   per-stage diff this ADR's restructured M7 stages feed into.
-- ADR-0013 — Declarative state schema + 4-state lifecycle +
+- ADR-0013 — Declarative state schema + 5-state lifecycle +
   K8s-style three-layer fingerprint. The block-level
   fingerprint comparison this ADR exploits.
 - ADR-0014 — Stage registry contract. The YAML row shape

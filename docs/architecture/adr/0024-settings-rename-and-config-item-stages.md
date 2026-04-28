@@ -191,7 +191,7 @@ unless the change introduces architectural-grade decisions.
   host-shared `settings.yml:modules.m8_autonomy`.
 - ADR-0012 — Unified check-script trigger model; the pre-v1
   delete-and-re-bootstrap posture is shared.
-- ADR-0013 — Declarative state schema + 4-state lifecycle;
+- ADR-0013 — Declarative state schema + 5-state lifecycle;
   `target_state` / `generation` / `target_state_hash` recorded
   inside each `settings.yml` follow this contract.
 - ADR-0014 — Stage registry contract; both new stages are

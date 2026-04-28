@@ -221,7 +221,7 @@ schema gates the gap.
   through it.
 - ADR-0012 — unified check-script trigger model; hook consumes
   this registry every `SessionStart`.
-- ADR-0013 — 4-state lifecycle + three-layer fingerprint;
+- ADR-0013 — 5-state lifecycle + three-layer fingerprint;
   defines what the lifecycle asks, this ADR specifies how it
   is stored.
 - ADR-0015..ADR-0019 — companion bootstrap-redesign ADRs (audit

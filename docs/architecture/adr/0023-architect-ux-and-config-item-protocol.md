@@ -20,9 +20,10 @@ be added by editing the SKILL. Three structural costs follow:
    items as the catalog grows.
 2. **No SPOT for "did we already ask this?".** Each prompt path
    answers it its own way (file-presence check, field test,
-   hand-rolled "needs setup" flag). ADR-0013's 4-state
-   lifecycle already answers it generically, but the v0.4.0
-   prompt paths predate the lifecycle and do not consume it.
+   hand-rolled "needs setup" flag). ADR-0013's lifecycle (4-state
+   when first sketched; extended to 5-state by ADR-0020) already
+   answers it generically, but the v0.4.0 prompt paths predate
+   the lifecycle and do not consume it.
 3. **"Skip" was contemplated as a fifth lifecycle state.** Early
    redesign drafts considered a `skipped` / `deferred` state for
    "architect declined to configure this item" — a concession to
@@ -97,11 +98,11 @@ no SKILL prompt code is written per item.
    plus required-or-optional, default, and enum option list
    with `introduced_in_version` per option for graceful
    enum-bump compatibility.
-2. **Detection** — the lifecycle 4-state model (per ADR-0013)
-   computes whether the item needs eliciting. `never-run` /
-   `stale` ⇒ elicit; `completed` ⇒ skip; `deprecated` /
-   `not-applicable` ⇒ ignore. No bespoke "is this set?" code
-   per item.
+2. **Detection** — the lifecycle 5-state model (per ADR-0013
+   + ADR-0020) computes whether the item needs eliciting.
+   `never-run` / `stale` ⇒ elicit; `completed` ⇒ skip;
+   `deprecated` / `not-applicable` ⇒ ignore. No bespoke "is
+   this set?" code per item.
 3. **Interaction** — a new `interactive_prompt` registry field
    declares the prompt template + kind (single-choice /
    multi-choice / free-text / boolean / numeric-range) +
@@ -126,9 +127,9 @@ no SKILL prompt code is written per item.
 
 An empty / null / "no presets selected" choice is itself a valid
 `target_state` value (when the schema permits empty list / null)
-and produces `completed`. The 4-state lifecycle covers all
-observable architect states; no `skipped` / `deferred` state is
-introduced.
+and produces `completed`. The 5-state lifecycle (ADR-0013 +
+ADR-0020) covers all observable architect states; no `skipped` /
+`deferred` state is introduced.
 
 ### Future-feature inclusion procedure
 
@@ -230,19 +231,27 @@ empty `target_state`."
 
 - ADR-0012 — unified check-script trigger model; emits the
   `INVOKE: bootstrapping-repo` marker the SKILL consumes.
-- ADR-0013 — 4-state lifecycle; supplies the detection element
-  (item 2) and re-prompt trigger element (item 5).
+- ADR-0013 — 5-state lifecycle (extended from 4 by ADR-0020);
+  supplies the detection element (item 2) and re-prompt trigger
+  element (item 5).
 - ADR-0014 — stage registry contract; supplies the schema
   declaration element (item 1) and absorbs the new
   `interactive_prompt` field for the interaction element
   (item 3).
+- ADR-0020 — Stage applicability + `not-applicable` 5th
+  lifecycle state; combined with ADR-0013 forms the lifecycle
+  detection surface this protocol's element 2 consumes; clarifies
+  that `not-applicable` is unrelated to skip semantics (see Notes
+  above).
 - ADR-0021 — settings layering; supplies the persistence
-  element (item 4) by mapping `locality` to settings file.
-- ADR-0022 — partitioned settings files; the file-level
-  contract the persistence step writes into.
-- ADR-0024 — pre-v1 breaking changes; the rename of v0.4.0
-  plumbing names that the protocol's persistence file paths
-  consume.
+  element (item 4) by mapping `locality` to settings file
+  internal layout (two-section split + `modules.<id>`
+  projection).
+- ADR-0024 — settings.yml rename + new config-item stages;
+  the pre-v1 file-naming change that the protocol's persistence
+  file paths consume, plus the two new stages
+  (`m5.repo.set-wip-limit`, `m10.repo.choose-kanban-backend`)
+  that exemplify the protocol.
 - [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
   § "Architect UX" — authoritative reference for the reframe,
   the sequential flow, the 5-element protocol, the

@@ -48,7 +48,7 @@ a stateless **check script** runs on every `SessionStart` hook,
 computes the diff between the current plugin's stage registry
 and the recorded per-stage status entries, and emits an
 `INVOKE: bootstrapping-repo` marker if any stage is `never-run`
-or `stale` (per the 4-state lifecycle defined in ADR-0013).
+or `stale` (per the 5-state lifecycle defined in ADR-0013).
 
 Concretely:
 
@@ -175,7 +175,7 @@ Invariants 1-3.
 
 ## Related
 
-- ADR-0013 — Declarative state schema + 4-state lifecycle +
+- ADR-0013 — Declarative state schema + 5-state lifecycle +
   K8s-style three-layer fingerprint (the lifecycle model this
   trigger consults).
 - ADR-0014 — Stage registry contract (the source of truth

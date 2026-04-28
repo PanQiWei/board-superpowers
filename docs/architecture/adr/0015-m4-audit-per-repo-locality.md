@@ -166,7 +166,7 @@ alone is the surface this ADR moves.
   breaking-change procedure relies on the lifecycle diff
   seeing `m4.repo.acquire-dsn` as `never-run` after the
   architect deletes host-shared state.
-- ADR-0013 — Declarative state schema + 4-state lifecycle. M4
+- ADR-0013 — Declarative state schema + 5-state lifecycle. M4
   stages' `target_state` carries per-repo identity into their
   hash, making per-repo isolation observable from the diff.
 - [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
