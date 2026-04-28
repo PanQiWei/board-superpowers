@@ -62,23 +62,36 @@ Refusing the hosted control plane is a stance only an open-source
 plugin will credibly take.
 
 This commitment has two reinforcing layers:
-1. **Architectural:** the BoardAdapter contract (ADR-0005) puts
-   backend-replacement at the core of the design, not as a future
-   feature.
+1. **Architectural:** the **Kanban Protocol**
+   ([`0005-contracts/00-kanban-protocol.md`](./0005-contracts/00-kanban-protocol.md))
+   is the universal mental model agents reason in; per-backend
+   projections (Form A bash CLI, Form B plugin-shipped MCP server,
+   Form C REST/GraphQL — see protocol § Implementation surface)
+   realize the protocol on each backend. Backend-replacement is
+   thus a projection-shaped concern, not a contract-shaped one;
+   the protocol's transport-agnostic stance makes that explicit.
 2. **Strategic:** competitor business models structurally disfavor
    matching us. They could in principle ship a free OSS adapter
    the way LangChain does, but the bet is they won't prioritize
    it.
 
-*Honest scope of "present commitment":* the BoardAdapter contract
-is committed in writing today (ADR-0005, Accepted) at
-second-adapter-implementable detail. The reference implementation
-is currently spread across the existing `gh`-bound scripts
-(`claim-card.sh`, `create-card.sh`, `transition-card.sh`); the
-GitHubProjectAdapter wrapper port that consolidates them behind
-the contract is a follow-up PR scheduled to land before v1 GA
-(see ADR-0005 Consequences as amended by ADR-0010). So P2a is
-**"contract committed, implementation port queued."**
+*Honest scope of "present commitment" (2026-04-28 reframe):* the
+**Kanban Protocol** is committed in writing today
+([`0005-contracts/00-kanban-protocol.md`](./0005-contracts/00-kanban-protocol.md),
+ADR-0012 accepted) at agent-readable + second-projection-
+implementable detail. v1.0 ships **one projection** —
+GitHubProjectAdapter (Form A: bash + `gh` CLI) — whose shape is
+documented in ADR-0005 (rescoped by ADR-0012 to "the v1
+GitHubProjectAdapter implementation projection," not "the
+universal contract"). The current `gh`-bound scripts
+(`claim-card.sh`, `create-card.sh`, `transition-card.sh`) ARE
+that projection's reference shape; the optional wrapper port
+that consolidates them behind a single bash adapter file (card
+#36) is a refactoring concern of the projection, not a gate on
+the protocol. v1.x adds Linear / Jira projections (Form B
+expected, wrapping each platform's official MCP server). So P2a
+is **"protocol committed, one projection in production, more
+projections expected in v1.x."**
 
 *Falsification:* if v1 GA + 1 week (AI cadence) passes and no
 second adapter has been seriously attempted (by us or a
@@ -317,20 +330,40 @@ back here when a phrase confuses them.
   commitment: we use the team's existing board as truth source and
   refuse to own state ourselves. Has two reinforcing layers
   (architectural + strategic) — see P2a above.
-- **BoardAdapter contract.** The interface board-superpowers calls
-  to read and mutate board state. v1 has one implementation
-  (GitHubProjectAdapter); the contract is defined in ADR-0005.
-- **Backend-shape-agnostic.** A property of skills/scripts: they
-  invoke the BoardAdapter contract, not backend-specific APIs.
-  Today most scripts are GitHub-CLI-bound (`gh`); P2a means new
-  code aims at the contract, and the GitHubProjectAdapter wrapper
-  port (see ADR-0005 Consequences) is the planned migration.
+- **Kanban Protocol.** The semantic mental model agents reason in
+  when interacting with any kanban board (GitHub Project v2,
+  Linear, Jira, future). Establishes ontology (Board / Card /
+  Status / Claim / PR Link / Label / Comment), six-state machine,
+  identity rules (`Card.key` opacity, branch naming
+  `claim/<key-slug>-<title-slug>`), eight action contracts,
+  compliance levels, and three implementation projection forms
+  (bash CLI, plugin-shipped MCP server, REST). Lives in
+  `0005-contracts/00-kanban-protocol.md`. ADR-0012 promotes this
+  protocol to spec authority.
+- **Backend projection.** A concrete realization of the Kanban
+  Protocol on one backend through one transport. v1 ships one
+  projection: **GitHubProjectAdapter** (Form A — bash + `gh` CLI),
+  whose implementation shape is documented in ADR-0005 (rescoped
+  to projection-only by ADR-0012, not the universal contract).
+  v1.x roadmap: Linear / Jira projections, expected to be Form B
+  (plugin-shipped MCP server wrapping the official Linear /
+  Atlassian Remote MCP server).
+- **Backend-shape-agnostic.** A property of skills: they reason in
+  Kanban Protocol terms (not backend-specific APIs) and dispatch
+  to the active projection through `operating-kanban` (lands
+  v0.5.0). Today's `gh`-bound scripts ARE the GitHub projection's
+  reference shape; the optional wrapper port that consolidates
+  them behind a single bash adapter file (card #36) is a
+  refactoring concern of the projection.
 - **Claim primitive.** The atomic operation that gives a Consumer
   Session exclusive ownership of a Card. Today: `git push
-  --force-with-lease=<ref>:` of a `claim/<N>-<slug>` branch. This
-  is **git-layer**, not board-layer — git platform
-  (GitHub/GitLab/Bitbucket) decides atomicity; the board only
-  observes the resulting status transition. See ADR-0002 (stub).
+  --force-with-lease=<ref>:` of a `claim/<key-slug>-<title-slug>`
+  branch (per ADR-0012's branch-naming abstraction; for GitHub
+  `<key-slug>` slugifies to the issue number, so existing
+  `claim/<N>-<slug>` branches remain valid). This is **git-layer**,
+  not board-layer — git platform (GitHub/GitLab/Bitbucket)
+  decides atomicity; the board only observes the resulting status
+  transition. See ADR-0002.
 
 ## Position vs the obvious alternatives
 
@@ -374,8 +407,12 @@ lingua franca for AI-era engineering teams the way Scrum was for
 the prior era — but enforced by code, not by ceremony. 100
 architects across an org speak the same agile dialect; retros
 aggregate cross-team patterns; hiring conversation includes "we
-work in board-superpowers." The BoardAdapter contract (ADR-0005)
-is what makes this reachable for non-GitHub teams.
+work in board-superpowers." The Kanban Protocol
+(`0005-contracts/00-kanban-protocol.md`, ADR-0012) is what makes
+this reachable for non-GitHub teams — agents speak protocol;
+per-backend projections (the GitHubProjectAdapter projection
+ships at v1.0; Linear / Jira projections in v1.x) realize it on
+each team's substrate.
 
 ### Explicitly rejected
 

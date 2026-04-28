@@ -1,8 +1,21 @@
 # ADR 0001: Pluggable board backend (GitHub Project v2 as v1 reference adapter)
 
-**Status:** accepted
+**Status:** accepted; branch-naming convention generalized by ADR-0012
 **Date:** 2026-04-25
 **Deciders:** PanQiWei (maintainer)
+
+> **Reading note (2026-04-28).** ADR-0012 elevates the universal
+> contract from "the BoardAdapter SDK ADR-0005 defines" to "the
+> Kanban Protocol document at
+> [`../0005-contracts/00-kanban-protocol.md`](../0005-contracts/00-kanban-protocol.md)".
+> ADR-0001's substrate-pluggability commitment is unchanged; what
+> changed is the SHAPE of the contract that anchors it. Branch
+> naming `claim/<N>-<slug>` (where `N` is GitHub issue number) is
+> generalized by ADR-0012 to `claim/<key-slug>-<title-slug>` (where
+> `<key-slug>` = `slugify(Card.key)`). For GitHub Project v2,
+> `<key-slug>` of `42` slugifies to `42`, so existing
+> `claim/<N>-<slug>` branches remain valid. The board-canon
+> skill is the SPOT for the slugifier rule.
 
 ## Context
 
@@ -45,19 +58,30 @@ substrate commitment described above.
 
 The board layer is **pluggable behind a stable contract**.
 
-- **Contract:** ADR-0005 (`BoardAdapter`) defines the v1 interface
-  every adapter must implement (5 read+write methods, type
-  definitions, error semantics, status mapping policy).
-- **v1 reference adapter:** **GitHubProjectAdapter** ships with the
-  plugin. It is the only adapter at v1.
-- **Future adapters:** LinearAdapter, JiraAdapter, and any other
+- **Contract:** the **Kanban Protocol** ([`../0005-contracts/00-kanban-protocol.md`](../0005-contracts/00-kanban-protocol.md))
+  is the universal contract — a semantic mental model agents reason
+  in, with eight action contracts, six canonical states, identity
+  rules, and three implementation projection forms (bash CLI / plugin-
+  shipped MCP server / REST). ADR-0005 defines the **v1
+  GitHubProjectAdapter implementation projection** (Form A: bash +
+  `gh` CLI), not the universal contract — see ADR-0012 for the
+  rescoping. *(2026-04-28 update: original Decision text used
+  ADR-0005 as the universal contract; ADR-0012 reframed that.)*
+- **v1 reference projection:** **GitHubProjectAdapter** (Form A)
+  ships with the plugin. It is the only projection at v1.
+- **Future projections:** LinearAdapter, JiraAdapter, and any other
   backend a contributor wants to write are **first-class targets**,
-  not afterthoughts. They implement the same contract (ADR-0005).
+  not afterthoughts. They realize the Kanban Protocol on their
+  backend through whatever projection form fits — Form B (plugin-
+  shipped MCP server, expected for Linear/Jira) is a first-class
+  option per ADR-0012.
 - **The board IS the truth source.** board-superpowers does not
   maintain a parallel state store. Per-session scratch
-  (`.board-superpowers/claims/<N>.claim`, `docs/board-superpowers/
+  (`.board-superpowers/claims/<key>.claim`, `docs/board-superpowers/
   plans/`) is the only state we own, and both are
-  reconstructible-or-disposable.
+  reconstructible-or-disposable. *(2026-04-28: the path token `<N>`
+  is generalized to `<key>` per ADR-0012's branch-naming
+  abstraction; for GitHub `<key>` slugifies to the issue number.)*
 
 ## Consequences
 

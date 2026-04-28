@@ -74,6 +74,7 @@ then jump back via cross-references.
 
 | File | Coverage |
 |------|----------|
+| [`00-kanban-protocol.md`](./00-kanban-protocol.md) | **Top-level contract.** Semantic mental model every other contract derives meaning from. Establishes ontology (Board / Card / Status / Claim / PR Link / Label / Comment), six-state machine, identity rules (`Card.key` opacity, branch-naming abstraction), eight action contracts, compliance levels (L0-L3), and the three implementation projection forms (bash CLI / plugin-shipped MCP server / REST). Read FIRST on this directory's first-pass tour. |
 | [`01-script-contracts.md`](./01-script-contracts.md) | Per-script: purpose, inputs, stdout shape, exit codes, side effects. Covers `check-deps.sh`, `bootstrap-project.sh`, `claim-card.sh`, `create-card.sh`, `transition-card.sh`, plus the `lib/common.sh` exported function surface. |
 | [`02-hook-contracts.md`](./02-hook-contracts.md) | Per-hook: trigger event, stdin payload shape, stdout / `additionalContext` format, sanitization rules, exit codes, timeout. v1 wires `SessionStart` only; the format is forward-looking for additional events. |
 | [`03-config-schemas.md`](./03-config-schemas.md) | Per YAML config: `~/.board-superpowers/manifest.yml`, `~/.board-superpowers/repos/<normalized>/state.yml` (host-local per I-13), `<repo>/.board-superpowers/config.yml`, `~/.board-superpowers/overrides.yml`, `~/.board-superpowers/credentials.yml`. Schema-version migration policy. The `autonomy_overrides:` finalization. |

@@ -74,6 +74,36 @@ single most common authoring mistake (per
 [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md) Anti-pattern
 A9).
 
+### Atomic-layer boundary discipline (v0.5.0+)
+
+Two atomic skills can BOTH be valid even when they appear to
+cover "the same domain" — provided they consolidate **different
+SPOTs**. Mixing two SPOTs into one atomic violates atomic single
+responsibility (A9) even when the resulting skill stays under
+the body-length budget.
+
+The canonical example, applied first to v0.5.0's
+`board-canon` + `operating-kanban` pair (which lands when the
+new atomic ships):
+
+| Atomic | SPOT it consolidates | One-line discriminator |
+|--------|----------------------|------------------------|
+| `board-canon` | "Kanban is what" — ontology, schema rules, state machine, branch-naming convention, WIP formula. **Backend-agnostic.** Stable; rarely changes. | If the question is *"what is legal / what does X mean"*, route to `board-canon`. |
+| `operating-kanban` *(lands v0.5.0)* | "How to act on the active backend" — backend selection (reads `<repo>/.board-superpowers/config.yml § kanban`), per-backend action invocation (Form A / B / C projections), failure-mode dispatch. **Backend-aware.** Mutates as new projections land. | If the question is *"how do I do X on this repo's backend"*, route to `operating-kanban`. |
+
+**Boundary discriminator (one sentence)**: *if the new content
+is "what is legal," it belongs in `board-canon`; if it is "in a
+specific backend, here is how you make the action happen," it
+belongs in `operating-kanban`.*
+
+This discipline rules out a tempting but harmful merge: "kanban-
+related rules and operations could co-exist in one skill." That
+would couple a backend-agnostic SPOT (which rarely changes) to a
+backend-specific SPOT (which changes per projection landing),
+forcing every projection landing to re-review the stable
+ontology. See ADR-0012 § Decision for the protocol-vs-SDK
+rationale that motivates the split.
+
 ## v1 minimum vs v1 complete
 
 The full v1 catalog defines **10 skills**. As of `v0.4.0`,
