@@ -127,6 +127,34 @@ Producer rows (1-14) and Consumer rows (100-113) do NOT use
 DB-or-jsonl-fallback path. Only bootstrap rows (200-208) are
 outbox-shaped.
 
+#### Host bootstrap special case — action_id 200
+
+Action_id 200 (host manifest write) emits **before** any per-repo
+`config.yml` exists, so `audit-log-write.sh`'s default repo-root
+resolution (PWD → primary repo) would land the jsonl row at an
+arbitrary repo's outbox directory (orphan if PWD is outside any
+git repo). To pin the host audit row to a canonical location, the
+host emission MUST also pass `--repo-root "${HOME}/.board-superpowers/__host__"`:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/audit-log-write.sh" \
+  --action-id 200 \
+  --decision A \
+  --skill bootstrapping-repo \
+  --approval-stage auto \
+  --outcome success \
+  --payload '{"host_manifest_path":"...","schema_version":2,...}' \
+  --mode bootstrap-pending \
+  --repo-root "${HOME}/.board-superpowers/__host__"
+```
+
+`bootstrap-host.sh` creates `${HOME}/.board-superpowers/__host__/`
+(idempotent mkdir) so this directory always exists when the SKILL
+emits action 200. Other 8 actions (201-208) emit during per-repo
+bootstrap and use the default per-repo repo-root resolution
+(no `--repo-root` flag needed; the per-repo `config.yml` carries
+the project mapping).
+
 ## Procedure
 
 The full sequence is four steps. Each step is independently idempotent and surfaces progress to the architect.
