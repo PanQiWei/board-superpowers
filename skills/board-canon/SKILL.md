@@ -97,6 +97,13 @@ Two bottom-region marker pairs are reserved (machine-managed):
 - `<!-- board-superpowers:creator-trace -->` — platform + session id of the creating session (per card #44; new cards only — see `references/card-body-schema.md` § "Creator-trace marker").
 - `<!-- board-superpowers:audit-trail -->` — query pointer to the audit log (existing behavior).
 
+The `creator-trace` marker is **auto-prepended by intake tooling**
+(via `bsp_render_creator_trace_block` in `scripts/lib/common.sh`)
+at `gh issue create` time and is NOT part of the manual
+schema-block template above. The `audit-trail` marker IS part of
+the manual schema and appears in every Card body authored by
+hand or by decomposition tooling.
+
 `references/card-body-schema.md` documents the filler-detection rules applied to each section + the INVEST checklist for Acceptance criteria.
 
 ## Claim protocol

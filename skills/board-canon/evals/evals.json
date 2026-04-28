@@ -30,7 +30,7 @@
     {
       "id": 5,
       "prompt": "What's the mandatory bottom marker block in a Card body for?",
-      "expected_output": "Auto-generated audit-trail pointer block — board-superpowers:card. Hand edits are rejected by enforcing-pr-contract. Producer's tooling owns this block; it points at the audit log file at ~/.board-superpowers/repos/<normalized>/audit-local.jsonl.",
+      "expected_output": "Auto-generated audit-trail pointer block — board-superpowers:audit-trail. Hand edits are rejected by enforcing-pr-contract. Producer's tooling owns this block; it points at the audit log file at ~/.board-superpowers/repos/<normalized>/audit-local.jsonl.",
       "files": []
     }
   ]

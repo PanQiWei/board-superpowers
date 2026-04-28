@@ -57,7 +57,7 @@ The marker is **protocol, not decoration**. Tooling (managing-board's Review Que
 > recognizes all three):
 > - **v0.1.x – v0.3.x**: `<!-- bsp-bottom-marker:do-not-edit -->` … `<!-- /bsp-bottom-marker:do-not-edit -->`
 > - **v0.4.0 transition**: renamed to `<!-- board-superpowers:card -->` … `<!-- /board-superpowers:card -->` (intermediate form; visible on issues #1–#34)
-> - **v0.4.x onward (current)**: renamed to `<!-- board-superpowers:audit-trail -->` … `<!-- /board-superpowers:audit-trail -->` (current form; visible on issues #35+; emitted by all current intake paths)
+> - **v0.4.x onward (current)**: renamed to `<!-- board-superpowers:audit-trail -->` … `<!-- /board-superpowers:audit-trail -->` (current form; visible on issues #35+; emitted by `bsp_render_creator_trace_block` and live intake helpers — broader spec/skill alignment for stale `:card` references in `docs/architecture/`, `bootstrapping-repo`, and `decomposing-into-milestones` is a follow-up issue, out of #44 scope)
 >
 > When reading existing card bodies, accept any of the three. When writing
 > new card bodies, emit only the current form (`audit-trail`). The
