@@ -31,12 +31,13 @@ This reference is consumed by:
 
 ## Mirror handshake with `AGENTS.md`
 
-`AGENTS.md` § "How to compose gstack and superpowers"
-(lines 525-606) is the plugin-maintainer-facing source of truth
-for cross-plugin composition. **This file is the manager-mode
-reading of that section** — it covers the same composition
-rules, but rephrased for an LLM agent doing intake decisions
-rather than a human plugin maintainer reading project docs.
+[`AGENTS.md`](../../../AGENTS.md) § "How to compose gstack
+and superpowers" is the plugin-maintainer-facing source of
+truth for cross-plugin composition. **This file is the
+manager-mode reading of that section** — it covers the same
+composition rules, but rephrased for an LLM agent doing
+intake decisions rather than a human plugin maintainer
+reading project docs.
 
 The two files MUST stay in sync. The change-impact matrix in
 [`docs/architecture/AGENTS.md`](../../../docs/architecture/AGENTS.md)
@@ -226,35 +227,65 @@ Pattern 3).
 
 ### Worked example — #43 AC4 trace
 
-#43's AC4 ("which audit DB scheme should bootstrap default
-to") fits this template exactly:
+#43's AC4 ("bootstrap-time audit ordering fixed, one of two
+designs picked") fits this template exactly. The card was
+written before this template was codified; trace it back:
 
-- Options: SQLite / Postgres / MySQL.
-- Architect's leaning: SQLite-as-a-fallback (lowest setup
-  cost; covers solo-architect case). Consumer free to default
-  differently if the project shape demands.
-- Rationale capture: PR #45's description states "defaulted to
-  SQLite, fallback chain attempts Postgres if `DATABASE_URL`
-  is set" — the leaning was followed but the PR records why.
+- **Options** (the Consumer picks one in implementation):
+  - **Design A — audit-init-early**: re-order sub-steps so
+    the audit table exists before any audit row is written.
+    End-to-end test asserts every bootstrap audit lands
+    directly in DB. Caveat: 2e/2f/2g themselves still need
+    audit rows that cannot land in a table that does not yet
+    exist — those fall back to a small jsonl-with-flush.
+  - **Design B — jsonl-then-flush**: keep current order;
+    bootstrap-time audit rows write jsonl with new
+    `mode=bootstrap-pending`; a new
+    `scripts/audit-flush-pending.sh` runs after step 2g and
+    replays pending rows into DB (idempotent via composite
+    key).
+- **Architect's leaning**: Design B (jsonl-then-flush) —
+  "only drawbacks are mechanical (script + enum + cross-driver
+  INSERT), no structural risk near release gate". Consumer is
+  **not bound** to this leaning; explicitly free to pick A
+  "if they find an acceptable solution to the 2e/2f rollback
+  semantics question".
+- **Rationale capture**: card #43 directs the Consumer to run
+  a 30-min `superpowers:brainstorming` session to lock the
+  choice and writes the rationale into the PR description.
+  The card body itself records the design A/B framing in its
+  Notes section so the rationale lives both in the PR (durable
+  record) and the card body (audit trail) per Step 9.5 card
+  body sync.
 
-The template applied retroactively reproduces #43's actual
-shape; this confirms the template is a faithful codification.
+The template applied to #43's AC4 reproduces its actual shape
+— Options + Architect's leaning + non-binding-on-Consumer +
+PR-records-rationale all present in #43 before this template
+existed. This is the empirical basis for codifying the shape
+as a reusable AC pattern; verification that the Consumer
+honors the template will land when #43's PR opens.
 
-## Anchor to add to `AGENTS.md`
+## Anchor present in `AGENTS.md`
 
-`AGENTS.md` § "How to compose gstack and superpowers" gains
-the following 1-paragraph anchor (insert before the closing
-`<!-- /board-superpowers:routing -->` marker, per AC6 of
-this card):
+`AGENTS.md` § "How to compose gstack and superpowers" carries
+a 1-paragraph anchor pointing back to this file (injected
+before the closing `<!-- /board-superpowers:routing -->`
+marker as part of the same PR that landed this file). The
+anchor's canonical text is:
 
 > **Manager-mode mirror**: this section's composition rules
 > are mirrored for the Producer's intake routine in
-> [`skills/managing-board/references/skill-routing.md`](./skills/managing-board/references/skill-routing.md).
+> [`skills/managing-board/references/skill-routing.md`](../../../skills/managing-board/references/skill-routing.md).
 > The two files MUST stay in sync — see the
 > change-impact-matrix row "AGENTS.md compose section ↔
 > skill-routing.md / scope-shape-judgment.md" in
-> [`docs/architecture/AGENTS.md`](./docs/architecture/AGENTS.md).
+> [`docs/architecture/AGENTS.md`](../../../docs/architecture/AGENTS.md).
 > If you edit one without the other, the PR is incomplete.
+
+If `AGENTS.md` ever drifts from this canonical text (anchor
+missing, wording diverged), the change-impact-matrix row
+referenced in the quote is the recovery path — re-injecting
+this anchor is a same-PR contract obligation.
 
 ## When this file is wrong
 
