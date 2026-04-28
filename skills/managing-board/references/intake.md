@@ -192,12 +192,11 @@ gating; they route to direct claim, not to #35.
 ## Decline policy
 
 If the requirement is misaligned with the project's premises
-(per the project's positioning doc / non-goals — see
-[`docs/architecture/0001-positioning.md`](../../../docs/architecture/0001-positioning.md)
-P1..P8 + non-goals), the intake routine produces a
-"we won't do this and here's why" response. The architect can
-override; the routine surfaces the conflict explicitly so the
-override is conscious.
+or non-goals (see
+[`docs/architecture/0001-positioning.md`](../../../docs/architecture/0001-positioning.md)),
+the intake routine produces a "we won't do this and here's
+why" response. The architect can override; the routine
+surfaces the conflict explicitly so the override is conscious.
 
 ## Worked retrofit traces
 

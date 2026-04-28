@@ -147,9 +147,20 @@ means for board-superpowers" #3 for the full rationale.
   [`docs/architecture/0002-product-features-and-flows/03-producer-surface.md`](./docs/architecture/0002-product-features-and-flows/03-producer-surface.md).
 - **Body target**: 300-400 lines.
 - **References folder**:
-  `references/{daily,intake,review-queue,triage}.md`
+  `references/{daily,intake,review-queue,triage,scope-shape-judgment,spec-first-checklist,skill-routing}.md`
   (retro / weekly-report / harness / hygiene deferred to
-  v1-complete).
+  v1-complete). The intake-routing trio
+  (`scope-shape-judgment` / `spec-first-checklist` /
+  `skill-routing`) lands alongside the extended
+  decision-tree in `intake.md`; together they encode the
+  shape + spec-first + sibling-routing judgments at
+  manager-mode intake. Anchored to four primary sources
+  (Cohn 2005 Planning Onion / Patton 2014 Story Map /
+  Cockburn 2004 Walking Skeleton / Denne 2003 MMF/MMR);
+  `skill-routing.md` is the manager-mode mirror of
+  `AGENTS.md` § "How to compose gstack and superpowers"
+  (paired same-PR per the change-impact-matrix row in
+  `docs/architecture/AGENTS.md`).
 - **Composes (atomic)**: `board-canon`,
   `enforcing-pr-contract` (Review Queue contract-violation
   check), `classifying-actions` + `auditing-actions` (every
