@@ -16,9 +16,11 @@ bash "${SCRIPT_DIR}/scripts/audit-init.sh"
 rc=$?
 [ $rc -eq 0 ] || { echo "FAIL: audit-init.sh exit $rc"; exit 1; }
 
-# Verify schema applied.
+# Verify schema applied. (#43 AC4 bumped fresh-init schema v1 → v2 with
+# event_uuid column + UNIQUE index; existing v1 DBs migrate via canonical
+# scripts/migrations/audit-v1-to-v2.sh on next audit-init.sh run.)
 sqlite_version=$(sqlite3 "${TMPDB}" "SELECT version FROM audit_schema_meta")
-[ "${sqlite_version}" = "1" ] || { echo "FAIL: schema_meta.version=${sqlite_version}"; exit 1; }
+[ "${sqlite_version}" = "2" ] || { echo "FAIL: schema_meta.version=${sqlite_version}"; exit 1; }
 
 # Verify table exists.
 tables=$(sqlite3 "${TMPDB}" ".tables")
