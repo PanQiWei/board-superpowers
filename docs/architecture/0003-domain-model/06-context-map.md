@@ -12,10 +12,12 @@ clarifies a seam**, not as decoration.
 
 The map below is intentionally lean — six edges total, four of
 them Customer-Supplier through GitHub. The two non-trivial seams
-are: (a) the BoardAdapter Anti-Corruption Layer between Board
-context's logical layer and the GitHub-Project-v2 substrate,
-and (b) the routing-block-marker pair between Bootstrap context
-and the host platform's CLAUDE.md / AGENTS.md surface.
+are: (a) the Kanban Protocol projection (Anti-Corruption Layer)
+between Board context's logical layer and the backend substrate
+(GitHub Project v2 today; Linear / Jira / future via their own
+projections per ADR-0012), and (b) the routing-block-marker pair
+between Bootstrap context and the host platform's CLAUDE.md /
+AGENTS.md surface.
 
 ---
 
@@ -23,12 +25,12 @@ and the host platform's CLAUDE.md / AGENTS.md surface.
 
 | # | From → To | Pattern | Channel | Notes |
 |---|-----------|---------|---------|-------|
-| 1 | Bootstrap → Board | Customer (one-shot at F-B2) | `BoardAdapter.get_status_options` validation | Bootstrap calls Board once to confirm Project v2 has all six required Status options. |
-| 2 | Session → Board | Customer (continuous) | `BoardAdapter.list_cards` / `get_card` / `set_card_status` + `gh issue comment` + `git push` (claim) + `gh pr create` (PR) | The dominant edge in v1. Every Producer + Consumer feature reads or writes Board context this way. |
+| 1 | Bootstrap → Board | Customer (one-shot at F-B2) | Kanban Protocol `read_board` (status-options validation) — v1 GitHubProjectAdapter projection realizes via `BoardAdapter.get_status_options` | Bootstrap calls Board once to confirm the backend has all six canonical Status options (or a fold-table mapping to them per the custom-state folding rule). |
+| 2 | Session → Board | Customer (continuous) | Kanban Protocol actions (`read_board` / `read_card` / `transition_card` / `create_card` / `claim_card` / `release_claim` / `link_pr_to_card` / `comment_on_card`) — v1 GitHubProjectAdapter projection realizes via `gh` CLI + `git push` (claim branch) | The dominant edge in v1. Every Producer + Consumer feature reads or writes Board context this way. |
 | 3 | Session → Bootstrap | Customer (read-only) | Filesystem read of `state.yml` / `config.yml` at session start | `using-board-superpowers` Step 1; `consuming-card` Step 0. |
 | 4 | (any) → Audit | Customer (write-only) | RDBMS INSERT into the BYO database | Every D-AUTONOMY-1 action writes an `AuditEntry`. Audit context is sink-only — never feeds back into other contexts' live decision loop. |
 | 5 | Session → Spec | Customer (read-only) | Filesystem read of repo-relative path / third-party storage GET | Consumer F-C2 fetches; Producer F-08/F-09 references. |
-| 6 | Board ↔ GitHub Project v2 substrate | **Anti-Corruption Layer** (BoardAdapter) | `gh project` / `gh issue` / `gh pr` calls inside the GitHubProjectAdapter | The translation layer between board-superpowers' canonical Status enum and the backend's native taxonomy. ADR-0005. |
+| 6 | Board ↔ backend substrate (GitHub Project v2 today; Linear / Jira / future) | **Anti-Corruption Layer** = Kanban Protocol projection | v1 GitHubProjectAdapter (Form A: bash + `gh project` / `gh issue` / `gh pr`); future Form B (plugin-shipped MCP server) / Form C (REST/GraphQL) projections per ADR-0012 | The translation layer between board-superpowers' canonical Kanban Protocol vocabulary and the backend's native taxonomy. Protocol contract: `0005-contracts/00-kanban-protocol.md`. v1 projection contract: ADR-0005 (rescoped). |
 
 Two more relationships exist conceptually but don't warrant
 their own row in the table:
@@ -62,9 +64,11 @@ return well-typed errors). The pattern dominates because
 board-superpowers' substrate commitments make every cross-
 context interaction a one-way request:
 
-- **Board context exposes BoardAdapter** to Bootstrap and
-  Session. Consumers of Board never assume Board's internal
-  shape; they go through the contract.
+- **Board context exposes the Kanban Protocol** to Bootstrap
+  and Session through whatever projection the backend ships.
+  Consumers of Board never assume Board's internal shape;
+  they reason in protocol terms and dispatch to the active
+  projection (the v1 GitHubProjectAdapter for github-project-v2).
 - **Audit context is a write-only sink** — write-only Customer-
   Supplier with the additional discipline that nobody reads back
   into the live loop.
@@ -76,55 +80,98 @@ context interaction a one-way request:
   channel.
 
 The pattern's symmetry is what makes the plugin
-backend-portable in principle — replace the BoardAdapter
-implementation, and the Customer-Supplier shape across edges
+backend-portable in principle — swap in a different Kanban
+Protocol projection (a new Form A / B / C realization for a
+new backend), and the Customer-Supplier shape across edges
 1, 2, and 6 stays the same; only the supplier's internals
 change.
 
 ---
 
-### 3.6.3 The Anti-Corruption Layer at BoardAdapter
+### 3.6.3 The Anti-Corruption Layer — Kanban Protocol projection
 
 The single edge in board-superpowers that genuinely warrants
 the **Anti-Corruption Layer** (ACL) name. Strategic-DDD ACL
 shape: a translation layer that prevents one context's
 vocabulary from leaking into another.
 
-**What it translates:**
+Per ADR-0012 the ACL is reframed: it is **the per-backend
+projection of the Kanban Protocol**
+(`0005-contracts/00-kanban-protocol.md`). The protocol is the
+canonical mental model — eight actions, six canonical states,
+the Board / Card / Status / Claim / PR Link / Label / Comment
+ontology, the `Card.key` opaque identifier, the
+`claim/<key-slug>-<title-slug>` branch-naming convention.
+**The projection IS the ACL**: each backend (GitHub Project v2
+today; Linear / Jira / future) ships a projection — Form A
+bash CLI, Form B plugin-shipped MCP server, Form C REST/GraphQL
+— that translates between the protocol's canonical vocabulary
+and the backend's native API. ADR-0005's five-method
+`BoardAdapter` surface remains valid AS the v1
+GitHubProjectAdapter implementation projection (Form A,
+bash + `gh` CLI), not as a universal contract every adapter
+must implement.
+
+**What the projection translates:**
 
 - Canonical `Status` enum
   (`Backlog | Ready | In Progress | In Review | Done | Blocked`)
   ↔ backend-native status names (GitHub Project v2 single-
-  select option names; future Linear / Jira native columns).
+  select option names; future Linear / Jira native columns,
+  with the custom-state folding rule from
+  `0005-contracts/00-kanban-protocol.md` § State machine).
 - Canonical `Card` value object ↔ backend-native issue+project
-  item shape.
+  item shape; canonical `Card.key` opaque identifier ↔
+  backend-native key (GitHub issue number `42`; Linear
+  `eng-42`; Jira `proj-42`).
+- Canonical action contracts (`read_board`, `read_card`,
+  `create_card`, `transition_card`, `claim_card`,
+  `release_claim`, `link_pr_to_card`, `comment_on_card`) ↔
+  backend-native operations. The v1 GitHubProjectAdapter
+  realizes these via the five ADR-0005 methods + claim push +
+  PR link conventions; future projections realize them via
+  whatever transport fits their backend.
 - Canonical `Result[T]` + `ErrorKind` enum
   (`not_found | permission | rate_limit | conflict |
   schema_mismatch | transport`) ↔ backend-native error
-  payloads (`gh` exit codes, REST error JSON, etc.).
+  payloads (`gh` exit codes, REST error JSON, etc.). Per
+  ADR-0012 the `Result[T]` shape belongs to ADR-0005's
+  Form A projection; alternative projections are NOT bound
+  to it.
 - Canonical `ProjectRef` ↔ backend-native project handle
-  (`OWNER/NUMBER` for GitHub; per-adapter parser for others).
+  (`OWNER/NUMBER` for GitHub Project v2 per ADR-0005; per-
+  projection parser for others).
 
-**What it deliberately does NOT translate** (ADR-0005 § Out of
-scope at v1):
+**What the projection deliberately does NOT translate** (per
+the protocol's "out of scope at v1" list and ADR-0005 § Out
+of scope at v1):
 
-- Backend-specific affordances (Linear's auto-creating labels;
-  GitHub's draft items; Jira's custom workflows). These are
-  either covered by the contract or explicitly excluded —
-  never exposed via escape hatches at v1.
+- Backend-specific affordances (Linear's cycles, Jira's
+  custom workflows, GitHub's draft items, native richer
+  label semantics like Linear team-vs-workspace). These
+  either fold to canonical at the projection layer or stay
+  backend-internal — they MUST NOT leak into agent-visible
+  vocabulary.
 - Backend-specific identifiers like `gh_pr_number` field on
-  `Card`. The ACL keeps backend-internal identifiers internal.
+  `Card`. The projection keeps backend-internal identifiers
+  internal.
 
-**Why this seam matters:** the ACL is what makes ADR-0001's
-pluggable-backend commitment falsifiable. Without it, every
+**Why this seam matters:** the projection-as-ACL is what makes
+ADR-0001's pluggable-backend commitment + ADR-0012's
+multi-projection commitment falsifiable. Without it, every
 new feature would tunnel a `gh`-shaped assumption into Board
-context, and the second-adapter cost would balloon. With it,
-the second adapter is a self-contained translation problem.
+context, and the second-projection cost would balloon. With
+it, the second projection is a self-contained translation
+problem — the agent always reasons in protocol terms.
 
-The ACL is the only place in the codebase where backend-
-specific code lives at v1; the GitHubProjectAdapter wrapper
-port (ADR-0005 § Consequences, 60-day deadline) consolidates
-the existing `gh`-bound scripts behind it.
+At v1 the projection is the only place in the codebase where
+backend-specific code lives; the GitHubProjectAdapter wrapper
+port (ADR-0005 § Consequences, re-anchored by ADR-0010)
+consolidates the existing `gh`-bound scripts behind it.
+Future Form B (MCP-server) projections — Linear via the
+official Linear MCP server, Jira via Atlassian Remote MCP —
+are recognized as valid projection shapes by ADR-0012; they
+do NOT inherit ADR-0005's bash-CLI shape.
 
 ---
 
@@ -158,10 +205,10 @@ flowchart LR
         AT[AuditTrail]
     end
 
-    Adapter[BoardAdapter\nAnti-Corruption Layer]:::acl
+    Adapter[Kanban Protocol projection\n(Anti-Corruption Layer)\nv1: GitHubProjectAdapter]:::acl
 
-    Bootstrap -->|edge 1\nget_status_options once at F-B2| Adapter
-    Session -->|edge 2\nlist/get/set/comment/push/PR\ncontinuous| Adapter
+    Bootstrap -->|edge 1\nstatus-options validation once at F-B2| Adapter
+    Session -->|edge 2\nprotocol actions\ncontinuous| Adapter
     Adapter -.->|translates to| Board
 
     Session -->|edge 3\nread state.yml + config.yml\nat session start| Bootstrap
@@ -181,15 +228,19 @@ Reading the picture:
 - **Edge 4 fans in to AuditTrail** from every context. That is
   the "audit-log uniformity" invariant I-8 visualized — same
   schema, every actor.
-- **The BoardAdapter box is the only `flowchart` node not
-  contained in any context's subgraph.** That placement
-  reflects its role: it doesn't *belong* to either side of
-  the seam; it IS the seam. (Strategic-DDD ACLs are
-  conceptually "owned by the downstream side" — the
-  consumers depending on the canonical vocabulary — so in a
-  stricter rendering this would live inside Board context.
-  Drawing it as a free-standing box highlights the
-  translation function.)
+- **The Kanban Protocol projection box is the only
+  `flowchart` node not contained in any context's
+  subgraph.** That placement reflects its role: it doesn't
+  *belong* to either side of the seam; it IS the seam.
+  (Strategic-DDD ACLs are conceptually "owned by the
+  downstream side" — the consumers depending on the canonical
+  vocabulary — so in a stricter rendering this would live
+  inside Board context. Drawing it as a free-standing box
+  highlights the translation function. The protocol document
+  is the canonical vocabulary; each projection — v1
+  GitHubProjectAdapter via Form A; future Linear / Jira via
+  Form B / C per ADR-0012 — implements that vocabulary on
+  one backend.)
 - **Spec is a thin participant.** Card.body references; Session
   reads. Nothing else interacts with Spec. That thinness is
   by design — board-superpowers refuses to grow opinions
@@ -201,9 +252,19 @@ Reading the picture:
 
 What would force the map to grow:
 
-- **Adding a second BoardAdapter** (Linear, Jira). No new edge;
-  the ACL accepts a new implementation. The map shape stays
-  identical. (This is the architectural payoff of the ACL.)
+- **Adding a second Kanban Protocol projection** (Linear,
+  Jira; per ADR-0012 also free to choose Form B MCP-server
+  shape over Form A bash CLI). No new edge; the projection-
+  as-ACL accepts a new implementation behind the protocol.
+  The map shape stays identical. (This is the architectural
+  payoff of the ACL.)
+- **Adding multi-kanban support** (one repo with multiple
+  boards — flagged in ADR-0012 as a v1.x roadmap item).
+  Today the Project aggregate is 1:1 with a board; under
+  multi-kanban it becomes 1:N. No new context edge — every
+  Session-side action gains a board-selection step internal
+  to the projection, and the canonical edges 1 / 2 / 6
+  stay shape-identical.
 - **Adding a second Audit-context backend** (e.g., a shipped
   SQLite adapter for solo architects who refuse Postgres).
   Currently rejected (ADR-0006 § Alternatives considered);

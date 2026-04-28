@@ -7,6 +7,19 @@
 > standard label set. Where canonical bodies live elsewhere
 > (`card-schema.md`, `pr-template.md`, `agentsmd-routing.md`), 0005
 > surfaces only the parsing contract and links.
+>
+> **Kanban Protocol scope (per ADR-0012).** This file is the v1
+> **GitHubProjectAdapter projection's** artifact contract — every
+> shape pinned here (Card body sections, ClaimMarker, PR sections,
+> routing markers, Project v2 Status enum, standard labels, branch
+> naming) is what the Kanban Protocol's eight actions / six states /
+> Card aggregate look like when the active backend is GitHub
+> Project v2. Future backend projections (Linear, Jira, future)
+> ship sibling artifact specs; the cross-backend semantic contract
+> lives in [`00-kanban-protocol.md`](./00-kanban-protocol.md). Where
+> this file says `Card.key` it is GitHub's Issue number; on a future
+> backend `Card.key` is whatever the backend assigns (per
+> [`00-kanban-protocol.md`](./00-kanban-protocol.md) § "Card.key").
 
 ---
 
@@ -84,7 +97,7 @@ synthesizer, etc.) parse Card bodies under these rules:
 ### Rationale
 
 - `card-schema.md` (canonical body + section-by-section guidance).
-- `board-protocol/SKILL.md` "Card body — schema".
+- `board-canon/SKILL.md` "Card body — schema".
 - §1.6.3 (decomposition surface card-schema invariants).
 - 0003 § 3.3.1 Card aggregate (CardBody member entity).
 
@@ -92,9 +105,13 @@ synthesizer, etc.) parse Card bodies under these rules:
 
 ## ClaimMarker file — schema + info-leak guard
 
-File path: `<repo>/.board-superpowers/claims/<N>.claim` on the
-**ClaimBranch only**. Gitignored locally; force-committed (`git
-add -f`) onto the claim branch by `claim-card.sh`.
+File path: `<repo>/.board-superpowers/claims/<key>.claim` on the
+**ClaimBranch only**, where `<key>` = `Card.key` (per
+[`00-kanban-protocol.md`](./00-kanban-protocol.md) § "Card.key").
+For the v1 GitHubProjectAdapter projection `<key>` is the GitHub
+Issue number — the v0.4.x byte form `<N>.claim` is preserved.
+Gitignored locally; force-committed (`git add -f`) onto the claim
+branch by `claim-card.sh`.
 
 ### v1 schema (YAML)
 
@@ -114,7 +131,7 @@ branch: <claim branch name, e.g. claim/42-oauth-callback>
 | `session` | string | yes | Session slug — `BOARD_SP_SESSION_SLUG` env var if set, else `s-$(date +%s)-$$` |
 | `claimed_at` | string (ISO 8601 UTC, `Z` suffix) | yes | When `claim-card.sh` wrote the file |
 | `base` | string (branch name) | yes | The base branch the claim was forked from (`main`, `master`, etc.) |
-| `branch` | string (`claim/<N>-<slug>`) | yes | The claim branch name |
+| `branch` | string (`claim/<key-slug>-<title-slug>`; v1 GitHub form preserves `claim/<N>-<slug>` byte layout) | yes | The claim branch name |
 
 ### Forbidden field — `worktree:`
 
@@ -191,7 +208,7 @@ Every PR body MUST end with the exact bytes:
 <!-- board-superpowers:pr -->
 ```
 
-Per `pr-template.md` + `board-protocol/SKILL.md` "PR body — schema"
+Per `pr-template.md` + `board-canon/SKILL.md` "PR body — schema"
 + 0003 § 3.3.2 PR aggregate "§1.8 marker required" invariant.
 
 `managing-board`'s Review Queue routine (F-02) keys off this marker
@@ -223,7 +240,7 @@ and `pr-template.md`):
 
 - §1.8 PR contract (canonical content + per-section rules).
 - `pr-template.md` (canonical template).
-- `board-protocol/SKILL.md` "PR body — schema".
+- `board-canon/SKILL.md` "PR body — schema".
 - 0003 § 3.3.2 PR aggregate.
 - F-C12 PR submission feature (`04-consumer-surface.md` §1.4.1).
 
@@ -342,7 +359,7 @@ via UI once.
 
 ### Allowed transitions (state machine)
 
-Pinned in `board-protocol/SKILL.md` and 0003 § 3.3.1 (Card aggregate
+Pinned in `board-canon/SKILL.md` and 0003 § 3.3.1 (Card aggregate
 state machine). 0005 reproduces the table:
 
 | From → To | Who | When |
@@ -370,12 +387,16 @@ GitHub stores.
 
 ### Cited rationale
 
-- `board-protocol/SKILL.md` "The board" + state machine.
+- `board-canon/SKILL.md` "The board" + state machine.
 - 0003 § 3.3.1 Card aggregate state machine invariant.
 - §1.5.2 F-B2 step 2 validation.
 - ADR-0001 (substrate-commitment posture explains why API doesn't
   create options).
-- ADR-0005 (BoardAdapter Status enum is the canonical type).
+- ADR-0005 — the v1 GitHubProjectAdapter projection's Status enum
+  is the canonical type **for this projection**; protocol-level
+  six-state semantics live in
+  [`00-kanban-protocol.md`](./00-kanban-protocol.md).
+- ADR-0012 — protocol-vs-projection layering.
 
 ---
 
@@ -418,21 +439,37 @@ failures.
 
 ---
 
-## Branch naming — `claim/<N>-<slug>`
+## Branch naming — `claim/<key-slug>-<title-slug>`
 
-Pattern:
+Protocol-level pattern (per [`00-kanban-protocol.md`](./00-kanban-protocol.md)
+§ "Branch naming convention"):
 
 ```
-claim/<card-number>-<short-slug>
+claim/<key-slug>-<title-slug>
 ```
 
-- `<card-number>` — positive integer (the GitHub Issue number).
-- `<short-slug>` — derived from the Card title via
+- `<key-slug>` — `slugify(Card.key)`. For the v1 GitHubProjectAdapter
+  projection (this file), `Card.key` IS the GitHub Issue number, so
+  `<key-slug>` is the integer rendered as decimal (e.g., `42`).
+  Slugification is identity for digits — `slugify('42') == '42'` —
+  which preserves backward compatibility with v0.4.x's
+  `claim/<N>-<slug>` form.
+- `<title-slug>` — derived from the Card title via
   `bsp_sanitize_slug` (lowercased, `[^a-z0-9-]+` → `-`, collapsed,
   ≤ 40 chars). The 40-char ceiling is dictated by GitHub's branch-
   picker UI truncation.
 
-This branch is three things at once (per `board-protocol/SKILL.md`
+> **Migration note (v0.4.x → v0.5.0).** Existing `claim/<N>-<slug>`
+> branches and the `claim-card.sh` Form A script remain valid — the
+> GitHub case `<key-slug>` of `42` slugifies to `42`, so the bytes
+> on the wire are identical for the v1 GitHubProjectAdapter
+> projection. The rename is semantic (the `<N>` placeholder becomes
+> `<key-slug>` so future backends with non-integer `Card.key` values
+> have an unambiguous form). `claim-card.sh` is retitled in spec to
+> `claim/<key-slug>-<title-slug>` once `operating-kanban` ships;
+> until then the v0.4.x byte layout is the v1 projection's lock.
+
+This branch is three things at once (per `board-canon/SKILL.md`
 "Branch naming"):
 
 - **Atomic lock** — first `git push --force-with-lease=<ref>:` wins.
@@ -442,8 +479,12 @@ This branch is three things at once (per `board-protocol/SKILL.md`
 
 ### Cited rationale
 
-- `board-protocol/SKILL.md` "Branch naming".
+- [`00-kanban-protocol.md`](./00-kanban-protocol.md) § "Branch
+  naming convention" — protocol-level form.
+- `board-canon/SKILL.md` "Branch naming" — in-session SPOT.
 - ADR-0002 (atomicity-via-git-push).
+- ADR-0012 — protocol promotion + `<N>` → `<key-slug>` rename
+  rationale.
 - §1.4.1 F-C1.
 - 0003 § 3.3.3 ConsumerLogical aggregate (ClaimBranch member
   entity).
@@ -452,9 +493,13 @@ This branch is three things at once (per `board-protocol/SKILL.md`
 
 ## Cross-references
 
+- [`00-kanban-protocol.md`](./00-kanban-protocol.md) — top-level
+  Kanban Protocol; this file is the v1 GitHubProjectAdapter
+  projection's artifact contract (per ADR-0012).
 - [`01-script-contracts.md`](./01-script-contracts.md) — the scripts
   that write these artifacts (`claim-card.sh`, `create-card.sh`,
-  `transition-card.sh`, `bootstrap-project.sh`).
+  `transition-card.sh`, `bootstrap-project.sh`); they are the v1
+  GitHubProjectAdapter projection's Form A (bash CLI) implementation.
 - [`03-config-schemas.md`](./03-config-schemas.md) —
   `state.yml:routing_blocks[]` (list of `{target_file, block_hash,
   injected_at}`) carries the hashes of all tracked routing-block
@@ -464,8 +509,10 @@ This branch is three things at once (per `board-protocol/SKILL.md`
 - [`07-path-conventions.md`](./07-path-conventions.md) — filesystem
   layout for `.board-superpowers/claims/<N>.claim`.
 - ADR-0001 (substrate commitment), ADR-0002 (claim via branch
-  push), ADR-0003 (worktree info-leak), ADR-0005 (BoardAdapter
-  Status enum), ADR-0006 (PR contract gating).
+  push), ADR-0003 (worktree info-leak), ADR-0005 (v1
+  GitHubProjectAdapter projection Status enum, scoped per
+  ADR-0012), ADR-0006 (PR contract gating), ADR-0012
+  (Kanban Protocol promotion).
 - §1.6 decomposition surface, §1.8 PR contract, I-9 / I-10 / I-11.
 - 0003 § 3.3.1 / 3.3.2 / 3.3.3 (Card / PR / ConsumerLogical
   aggregates).

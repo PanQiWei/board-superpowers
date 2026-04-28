@@ -99,9 +99,14 @@ at v1, grouped into 5 thematic clusters for readability.
   age range).
 - **Outputs**: structured data — list of cards, each with
   status, labels, assignees, PR refs, timestamps.
-- **Composes**: `gh project item-list` / `gh issue list` /
-  `gh pr list` (direct GitHub API), wrapped behind the
-  BoardAdapter contract from ADR-0005.
+- **Composes**: the Kanban Protocol's `read_board` action
+  ([`0005-contracts/00-kanban-protocol.md`](../0005-contracts/00-kanban-protocol.md)).
+  v1 realizes this via the GitHub Project v2 projection —
+  `gh project item-list` / `gh issue list` / `gh pr list`
+  (direct GitHub API), wrapped per the v1
+  GitHubProjectAdapter projection shape (ADR-0005, rescoped
+  by ADR-0012 from "universal adapter contract" to "v1 GitHub
+  projection's bash implementation shape").
 - **Maps to (canonical)**: Anderson 2010 *Kanban*, ch. 4 — the
   minimal "visualize work" read surface.
 - **Original framing**: wrapping GitHub's native query layer

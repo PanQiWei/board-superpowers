@@ -206,11 +206,20 @@ project: "OWNER/NUMBER"
 #   default_execution_skill: superpowers:subagent-driven-development
 ```
 
+> **Note (Kanban Protocol layering, per ADR-0012).** The top-level
+> `project:` field is the v1 GitHubProjectAdapter projection's
+> shape — it carries a GitHub-specific `OWNER/NUMBER` string. v0.5.0
+> introduces a forward-looking `kanban:` block (see "v0.5.0 planned
+> schema" below) where backend selection becomes explicit and
+> `project:` is rephrased as `project_ref:` (an opaque, backend-shaped
+> string). Until v0.5.0 lands and `operating-kanban` ships, the
+> top-level `project:` field is the only consumed source.
+
 ### Field types and defaults
 
 | Field | Type | Required? | Default | Notes |
 |-------|------|-----------|---------|-------|
-| `project` | string in `OWNER/NUMBER` form (YAML quoting is stylistic; the value is the bare string) | yes | — | Round-trip stable per ADR-0005 (BoardAdapter `parse / serialize`). The example `project: "OWNER/NUMBER"` is YAML-quoted only to avoid the `/` parser quirk; `project: OWNER/NUMBER` is also valid. |
+| `project` | string in `OWNER/NUMBER` form (YAML quoting is stylistic; the value is the bare string) | yes | — | Round-trip stable per ADR-0005's v1 GitHubProjectAdapter projection (`parse / serialize`). The example `project: "OWNER/NUMBER"` is YAML-quoted only to avoid the `/` parser quirk; `project: OWNER/NUMBER` is also valid. Once v0.5.0's `kanban:` block lands, this top-level field reads as a deprecated alias for `kanban.project_ref` when the backend is `github-project-v2`. |
 | `base_branch` | string (branch name) | no (commented placeholder) | `main` (auto-detected from `origin/HEAD`) | Future; not yet read by `claim-card.sh` |
 | `default_execution_skill` | string | no (commented placeholder) | `superpowers:subagent-driven-development` | Future |
 
@@ -262,11 +271,80 @@ existing hand-editable convention. Editing `config.yml` is the
 architect's prerogative; the plugin reads it and never rewrites it
 beyond the initial `bootstrap-project.sh` write.
 
+### `kanban:` block — v0.5.0 planned schema (NOT YET SHIPPED)
+
+> **Status:** forward-looking. Not yet shipped. The block lands in
+> `bootstrap-project.sh` once the `operating-kanban` atomic skill
+> ships in v0.5.0 (per ADR-0012 + [`00-kanban-protocol.md`](./00-kanban-protocol.md)).
+> Documented here so consuming code authored against v0.5.0 has a
+> single canonical schema reference; pre-v0.5.0 plugin builds MUST
+> ignore an unknown `kanban:` block silently rather than fail.
+
+The v0.5.0 `kanban:` block makes backend selection explicit and
+factors out the GitHub-shaped `project:` field into a backend-shaped
+opaque `project_ref` string. Per [`00-kanban-protocol.md`](./00-kanban-protocol.md)
+the protocol is backend-agnostic; `kanban:` is where the active
+**projection** is named.
+
+```yaml
+kanban:
+  backend: github-project-v2          # enum: github-project-v2 (linear/jira are v1.x roadmap)
+  project_ref: <opaque-string>        # backend-shaped; GitHub uses OWNER/PROJECT_NUMBER (e.g., PanQiWei/3)
+  compliance: L0|L1|L2|L3             # advertised compliance level per Kanban Protocol
+```
+
+#### v0.5.0 field types and defaults
+
+| Field | Type | Required? | Default | Notes |
+|-------|------|-----------|---------|-------|
+| `kanban.backend` | string enum | yes (when `kanban:` block present) | — | v0.5.0 ships `github-project-v2` only. `linear` / `jira` / future backends are v1.x roadmap; adding a value requires a same-PR `operating-kanban/references/<backend>.md` reference per the protocol "second-adapter authors" contract. |
+| `kanban.project_ref` | string (opaque, backend-shaped) | yes | — | Parsed and round-trip-stable per the active backend's projection, NOT per the protocol. For `github-project-v2`: `OWNER/PROJECT_NUMBER` (same shape the legacy top-level `project:` field carried). Per [`00-kanban-protocol.md`](./00-kanban-protocol.md) `Card.key` / identity rules: `project_ref` is opaque to the agent — never parsed past what the backend reference declares. |
+| `kanban.compliance` | string enum `L0` \| `L1` \| `L2` \| `L3` | yes | `L1` (when omitted; subject to v0.5.0 finalization) | Advertised compliance level. Authoritative semantics live in [`00-kanban-protocol.md`](./00-kanban-protocol.md). The `operating-kanban` skill reads this field to decide which actions are guaranteed available on this backend / this repo. |
+
+#### Migration from the v0.4.x top-level `project:` field
+
+Legacy v0.4.x and earlier `config.yml` files carry `project:
+"OWNER/NUMBER"` at the top level. v0.5.0 plugin builds MUST treat
+that as equivalent to:
+
+```yaml
+kanban:
+  backend: github-project-v2
+  project_ref: <legacy-project-value>
+  compliance: <v0.5.0 default>
+```
+
+`bootstrap-project.sh` re-runs in v0.5.0 SHOULD write the explicit
+`kanban:` block; an architect who hand-edits MAY add it directly.
+The legacy top-level `project:` field is read-compatible
+indefinitely — removal would be a breaking change requiring its own
+ADR.
+
+#### Multi-kanban open question (v1.x roadmap)
+
+The schema above assumes one kanban per repo. ADR-0012 § "Multi-
+kanban support is v1.x roadmap" notes that one repo MAY have
+multiple kanbans (e.g., a feature board + a security-issue board).
+Whether v0.5.0 ships `kanban:` (singular block) or `kanbans:` (list
+of blocks) is **NOT YET DECIDED** — the singular form ships first if
+the simpler shape arrives ahead of the multi-kanban use case; the
+plural form ships if multi-kanban demand pulls forward. Either
+way, when multi-kanban lands the schema gains a `default:` selector
+and per-card `kanban:` references in the body.
+
+Implementers writing v0.5.0 against this schema SHOULD plan for a
+list-form refactor and avoid hard-coding singular access patterns
+in the consuming `operating-kanban` skill body.
+
 ### Rationale link
 
 - §1.5.2 F-B2 — initial write by `bootstrap-project.sh`.
 - I-11, I-13.
-- ADR-0005 (BoardAdapter — `project:` round-trip stability).
+- ADR-0005 — v1 GitHubProjectAdapter projection (round-trip
+  stability of `project:` / `project_ref:` for the GitHub backend).
+- ADR-0012 + [`00-kanban-protocol.md`](./00-kanban-protocol.md) —
+  Kanban Protocol top-level contract; rationale for the `kanban:`
+  block's backend / project_ref / compliance shape.
 - 0003 § 3.3.7 RepoConfig aggregate — entity home.
 - [`06-audit-log-schema.md`](./06-audit-log-schema.md) —
   action_id 113 (post-merge cleanup audit row) that
@@ -582,9 +660,15 @@ Registry pattern.
 
 ## Cross-references
 
+- [`00-kanban-protocol.md`](./00-kanban-protocol.md) — top-level
+  Kanban Protocol; the v0.5.0 `kanban:` block above names the
+  active backend projection and its compliance level.
 - [`05-github-artifact-schemas.md`](./05-github-artifact-schemas.md) —
   routing-block marker pair format; `block_hash` is the bridge
-  between this file and `state.yml`.
+  between this file and `state.yml`. The artifact schemas in 05
+  are specifically the v1 GitHubProjectAdapter projection's
+  contracts; under the `kanban:` block they apply when
+  `kanban.backend = github-project-v2`.
 - [`06-audit-log-schema.md`](./06-audit-log-schema.md) — the
   `action_id` numbers `autonomy_overrides[].action_id` references.
 - [`07-path-conventions.md`](./07-path-conventions.md) — the

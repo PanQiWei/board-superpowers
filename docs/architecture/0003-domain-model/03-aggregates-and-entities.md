@@ -31,7 +31,15 @@ question "what is this thing":
 The leaf work item. The entity Producers create, Consumers
 claim, the architect verifies. Spans Board context.
 
-**Root.** `Card` — identified by `(ProjectRef, CardNumber)`.
+**Root.** `Card` — identified by `(ProjectRef, Card.key)` where
+`Card.key` is the Kanban Protocol's opaque, display-stable,
+unparseable identifier (`0005-contracts/00-kanban-protocol.md`
+§ Identity). For the v1 GitHubProjectAdapter projection the
+`Card.key` value happens to equal the GitHub Issue number's
+string form (`42`, `137`); on future projections it takes the
+backend-native form (Linear `eng-42`; Jira `proj-42`). The
+glossary entry `CardNumber` (§3.1) remains valid as the GitHub-
+shape value backing v1's `Card.key`.
 
 **Member entities.**
 
@@ -54,7 +62,10 @@ claim, the architect verifies. Spans Board context.
 - **ClaimMarker (transient when alive).** When the Card is in
   `In Progress` / `In Review`, exactly one ClaimMarker file
   exists on origin under
-  `.board-superpowers/claims/<N>.claim` on the ClaimBranch.
+  `.board-superpowers/claims/<key>.claim` on the ClaimBranch
+  (where `<key>` is `Card.key`; under the v1 GitHubProjectAdapter
+  projection this resolves to the GitHub issue number, e.g.,
+  `.board-superpowers/claims/42.claim`).
   Logically a member entity of Card, but **physically owned
   by the ConsumerLogical aggregate** (3.3.3) — its existence
   on origin is the proof Card is claimed; its lifecycle is
@@ -64,10 +75,20 @@ claim, the architect verifies. Spans Board context.
 **Value objects.**
 
 - **CardNumber** — integer `N` GitHub assigns at issue
-  creation.
-- **Slug** — derived once from Card title (lowercase-hyphenated,
-  ≤ 40 chars). Stable for the Card's lifetime; locked into the
-  ClaimBranch name.
+  creation. Backs `Card.key` under the v1 GitHubProjectAdapter
+  projection. Future projections (Linear / Jira) carry their
+  own backend-native key shape (`eng-42`, `proj-42`); the
+  protocol-layer abstraction is `Card.key` per
+  `0005-contracts/00-kanban-protocol.md` § Identity.
+- **KeySlug** — `slugify(Card.key)` — lowercase, alphanumeric
+  + hyphens. Per the Kanban Protocol branch-naming convention
+  `claim/<key-slug>-<title-slug>`. Under v1's GitHub projection,
+  `slugify("42")` is `"42"`, so existing `claim/<N>-<slug>`
+  branches remain valid.
+- **Slug (= TitleSlug)** — derived once from Card title
+  (lowercase-hyphenated, ≤ 40 chars). Stable for the Card's
+  lifetime; locked into the ClaimBranch name as the
+  `<title-slug>` half of `claim/<key-slug>-<title-slug>`.
 - **Status** — typed enum from ADR-0005:
   `Backlog | Ready | In Progress | In Review | Done | Blocked`.
 - **Estimate** — `XS | S | M | L`. `XL` is invalid by design
@@ -115,13 +136,26 @@ claim, the architect verifies. Spans Board context.
 
 **Physical location.**
 
-- **Card identity + Status field** — one row in the GitHub
-  Project v2 items table, indexed by `(ProjectRef, CardNumber)`.
-- **CardBody + LabelSet + thread** — one GitHub Issue.
+- **Card identity + Status field** — under v1 the
+  GitHubProjectAdapter projection stores this as one row in
+  the GitHub Project v2 items table, indexed by
+  `(ProjectRef, Card.key)` (the GitHub Issue number backs
+  `Card.key`). Other projections (Linear / Jira / future)
+  carry the same logical identity in their own backend's
+  storage.
+- **CardBody + LabelSet + thread** — under v1 stored as one
+  GitHub Issue; the body markdown obeys the protocol-level
+  body schema (`0005-contracts/00-kanban-protocol.md` §
+  Body schema). Backends without native markdown convert at
+  the projection layer; agents always read and write
+  markdown.
 - **ClaimMarker (when alive)** — one file at
-  `.board-superpowers/claims/<N>.claim` on the
-  `claim/<N>-<slug>` ref on origin. Lifecycle owned by
-  ConsumerLogical (3.3.3).
+  `.board-superpowers/claims/<key>.claim` on the
+  `claim/<key-slug>-<title-slug>` ref on origin. Under v1's
+  GitHub projection, `<key>` is the GitHub issue number and
+  the path resolves to `.board-superpowers/claims/42.claim`
+  on `claim/42-fix-bug`. Lifecycle owned by ConsumerLogical
+  (3.3.3).
 
 ---
 
@@ -164,10 +198,17 @@ sections) operates independently of Card.status transitions.
 **Value objects.**
 
 - **PRNumber** — GitHub-assigned integer.
-- **CardLink** — back-reference to the Card via
-  `Closes #<CardNumber>`.
-- **TitleShape** — recommended `[card:#N] <verb> <area>`
+- **CardLink** — back-reference to the Card. Under v1's GitHub
+  projection this is the `Closes #<CardNumber>` syntax that
+  GitHub auto-resolves on merge; the protocol-level requirement
+  (per `0005-contracts/00-kanban-protocol.md` § PR Link) is
+  bidirectional discoverability — from `Card.url` an agent can
+  navigate to the PR; from the PR an agent can navigate back
+  to `Card.key`. Future projections may realize the link via
+  Linear's git-integration or Jira's smart-commit syntax.
+- **TitleShape** — recommended `[card:#<key>] <verb> <area>`
   (strong recommend per F-C12; not enforced by the contract).
+  Under v1's GitHub projection `<key>` is the issue number `N`.
 
 **Invariants enforced at root.**
 
@@ -207,22 +248,29 @@ The kanban-relative Consumer role binding to one Card. The
 Mode-2-resume path. Spans Session context.
 
 **Root.** `ConsumerLogical` — identified by
-`(ProjectRef, CardNumber)`. Persists across
-ConsumerProcess incarnations.
+`(ProjectRef, Card.key)`. Persists across ConsumerProcess
+incarnations.
 
 **Member entities.**
 
-- **ClaimBranch** — the `claim/<N>-<slug>` ref on origin.
-  Created atomically by `git push --force-with-lease=<ref>:`
-  (ADR-0002). Acts as: distributed lock + feature branch +
-  debugging aid (§1.4.1 F-C1). Lifecycle bound to
-  ConsumerLogical: created at F-C1, deleted at F-C14
-  success path (after merge GitHub auto-deletes; after
-  failure path the branch may be cleaned by architect).
+- **ClaimBranch** — the `claim/<key-slug>-<title-slug>` ref on
+  origin (per the Kanban Protocol branch-naming convention,
+  `0005-contracts/00-kanban-protocol.md` § Identity). Under
+  v1's GitHub projection `slugify(Card.key)` of `42` is `42`,
+  so the form reduces to `claim/42-fix-auth-bug` and existing
+  branches remain valid. Created atomically by
+  `git push --force-with-lease=<ref>:` (ADR-0002). Acts as:
+  distributed lock + feature branch + debugging aid (§1.4.1
+  F-C1). Lifecycle bound to ConsumerLogical: created at F-C1,
+  deleted at F-C14 success path (after merge GitHub auto-
+  deletes; after failure path the branch may be cleaned by
+  architect).
 - **ClaimMarker** — the file
-  `.board-superpowers/claims/<N>.claim` (YAML; see §3.1
-  glossary entry for fields). Force-committed onto the
-  ClaimBranch even though gitignored locally. Visible on
+  `.board-superpowers/claims/<key>.claim` (YAML; see §3.1
+  glossary entry for fields). Under v1's GitHub projection
+  `<key>` is the issue number, e.g.,
+  `.board-superpowers/claims/42.claim`. Force-committed onto
+  the ClaimBranch even though gitignored locally. Visible on
   origin as proof of claim.
 - **Worktree** — filesystem checkout paired with the
   ClaimBranch. Default location:
@@ -502,10 +550,18 @@ the supported mutation path (versus plugin-rewrite).
 
 **Value objects.**
 
-- **ProjectRef** — the `OWNER/NUMBER` string identifying the
-  GitHub Project v2 (canonical at v1; abstract over
-  BoardAdapter from ADR-0005). Roundtrip-stable per
-  ADR-0005 type definitions.
+- **ProjectRef** — opaque identifier for the active board,
+  parsed by the active Kanban Protocol projection
+  (`0005-contracts/00-kanban-protocol.md` § Implementation
+  surface). Under the v1 GitHubProjectAdapter projection
+  this is the `OWNER/NUMBER` string identifying the GitHub
+  Project v2; future Linear / Jira projections carry their
+  own `parse` / `serialize` rules. Roundtrip-stable per
+  ADR-0005's type definitions (now rescoped to "the v1
+  GitHubProjectAdapter implementation projection" by
+  ADR-0012). Stored under the
+  `<repo>/.board-superpowers/config.yml § kanban:` block per
+  `0005-contracts/03-config-schemas.md`.
 - **WipLimit** — positive integer; default `5`. Bound to the
   WIP soft-limit invariant (I-6).
 - **WorktreeDirOverride (optional).** Two override paths:
@@ -529,8 +585,11 @@ the supported mutation path (versus plugin-rewrite).
   matching the existing hand-editable convention.
 - **I-13 tracked in git** — team-shared by definition.
 - **`ProjectRef` parse roundtrip-stable** — changing the
-  string by hand requires `BoardAdapter.parse()` to accept
-  the new value (ADR-0005 type contract).
+  string by hand requires the active Kanban Protocol
+  projection's `parse()` to accept the new value (ADR-0005
+  type contract under v1's GitHubProjectAdapter; future
+  projections carry their own `parse` rule per
+  `0005-contracts/00-kanban-protocol.md`).
 
 **Physical location.** `<repo>/.board-superpowers/config.yml`.
 
@@ -678,8 +737,8 @@ Detailed diagrams in `05-relationships.md`.
 | **ProducerSession** ↔ **Project** | At most 1 active ProducerSession per Project (informal; §1.3.1) |
 | **ProducerSession** ↔ **PreflightSnapshot** | 1 ↔ 0..N over time, exactly 1 alive at any given prompt boundary |
 | **HostManifest** ↔ machine | 1 ↔ 1 |
-| **RepoState** ↔ Project | 1 ↔ 1 |
-| **RepoConfig** ↔ Project | 1 ↔ 1 |
+| **RepoState** ↔ Project | 1 ↔ 1 (multi-kanban — 1 repo : N boards — is a v1.x roadmap item per ADR-0012; if it lands, RepoState gains a per-board sub-key but the aggregate boundary stays). |
+| **RepoConfig** ↔ Project | 1 ↔ 1 (same multi-kanban caveat). |
 | **AuditTrail** ↔ AuditEntry | 1 ↔ 0..N (append-only) |
 | **AuditTrail** ↔ Project | 1 ↔ 1 (or 1 ↔ N globally — precise scoping TBD-5) |
 | **Card** ↔ **AuditEntry** | 1 ↔ 0..N (every Card-mutating action emits an entry; reads do not) |

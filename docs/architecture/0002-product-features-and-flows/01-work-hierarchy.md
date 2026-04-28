@@ -18,11 +18,16 @@ Project
                                                      mainlines)
 ```
 
-- **Project** — a single repo / single board scope. One-to-one
-  with a GitHub Project v2 (per ADR-0001).
+- **Project** — a single repo / single board scope. The Kanban
+  Protocol ([`0005-contracts/00-kanban-protocol.md`](../0005-contracts/00-kanban-protocol.md))
+  is the universal contract; v1 ships the GitHub Project v2
+  projection (per ADR-0001 + ADR-0005). One Project is one
+  Kanban (`Card.key` opaque identifier per the protocol; under
+  GitHub the key slugifies to the issue number).
 - **Milestone** — a deliverable outcome bucket. Has a goal
-  description and an optional target date. Maps to GitHub
-  Project's native Milestone field at v1.
+  description and an optional target date. Realized in v1
+  via the GitHub Project v2 native Milestone field; the
+  protocol-level Milestone concept is backend-agnostic.
 - **Thread** — a named work mainline (工作主线) that groups
   related Cards across Milestones by thematic continuity.
   Closest agile-canonical equivalents: **Epic** (Scrum / Jira)

@@ -79,10 +79,14 @@ single end-to-end delivery.
 - **One-card-one-worktree invariant**: every Consumer session
   binds to exactly one card and runs all post-claim work
   inside one worktree (`claim-card.sh`'s creation, default at
-  `$HOME/.config/superpowers/worktrees/<project>/claim/<N>-<slug>`).
-  N parallel Consumers therefore never share HEAD. The
-  worktree persists across Mode-2 terminate-and-resume cycles
-  and across Mode-2 wake-up.
+  `$HOME/.config/superpowers/worktrees/<project>/claim/<key-slug>-<title-slug>`
+  per the Kanban Protocol branch-naming rule;
+  v0.4.x's `claim/<N>-<slug>` was generalized in v0.5.0 per
+  ADR-0012, and the GitHub projection's `<key-slug>` of
+  issue number `42` slugifies to `42` so existing branches
+  remain valid). N parallel Consumers therefore never share
+  HEAD. The worktree persists across Mode-2 terminate-and-
+  resume cycles and across Mode-2 wake-up.
 - **Thin-pointer card**: the Card body (per
   `decomposing-into-milestones/references/card-schema.md`) is
   the Producer's contract surface, but for cards that need
@@ -154,21 +158,28 @@ isolated."
 > exists; nothing below F-C1 calls `git push` directly.
 
 - **Capability**: claim a Ready card atomically by pushing a
-  remote `claim/<N>-<slug>` branch. First push wins; race
-  losers exit cleanly with code 10 and never retry. Side
-  effect: a marker file (`.board-superpowers/claims/<N>.claim`)
-  is force-added to the claim branch as on-origin proof of
+  remote `claim/<key-slug>-<title-slug>` branch (Kanban
+  Protocol branch-naming rule per ADR-0012; under the v1
+  GitHub projection `<key-slug>` is the slugified
+  `Card.key` which equals the issue number, so the branch
+  shape is byte-identical to the historical
+  `claim/<N>-<slug>`). First push wins; race losers exit
+  cleanly with code 10 and never retry. Side effect: a marker
+  file (`.board-superpowers/claims/<key-slug>.claim`) is
+  force-added to the claim branch as on-origin proof of
   claim. The branch is simultaneously (a) the atomic lock,
   (b) the feature branch the PR will target, and
   (c) a debugging aid (`git branch -r | grep claim/`).
-- **Inputs**: card number `N`, short slug derived from card
-  title (≤ 40 chars per `board-protocol`), optional
-  `BOARD_SP_WORKTREE_DIR` / `.worktrees/` overrides, optional
-  `BOARD_SP_SESSION_SLUG` for session tagging.
+- **Inputs**: `Card.key` (opaque protocol identifier; under
+  GitHub it equals the issue number `N`), short title-slug
+  derived from card title (≤ 40 chars per `board-canon`),
+  optional `BOARD_SP_WORKTREE_DIR` / `.worktrees/` overrides,
+  optional `BOARD_SP_SESSION_SLUG` for session tagging.
 - **Outputs**: structured stdout — exactly two lines,
-  `branch=claim/<N>-<slug>` then `worktree=<absolute path>`.
-  Side effect: claim branch on origin with marker file;
-  isolated worktree at the resolved path.
+  `branch=claim/<key-slug>-<title-slug>` then
+  `worktree=<absolute path>`. Side effect: claim branch on
+  origin with marker file; isolated worktree at the resolved
+  path.
 - **Composes**: `scripts/claim-card.sh` (the public-contract
   script) wrapping `git push --force-with-lease=<ref>:` for
   the lock + `git worktree add` for isolation, in one atomic
@@ -193,10 +204,13 @@ isolated."
   Producer authored during Backlog → Ready (per ADR-0006 row 5
   precondition). Validate that the input bundle is complete
   before delegating implementation.
-- **Inputs**: card number `N` (already bound from kick-off or
-  F-C0 selection); the card body's section schema (Context /
-  Acceptance Criteria / Out of Scope / Size / optional
-  Execution Hints) per `board-protocol`.
+- **Inputs**: `Card.key` (already bound from kick-off or
+  F-C0 selection — the `[board-card:#N]` trigger token's `N`
+  is the user-facing display of the key, which under the
+  v1 GitHub projection equals the issue number); the card
+  body's section schema (Context / Acceptance Criteria /
+  Out of Scope / Size / optional Execution Hints) per
+  `board-canon`.
 - **Outputs**: a synthesized **plan brief** at
   `docs/board-superpowers/plans/card-<N>.md` (gitignored;
   Consumer-session scratch). The card body on GitHub remains
@@ -234,8 +248,9 @@ isolated."
   `In Progress`; first card comment posted with session slug,
   branch name, and worktree path.
 - **Composes**: `cd` (process state) + `scripts/transition-
-  card.sh` (Project v2 status mutation) + `gh issue comment`
-  (audit-trail comment).
+  card.sh` (Kanban Protocol `transition_card` action; under
+  the v1 GitHub projection this performs a Project v2 status
+  mutation) + `gh issue comment` (audit-trail comment).
 - **Maps to (canonical)**: Anderson 2010 — kanban "pull"
   visualization (the pulled card visibly moves to In Progress).
 - **Mode compatibility**: both.

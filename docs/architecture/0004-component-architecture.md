@@ -51,7 +51,8 @@ This file pins both as tables. Anything more elaborate belongs in
 | Decompose requirement into cards | skill (`decomposing-into-milestones`) | references for INVEST + slicing patterns | Pure model behavior; no atomicity, no exit codes — exactly the skill sweet spot. |
 | Manager daily/intake/review/retro routines | skill (`managing-board`) | one reference per routine | Model-driven workflows reading the board via `gh` and recommending action. |
 | Consumer implementation lifecycle | skill (`consuming-card`) | superpowers/gstack skill chain | Delegates the actual work via skill invocation; the body is glue + protocol enforcement. |
-| Shared state machine + card schema | skill (`board-protocol`) | — | Loaded into every Manager and Consumer session as common context. No execution — pure shared contract. |
+| Shared state machine + card schema | skill (`board-canon`) | — | Loaded into every Manager and Consumer session as common context. No execution — pure shared contract. The schema's protocol-level semantics live in [`0005-contracts/00-kanban-protocol.md`](./0005-contracts/00-kanban-protocol.md); this skill is the in-session SPOT that surfaces them to agents. |
+| Kanban backend dispatch (action invocation per active projection) | skill (`operating-kanban`, ships v0.5.0) | per-backend reference files (`references/<backend>.md`) | Atomic SPOT for "given the active `kanban.backend`, how does the agent perform action X". v1 (pre-v0.5.0) lacks this skill — every Producer / Consumer skill inlines GitHub-specific `gh` invocations directly against the v1 GitHubProjectAdapter projection (per ADR-0012). |
 | Audit-log writes (per ADR-0006) | script (TBD; wraps `psql` / `mysql`) | called from Manager and Consumer skills | RDBMS connection + transaction handling needs a script wrapper. Skills cannot hold a DB session. |
 | Routing-block injection into `CLAUDE.md` / `AGENTS.md` | script (`bootstrap-project.sh`) | — | Filesystem mutation with idempotency + marker-pair check — script semantics. |
 | Host-local `state.yml` read/update | helper in `scripts/lib/common.sh` | called from any script that needs it | Shared helper across scripts; not a top-level capability. Path resolution per 0005-contracts/07. |
@@ -178,8 +179,26 @@ a daemon by another name and violate ADR-0007 C-PLUGIN-2.
 
 ## Decision references
 
+- **Kanban Protocol** ([`0005-contracts/00-kanban-protocol.md`](./0005-contracts/00-kanban-protocol.md))
+  — top-level semantic contract. Decision 2's
+  capability-to-slot mapping above is itself the v1
+  GitHubProjectAdapter projection's component shape; future
+  backends (Linear / Jira / future) project to different slot
+  inhabitants while preserving the action / state semantics. The
+  `operating-kanban` skill (v0.5.0) is the SPOT that owns the
+  per-backend dispatch (mirrors `enforcing-pr-contract` /
+  `classifying-actions` / `auditing-actions` as a kanban-level
+  reflex).
 - **ADR-0001** — GitHub Project as source of truth → forces "skill
-  reads via `gh`, script writes via `gh`".
+  reads via `gh`, script writes via `gh`" for the v1 GitHub
+  projection. Generalized to "skill reads via the active
+  projection's transport, writes via the same transport" once
+  `operating-kanban` ships.
+- **ADR-0012** — Kanban Protocol promotion. Rescopes ADR-0005
+  from "universal BoardAdapter contract" to "v1
+  GitHubProjectAdapter projection"; introduces backend
+  projection forms (Form A bash CLI / Form B plugin-shipped MCP
+  server / Form C REST/GraphQL).
 - **ADR-0002** — Atomic claim via remote branch push → forces
   `claim-card.sh` into the script slot (atomicity needs exit codes).
 - **ADR-0003** — One worktree per Consumer → bundled into

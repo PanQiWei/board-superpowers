@@ -99,15 +99,24 @@ only the qualitative-learning half.
 
 #### 1.8.4 `Closes #<card>` trailer (Contract C)
 
-**Required on every Consumer PR.** The trailing
+**Required on every Consumer PR.** This contract is
+projection-specific to the v1 GitHub projection: the trailing
 `Closes #<card>.` line (or any of the 9 GitHub-sanctioned
 forms `close[ds]?` / `fix(?:e[ds])?` / `resolve[ds]?`,
 case-insensitive) is what tells GitHub to register the
 PR↔Issue link via the `closingIssuesReferences` GraphQL field
 and fire the merge → Issue-close → ProjectV2 Auto-close
-webhook chain on merge. Without it: Issue stays open after
-PR merge, ProjectV2 Auto-close workflow never triggers, and
-the Consumer falls into the manual recovery path described in
+webhook chain on merge. At the Kanban Protocol level
+([`0005-contracts/00-kanban-protocol.md`](../0005-contracts/00-kanban-protocol.md))
+this is the `link_pr_to_card` action — under the GitHub
+projection, the trailer's `<card>` is the `Card.key`
+slugified to issue number, and the projection realizes the
+link via the auto-close keyword. Other projections (Linear /
+Jira / future) realize `link_pr_to_card` differently per
+their backend's PR↔ticket linking mechanism.
+Without the trailer: Issue stays open after PR merge,
+ProjectV2 Auto-close workflow never triggers, and the
+Consumer falls into the manual recovery path described in
 the `consuming-card` Step 12 Stage (a) procedure
 (manual `gh issue close` + manual `gh project item-edit`,
 recorded as `recovery_path: "manual close + manual status flip"`

@@ -87,19 +87,29 @@ ADR-0006 row 6). Source: ADR-0005 (Status type), `board-protocol`
 `03-aggregates-and-entities.md` § Card and
 `05-relationships.md`.
 
-**BoardAdapter.** The contract every backend (GitHub Project
-v2, Linear, Jira, etc.) implements. Five methods: `list_cards`,
-`get_card`, `get_status_options`, `create_card`,
-`set_card_status` + `parse` / `serialize` for `ProjectRef`.
-Source: ADR-0005. Expanded in: `02-bounded-contexts.md`
-(Board context boundary) and `06-context-map.md` (the
-Anti-Corruption Layer seam).
+**BoardAdapter** *(rescoped per ADR-0012)*. The five-method
+surface (`list_cards`, `get_card`, `get_status_options`,
+`create_card`, `set_card_status` + `parse` / `serialize` for
+`ProjectRef`) defining **the v1 GitHubProjectAdapter
+implementation projection** (Form A: bash + `gh` CLI). Was
+originally framed as "the contract every adapter must
+implement"; ADR-0012 rescopes it to one specific
+realization of the Kanban Protocol on the GitHub Project v2
+backend. Other backends realize the same protocol via their
+own projections (Form B MCP server, Form C REST/GraphQL),
+which are NOT bound to ADR-0005's signature. See
+**Kanban Protocol** for the universal contract. Source:
+ADR-0005 (rescoped); ADR-0012; `0005-contracts/00-kanban-
+protocol.md`. Expanded in: `02-bounded-contexts.md` (Board
+context boundary) and `06-context-map.md` § 3.6.3 (the
+Anti-Corruption Layer = Kanban Protocol projection seam).
 
 **Board context.** The bounded context owning Card / Status /
 Project / Label / ClaimMarker (logical layer). Talks to every
-other context via the BoardAdapter or via GitHub artifacts
-directly. Source: this directory. Expanded in:
-`02-bounded-contexts.md`.
+other context via the Kanban Protocol projection (the v1
+GitHubProjectAdapter at ADR-0005, anchored by ADR-0012) or
+via backend artifacts directly. Source: this directory.
+Expanded in: `02-bounded-contexts.md`.
 
 **Board Manager.** The specific Producer role at v1
 (§1.3.1 — long-lived, aggregate-view, architect-initiated).
@@ -119,19 +129,53 @@ directory. Expanded in: `02-bounded-contexts.md`.
 
 ### C
 
-**Card.** A leaf work item. One GitHub Issue + one Project v2
-item linked to it; the Issue body follows the §1.6.3 schema and
-ends with `<!-- board-superpowers:card -->`. The unit Consumers
-claim, Producers create, the architect verifies. Source:
+**Card.** A leaf work item — the smallest unit of kanban
+flow per the Kanban Protocol's ontology
+(`0005-contracts/00-kanban-protocol.md` § Ontology). Has
+identity (`Card.key`), human-readable display (`Card.title`),
+narrative content (`Card.body` markdown), state membership
+(`Card.status`), classification (`Card.labels`), and a web
+pointer (`Card.url`). Under the v1 GitHubProjectAdapter
+projection, one Card materializes as one GitHub Issue + one
+Project v2 item linked to it; the Issue body follows the
+§1.6.3 schema and ends with `<!-- board-superpowers:card -->`.
+The unit Consumers claim, Producers create, the architect
+verifies. Source: `0005-contracts/00-kanban-protocol.md`,
 `board-protocol/SKILL.md`,
 `decomposing-into-milestones/references/card-schema.md`,
 ADR-0005 § Card. Expanded in: `03-aggregates-and-entities.md`
 § Card aggregate.
 
+**Card.key.** The Kanban Protocol's opaque, display-stable,
+unparseable identifier for one Card on one Board
+(`0005-contracts/00-kanban-protocol.md` § Identity).
+Guarantees: unique within a Board, stable across the Card
+lifetime, display-friendly (users recognize and quote it).
+**Callers MUST NOT parse it** — board structure (project,
+team, namespace) cannot be recovered from the key alone.
+Backend-specific shapes:
+
+| Backend | `Card.key` format |
+|---------|-------------------|
+| GitHub Project v2 (v1) | issue number string, e.g., `42` |
+| Linear (future) | `<team-prefix>-<number>`, e.g., `eng-42` |
+| Jira (future) | `<project-key>-<number>`, e.g., `proj-42` |
+
+Under v1 the `Card.key` value backs `CardNumber` (the GitHub-
+shape integer); the protocol-layer abstraction is the
+opaque-string shape. VO of the Card aggregate. Source:
+`0005-contracts/00-kanban-protocol.md` § Identity, ADR-0012.
+
 **CardNumber.** The integer identifier `N` GitHub assigns to
-the Issue at creation. Used in claim branch name (`claim/<N>-<slug>`),
-marker file path (`.board-superpowers/claims/<N>.claim`), kick-off
-prompt (`[board-card:#N]`). VO of the Card aggregate. Source:
+the Issue at creation. Backs `Card.key` under the v1
+GitHubProjectAdapter projection. Used in claim branch name
+(under v1 `slugify(N) == N`, so the protocol form
+`claim/<key-slug>-<title-slug>` reduces to the historical
+`claim/<N>-<slug>`), marker file path
+(`.board-superpowers/claims/<N>.claim`), kick-off prompt
+(`[board-card:#N]`). VO of the Card aggregate. Source:
+`0005-contracts/00-kanban-protocol.md` § Identity (for
+backend-agnostic abstraction `Card.key`),
 `board-protocol/SKILL.md`, `claim-card.sh` arg validation.
 
 **Cardinality.** Manager: at most one active per project (informal,
@@ -140,19 +184,28 @@ enforced atomically by ClaimBranch creation (§1.4.1, I-1).
 Source: §1.3.1, §1.4.1, I-1. Expanded in:
 `03-aggregates-and-entities.md`.
 
-**ClaimBranch.** The remote git ref `claim/<N>-<slug>` whose
-existence on origin IS the distributed lock (ADR-0002). Created
-atomically by `git push --force-with-lease=<ref>:` — first
-push wins; race losers see exit 10. The branch is also the
-feature branch the eventual PR targets. Source: ADR-0002,
+**ClaimBranch.** The remote git ref
+`claim/<key-slug>-<title-slug>` whose existence on origin IS
+the distributed lock (ADR-0002). Branch-naming convention is
+protocol-level (`0005-contracts/00-kanban-protocol.md` §
+Identity); under the v1 GitHubProjectAdapter projection
+`slugify(Card.key)` of `42` is `42`, so the form reduces to
+`claim/<N>-<slug>` and existing branches remain valid.
+Created atomically by `git push --force-with-lease=<ref>:` —
+first push wins; race losers see exit 10. The branch is also
+the feature branch the eventual PR targets. Source: ADR-0002,
+`0005-contracts/00-kanban-protocol.md`,
 `scripts/claim-card.sh` header, §1.4.1 F-C1. Expanded in:
 `03-aggregates-and-entities.md` § ConsumerLogical.
 
-**ClaimMarker.** The file `.board-superpowers/claims/<N>.claim`
-(YAML; fields `card`, `session`, `claimed_at`, `base`, `branch`).
-Force-committed (`git add -f`) onto the ClaimBranch even though
-its parent directory is gitignored locally. Side effect: visible
-on origin as on-public proof that a Consumer holds the claim.
+**ClaimMarker.** The file
+`.board-superpowers/claims/<key>.claim` (YAML; fields `card`,
+`session`, `claimed_at`, `base`, `branch`). Under v1's GitHub
+projection `<key>` is the issue number, e.g.,
+`.board-superpowers/claims/42.claim`. Force-committed
+(`git add -f`) onto the ClaimBranch even though its parent
+directory is gitignored locally. Side effect: visible on
+origin as on-public proof that a Consumer holds the claim.
 **Never** carries an absolute local path (regression-tested in
 `tests/test-claim-card-worktree.sh`). Source: `claim-card.sh`
 (write site), I-13 (gitignore rule). Expanded in:
@@ -204,9 +257,15 @@ aggregate boundary or that another aggregate observes. Not
 aggregates. Source: this directory. Expanded in:
 `04-domain-events.md`.
 
-**Done.** Status enum value. Reached when the PR merges
-(GitHub auto-close on `Closes #<N>`). Source: ADR-0005,
-`board-protocol`, §1.4 F-C14 success path.
+**Done.** Status enum value (canonical, protocol-level).
+Reached when the PR merges. Under v1's GitHubProjectAdapter
+projection the transition fires via GitHub auto-close on
+`Closes #<N>`; future projections may rely on Linear's git
+integration or Jira's smart-commit syntax (per the Kanban
+Protocol's `link_pr_to_card` merge-trigger note in
+`0005-contracts/00-kanban-protocol.md`). Source:
+`0005-contracts/00-kanban-protocol.md` § State machine,
+ADR-0005, `board-protocol`, §1.4 F-C14 success path.
 
 ### E
 
@@ -278,14 +337,58 @@ invariant (referenced from `03-aggregates-and-entities.md`).
 Specifically NOT inheriting Sprint or velocity tracking
 (§1.1). Source: §1.1.
 
+**Kanban Protocol.** The top-level semantic / mental-model
+contract every board-superpowers skill reasons in
+(`0005-contracts/00-kanban-protocol.md`, anchored by ADR-0012).
+NOT an SDK — eight named action contracts (`read_board`,
+`read_card`, `create_card`, `transition_card`, `claim_card`,
+`release_claim`, `link_pr_to_card`, `comment_on_card`), six
+canonical states (`Backlog | Ready | In Progress | In Review |
+Done | Blocked`), a small ontology (Board / Card / Status /
+Claim / PR Link / Label / Comment), identity rules
+(`Card.key` opaque + branch-naming
+`claim/<key-slug>-<title-slug>`), four compliance levels
+(L0 read-only / L1 write / L2 claim / L3 full v1). Each
+backend exposes the protocol via a **projection** (Form A bash
+CLI / Form B plugin-shipped MCP server / Form C REST/GraphQL);
+the v1 GitHubProjectAdapter is one Form A projection. Source:
+`0005-contracts/00-kanban-protocol.md`, ADR-0012. Expanded in:
+`02-bounded-contexts.md` (Board context), `06-context-map.md`
+§ 3.6.3 (projection-as-ACL).
+
+**Kanban Protocol projection.** The per-backend, per-transport
+realization of the Kanban Protocol. The projection IS the
+Anti-Corruption Layer between board-superpowers' canonical
+vocabulary and one backend's native API. Three recognized
+forms at v1: Form A (bash CLI; v1 GitHubProjectAdapter),
+Form B (plugin-shipped MCP server; future Linear / Jira),
+Form C (REST/GraphQL wrapper; reserved). Per ADR-0012, the
+projection MUST surface the protocol's full ontology and
+action contracts at its declared compliance level; it MUST
+fold backend-native richness (Linear cycles, Jira custom
+workflows, GitHub draft items) into protocol terms — never
+leaking it to the agent. Source:
+`0005-contracts/00-kanban-protocol.md` § Implementation
+surface, ADR-0012. Expanded in: `06-context-map.md` § 3.6.3.
+
 ### L
 
-**Label.** GitHub repository label. Two namespaces created by
-`bootstrap-project.sh`: `type:*` (`feature`, `bug`, `chore`,
-`refactor`, `epic`) and `size:*` (`XS`, `S`, `M`, `L`).
-BoardAdapter contract: adapters do NOT auto-create labels;
-unknown label → `schema_mismatch` error (ADR-0005). Source:
-`bootstrap-project.sh` header, ADR-0005.
+**Label.** Kanban Protocol classification tag attached to a
+Card (`0005-contracts/00-kanban-protocol.md` § Ontology /
+§ Label). Two protocol-required namespaces:
+`type:*` (`feature`, `bug`, `chore`, `refactor`, `epic`) and
+`size:*` (`XS`, `S`, `M`, `L`); plus optional backend-extension
+labels (e.g., `suspended`). Under the v1 GitHubProjectAdapter
+projection these materialize as GitHub repo-scope labels
+created by `bootstrap-project.sh`; future projections may
+realize them via Linear team / workspace labels or Jira
+components / labels / custom fields, but the agent always
+sees a flat `Card.labels: list[str]` of `type:<value>` /
+`size:<value>` (+ optional extension) strings. Auto-creation
+rule: projections do NOT auto-create labels; unknown label →
+`schema_mismatch` error (uniform across backends; ADR-0005
+v1 projection). Source: `0005-contracts/00-kanban-protocol.md`
+§ Label, `bootstrap-project.sh` header, ADR-0005.
 
 ### M
 
@@ -383,16 +486,26 @@ active per project at v1 (informal cardinality). Source:
 §1.3.1, ADR-0007. Expanded in:
 `03-aggregates-and-entities.md`.
 
-**Project.** A single repo / single board scope (§1.1). One-to-one
-with a GitHub Project v2 instance (per ADR-0001). Identified
-by `OWNER/NUMBER`. Source: §1.1, ADR-0001, ADR-0005.
+**Project.** A single repo / single board scope (§1.1). At
+v1 one-to-one with one Kanban Protocol board (per ADR-0001 +
+ADR-0012); the v1 GitHubProjectAdapter projection materializes
+this as a GitHub Project v2 instance identified by
+`OWNER/NUMBER`. **Multi-kanban support** (one repo : N boards)
+is a v1.x roadmap item flagged in ADR-0012; if it lands the
+Project aggregate's cardinality with RepoState / RepoConfig
+becomes 1:N. Source: §1.1, ADR-0001, ADR-0005 (rescoped by
+ADR-0012), ADR-0012.
 
-**ProjectRef.** Adapter-internal handle parsed from a
-user-facing identifier — `OWNER/NUMBER` for
-GitHubProjectAdapter; `WORKSPACE/TEAM` for the hypothetical
-LinearAdapter. Round-trip stable
-(`serialize(parse(s).value) == s`). Source: ADR-0005 type
-definitions.
+**ProjectRef.** Projection-internal handle parsed from a
+user-facing identifier. `OWNER/NUMBER` under the v1
+GitHubProjectAdapter projection (per ADR-0005 type
+definitions, now rescoped by ADR-0012); `WORKSPACE/TEAM` for
+the hypothetical Linear projection; per-backend rule for
+others. Round-trip stable
+(`serialize(parse(s).value) == s`) is a per-projection
+contract. Source: ADR-0005 (rescoped); ADR-0012;
+`0005-contracts/00-kanban-protocol.md` § Implementation
+surface.
 
 ### R
 
@@ -489,12 +602,26 @@ Bounds in `card-schema.md`. No `XL` allowed; cards
 exceeding L must be re-split (§1.6.1 Small letter). Source:
 `card-schema.md`, §1.6.1.
 
-**Slug.** Lowercase-hyphenated short identifier (≤ 40 chars,
-40 chosen because GitHub truncates branch-name UI at
-roughly that width) derived from Card title; appears in
-`claim/<N>-<slug>` branch name. VO of the ConsumerLogical
-aggregate. Source: `board-protocol/SKILL.md`,
-`claim-card.sh`.
+**Slug** (= **TitleSlug**). Lowercase-hyphenated short
+identifier (≤ 40 chars, 40 chosen because GitHub truncates
+branch-name UI at roughly that width) derived from Card
+title; appears as the `<title-slug>` half of the protocol-
+level branch-naming convention
+`claim/<key-slug>-<title-slug>`. Under v1's GitHub projection
+the `<key-slug>` half resolves to the issue number, so the
+historical `claim/<N>-<slug>` form remains valid. VO of the
+ConsumerLogical aggregate. Source:
+`0005-contracts/00-kanban-protocol.md` § Identity,
+`board-protocol/SKILL.md`, `claim-card.sh`.
+
+**KeySlug.** `slugify(Card.key)` — the `<key-slug>` half of
+the Kanban Protocol branch-naming convention
+`claim/<key-slug>-<title-slug>`
+(`0005-contracts/00-kanban-protocol.md` § Identity).
+Lowercase, alphanumeric + hyphens. GitHub: `42 → 42`; Linear:
+`ENG-42 → eng-42`; Jira: `PROJ-42 → proj-42`. VO of the
+ConsumerLogical aggregate. Source:
+`0005-contracts/00-kanban-protocol.md` § Identity, ADR-0012.
 
 **Spec context.** The bounded context owning the spec / plan
 / design artifacts referenced from a Card body via
@@ -504,21 +631,33 @@ storage. Source: this directory. Expanded in:
 `02-bounded-contexts.md`.
 
 **Status.** Typed enum (canonical) — `Backlog`, `Ready`, `In
-Progress`, `In Review`, `Done`, `Blocked`. ADR-0005 type.
-Distinct from **Status field**. VO of the Card aggregate.
-Source: ADR-0005, `board-protocol`.
+Progress`, `In Review`, `Done`, `Blocked`. **Protocol-level
+closed enum** per `0005-contracts/00-kanban-protocol.md` §
+State machine (the canonical six-state vocabulary). Backends
+with richer native taxonomies fold to canonical at the
+projection layer (per the protocol's custom-state folding
+rule). Distinct from **Status field**. VO of the Card
+aggregate. Source: `0005-contracts/00-kanban-protocol.md`
+§ State machine, ADR-0005 (the v1 projection's enum
+realization), `board-protocol`.
 
-**Status field.** The GitHub Project v2 single-select column
-that physically stores Status values (six options, in fixed
-order). Adapter-internal id needed by `set_card_status`.
-Source: ADR-0005, `bootstrap-project.sh` validation. (Sister
-backends — Linear, Jira — have their own per-backend status
-column with a per-adapter mapping table.)
+**Status field.** Under the v1 GitHubProjectAdapter projection,
+the GitHub Project v2 single-select column that physically
+stores Status values (six options, in fixed order). The
+projection-internal id is needed by `set_card_status`. Sister
+projections (future Linear / Jira) carry their own per-
+backend status column with a per-projection fold-table per
+the Kanban Protocol's custom-state folding rule. Source:
+ADR-0005 (v1 projection), `0005-contracts/00-kanban-protocol.md`
+§ State machine, `bootstrap-project.sh` validation.
 
 **Substrate commitment.** P2a — the plugin uses the team's
 existing board as truth source and refuses to own state
-itself. Architectural form is the BoardAdapter contract
-(ADR-0005). Source: `0001-positioning.md` P2a.
+itself. Architectural form is the **Kanban Protocol** + per-
+backend projection (`0005-contracts/00-kanban-protocol.md`,
+ADR-0012); the v1 GitHubProjectAdapter (ADR-0005, now rescoped)
+is the first projection to ship. Source: `0001-positioning.md`
+P2a, ADR-0001, ADR-0012.
 
 **superpowers.** External plugin providing TDD /
 subagent-driven-development / executing-plans / writing-skills /

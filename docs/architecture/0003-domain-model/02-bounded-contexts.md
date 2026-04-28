@@ -5,8 +5,9 @@ contexts**. Each context owns a clearly-named slice of the
 ubiquitous language, with sharp boundaries on what belongs
 inside and what does not. Contexts talk to each other through
 **well-defined seams** — usually GitHub artifacts or the
-BoardAdapter contract — never through shared in-memory state
-(C-PLUGIN-1).
+Kanban Protocol projection (the v1 GitHubProjectAdapter at
+ADR-0005, anchored by ADR-0012) — never through shared
+in-memory state (C-PLUGIN-1).
 
 Why five and not three or seven: each context corresponds to a
 *different physical substrate* — git+GitHub artifacts, OS
@@ -16,21 +17,24 @@ would obscure which storage layer owns the data.
 
 | # | Context | Physical substrate | Owned aggregates |
 |---|---------|--------------------|-----------------|
-| 1 | Board | GitHub Project v2 + Issues + git refs | Card · PR |
+| 1 | Board | Kanban Protocol over a backend substrate (v1: GitHub Project v2 + Issues + git refs; future: Linear / Jira via their own projections per ADR-0012) | Card · PR |
 | 2 | Session | OS processes + filesystem worktrees | ProducerSession · ConsumerLogical |
 | 3 | Bootstrap | Plugin-managed YAML files (`manifest.yml`, `state.yml`) + user-owned `config.yml` | HostBootstrap · RepoBootstrap · RepoConfig |
-| 4 | Audit | BYO RDBMS (Postgres / MySQL) | AuditTrail |
+| 4 | Audit | BYO RDBMS (Postgres / MySQL / SQLite per ADR-0009) | AuditTrail |
 | 5 | Spec | User-owned `docs/` tree + third-party storage | SpecPointer (TBD-light) |
 
 The boundaries are drawn so that each context can in principle
 be **replaced by a different substrate** without touching the
-others — Board context already has a contract (BoardAdapter,
-ADR-0005) that makes this concrete; Audit context's BYO-RDBMS
-choice has the same shape (Postgres OR MySQL OR future
-contributor target). The other three contexts are glued to
-their substrates by ADRs (ADR-0002 / ADR-0003 for Session;
-§1.5 for Bootstrap; I-9 + thin-pointer for Spec) but the
-boundary still lets each evolve independently.
+others — Board context already has a contract (the **Kanban
+Protocol** at `0005-contracts/00-kanban-protocol.md`, anchored
+by ADR-0012; v1 GitHubProjectAdapter at ADR-0005 is the first
+projection of that protocol) that makes this concrete; Audit
+context's BYO-RDBMS choice has the same shape (Postgres OR
+MySQL OR SQLite per ADR-0009 OR future contributor target).
+The other three contexts are glued to their substrates by
+ADRs (ADR-0002 / ADR-0003 for Session; §1.5 for Bootstrap;
+I-9 + thin-pointer for Spec) but the boundary still lets each
+evolve independently.
 
 ---
 
@@ -49,18 +53,30 @@ state (P4a) — this context owns that state's logical shape.
   iteration, mandatory section structure, auto-close-on-merge)
   is independent of the Card's status transitions.
 
-**Physical substrate.** GitHub Project v2 (the Status field +
-the project-item linkage), GitHub Issues (Card body + thread),
-GitHub Pull Requests (PR body + review threads), and git refs
-(`claim/<N>-<slug>` branches that host ClaimMarker commits).
-Accessed via the BoardAdapter contract (ADR-0005) plus
-`gh pr` / `git push` for PR + branch operations.
+**Physical substrate.** Accessed through the **Kanban
+Protocol** (`0005-contracts/00-kanban-protocol.md`, anchored
+by ADR-0012); the active backend projection translates
+protocol actions to the backend's native shape. Under v1's
+GitHubProjectAdapter projection (Form A: bash + `gh` CLI;
+ADR-0005 — now rescoped per ADR-0012 to "the v1
+GitHubProjectAdapter implementation projection") that
+resolves to GitHub Project v2 (the Status field + the
+project-item linkage), GitHub Issues (Card body + thread),
+GitHub Pull Requests (PR body + review threads), and git
+refs (`claim/<key-slug>-<title-slug>` branches that host
+ClaimMarker commits; `slugify(Card.key) == Card.key` for
+GitHub-shape integers, so historical `claim/<N>-<slug>`
+branches stay valid). Future Linear / Jira projections
+realize the same protocol via Form B (plugin-shipped MCP
+server) or Form C (REST/GraphQL).
 
 **Talks to:**
 
 - **Bootstrap context** — receives `ProjectRef` from
-  `RepoConfig.project`; calls `BoardAdapter.get_status_options`
-  during F-B2 validation.
+  `RepoConfig.kanban.project_ref`; performs Status-options
+  validation via the active projection (under v1's GitHub
+  projection that is `BoardAdapter.get_status_options` per
+  ADR-0005) during F-B2.
 - **Session context** — provides Card.status, Card.body
   (thin-pointer to Spec), Card.labels for ConsumerLogical's
   F-C0 / F-C1 / F-C2; receives status transitions via
@@ -165,9 +181,12 @@ files at
 
 **Talks to:**
 
-- **Board context** — calls
-  `BoardAdapter.get_status_options` exactly once during F-B2 to
-  validate the Project v2 has all six required Status options.
+- **Board context** — performs Kanban Protocol Status-options
+  validation exactly once during F-B2 to confirm the backend
+  has all six canonical Status options (or a fold-table per
+  the protocol's custom-state folding rule). Under v1's GitHub
+  projection this is `BoardAdapter.get_status_options` per
+  ADR-0005.
 - **Session context** — every Session reads `RepoConfig` and
   `RepoState.features_enabled` at session start through
   `using-board-superpowers` Step 1.
@@ -270,7 +289,8 @@ preserves P7 — board-superpowers does not ship a spec format
 opinion. Conflating Spec into Board would invite the plugin
 to start prescribing `docs/specs/` structure, lint rules,
 template content; the separation buys the same discipline
-the BoardAdapter contract buys for the Board substrate.
+the Kanban Protocol + per-backend projection buys for the
+Board substrate.
 
 ---
 
@@ -280,12 +300,13 @@ Three alternative splits considered and rejected:
 
 - **Splitting Card and PR into separate contexts.** Tempting
   because PR has its own state machine and lifecycle. Rejected
-  because both live on GitHub via the same `gh` surface and
-  share the BoardAdapter contract direction (the contract
-  should grow to cover PR queries before we'd add a separate
-  context). At v1 PR is a Board-context aggregate; it remains
-  a candidate for promotion if Linear/Jira PR semantics
-  diverge enough later.
+  because both reach the same backend via one Kanban Protocol
+  projection (under v1 the GitHubProjectAdapter via the same
+  `gh` surface), and PR Link is itself a protocol-level
+  concept (`0005-contracts/00-kanban-protocol.md` § Ontology
+  / § `link_pr_to_card`). At v1 PR is a Board-context
+  aggregate; it remains a candidate for promotion if
+  Linear / Jira PR semantics diverge enough later.
 - **Folding Audit into Bootstrap** because both are "config-
   shaped" plugin-managed state. Rejected because Audit's BYO
   RDBMS substrate is structurally different from

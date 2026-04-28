@@ -334,6 +334,10 @@ change-impact matrix.
 
 ## Cross-references
 
+- [`00-kanban-protocol.md`](./00-kanban-protocol.md) — top-level
+  Kanban Protocol; env vars here are protocol-agnostic (worktree
+  resolution, debug toggle, audit DB credential). No env var names
+  a backend.
 - [`01-script-contracts.md`](./01-script-contracts.md) — every
   script that reads one of these env vars enumerates them in its
   own "Inputs" section.

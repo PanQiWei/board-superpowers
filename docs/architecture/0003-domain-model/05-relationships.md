@@ -112,15 +112,22 @@ Key transitions worth restating:
 
 - **Atomic claim** (Ready → In Progress) is the only path for
   a card to enter active work. Driven by ConsumerLogical's
-  ClaimBranch creation; emitting the `Card.Claimed` domain
-  event (3.4.4).
+  ClaimBranch creation under the Kanban Protocol `claim_card`
+  action (`0005-contracts/00-kanban-protocol.md` §
+  `claim_card`); emits the `Card.Claimed` domain event
+  (3.4.4). Branch shape is `claim/<key-slug>-<title-slug>` per
+  the protocol's branch-naming convention; under v1's GitHub
+  projection that reduces to the historical `claim/<N>-<slug>`.
 - **Blocked is reachable only from In Progress** (not from
   Ready or In Review at v1). Reaching Blocked requires
   R-class authorization (matrix row 6).
-- **Done is reachable only from In Review.** GitHub auto-close
-  on `Closes #<N>` does the transition; no script in
-  board-superpowers writes Done directly. I-2 enforces
-  that humans (architects), not Consumers, perform merges.
+- **Done is reachable only from In Review.** The Kanban
+  Protocol `link_pr_to_card` action's merge-trigger
+  mechanism does the transition; under v1's GitHub
+  projection that fires through GitHub auto-close on
+  `Closes #<N>`. No script in board-superpowers writes Done
+  directly. I-2 enforces that humans (architects), not
+  Consumers, perform merges.
 - **In Progress → Ready** (clean abandonment) requires removing
   the worktree AND deleting the claim branch — the two
   together release both the logical lock and the filesystem
