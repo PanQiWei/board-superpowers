@@ -278,6 +278,46 @@ if [ "${MANIFEST_PRESENT}" = "no" ] || [ "${STATE_PRESENT}" = "no" ]; then
     LINES+=("REASON: $(sanitize_reason_line "${raw_reason}")")
 fi
 
+# --- Layer 1c: audit outbox observer (Task 7 / AC4) --------------------
+# Self-contained: NO source common.sh (per 02-hook-contracts.md
+# § "Self-containment"). Observer-only — emits a dep-alert text block
+# when the wakeup sentinel is present. Does NOT call
+# audit-flush-pending.sh because flush latency (DB INSERT round trip)
+# is incompatible with the 10s hook budget.
+#
+# Implementation uses only file stat + integer arithmetic; no helper
+# from common.sh is required, so the self-containment contract holds.
+# All filesystem accesses use `|| true` shape so a transient stat
+# error degrades to a silent no-op rather than blocking session start.
+SENTINEL="${HOME}/.board-superpowers/audit-pending.sentinel"
+LAST_FLUSH_FILE="${HOME}/.board-superpowers/audit-last-flush"
+if [ -f "${SENTINEL}" ]; then
+    NOW_SEC="$(date +%s 2>/dev/null || echo 0)"
+    LAST_FLUSH_SEC="0"
+    if [ -r "${LAST_FLUSH_FILE}" ]; then
+        LAST_FLUSH_SEC="$(head -n1 "${LAST_FLUSH_FILE}" 2>/dev/null || echo 0)"
+    fi
+    # Defensive: any non-numeric content collapses to 0 so the age
+    # math below cannot crash the hook.
+    case "${LAST_FLUSH_SEC}" in
+        ''|*[!0-9]*) LAST_FLUSH_SEC=0 ;;
+    esac
+    case "${NOW_SEC}" in
+        ''|*[!0-9]*) NOW_SEC=0 ;;
+    esac
+    if [ "${LAST_FLUSH_SEC}" -gt 0 ] && [ "${NOW_SEC}" -ge "${LAST_FLUSH_SEC}" ]; then
+        AGE_MIN=$(( (NOW_SEC - LAST_FLUSH_SEC) / 60 ))
+    else
+        AGE_MIN=-1
+    fi
+    LINES+=("")
+    if [ "${AGE_MIN}" -ge 0 ]; then
+        LINES+=("audit-pending: outbox has unflushed rows (last flush ${AGE_MIN}m ago); run scripts/audit-flush-pending.sh to drain manually.")
+    else
+        LINES+=("audit-pending: outbox has unflushed rows; run scripts/audit-flush-pending.sh to drain manually.")
+    fi
+fi
+
 # --- Emit JSON via Python (RFC 8259 quoting) ---------------------------
 # Python is part of our dep set; if it is missing, the hook silently
 # no-ops (we don't have a JSON-emitter fallback and emitting hand-

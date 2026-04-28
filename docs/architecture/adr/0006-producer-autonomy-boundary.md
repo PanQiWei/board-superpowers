@@ -54,8 +54,9 @@ Producer follows three rules, in this order:
    a proposal and awaits the next architect prompt for approval.
 
 We name the three classes **A** (Auto), **R** (Reserved), and
-**N** (No-go, permanent). At v1 the matrix has 7 A, 7 R, and 0 N.
-The N=0 result is itself a decision — see §4 below.
+**N** (No-go, permanent). At v1 the Producer matrix has 7 A, 7 R,
+and 0 N. The Bootstrap rows add 9 A. Across the full matrix:
+16 A, 7 R, 0 N. The N=0 result is itself a decision — see §4 below.
 
 ### 2. Triage rule (short-circuit, top-to-bottom)
 
@@ -75,7 +76,8 @@ default to A.
 
 ### 3. Initial permission matrix (v1)
 
-14 rows. A=7, R=7, N=0.
+14 Producer rows (A=7, R=7, N=0) + 9 Bootstrap rows (all A;
+see "Bootstrap rows (200-208)" sub-section below).
 
 | # | Producer action | Default | Category |
 |---|-----------------|---------|----------|
@@ -93,6 +95,33 @@ default to A.
 | 12 | Auto-merge PR | R | architect's reserved power |
 | 13 | Dispatch Consumer session | A | unlocks F-5 overnight batch |
 | 14 | Auto-trigger retro / weekly report (cadence-driven) | A | preflight piggyback (see ADR-0007) |
+
+#### Bootstrap rows (200-208)
+
+The `bootstrapping-repo` skill mutates state through 9 actions
+during first-time host + per-repo bootstrap. They are tracked
+in the same matrix because they are mutating Producer-side
+actions (the architect IS the actor); they sit in their own
+200-range numbering block to avoid collision with the 1–14
+Producer expansion range and the 100–199 Consumer range.
+
+| #   | Bootstrap action | Default | Category |
+|-----|-------------------|---------|----------|
+| 200 | Bootstrap host (manifest write) | A | host-level state init |
+| 201 | Bootstrap project step 2a (labels create) | A | forward incremental |
+| 202 | Bootstrap project step 2c (config.yml + config.local.yml write) | A | per-repo state init |
+| 203 | Bootstrap project step 2d (.gitignore append) | A | idempotent file append |
+| 204 | Bootstrap project step 2e (credentials.yml write) | A | host-level state init |
+| 205 | Bootstrap project step 2f (uv sync per-repo venv) | A | reversible build artifact |
+| 206 | Bootstrap project step 2g (audit-init dispatch) | A | DDL apply (idempotent) |
+| 207 | Bootstrap project step 4 (routing block injection) | A | source of truth append (marker-bracketed) |
+| 208 | Bootstrap project step 3 (state.yml write) | A | per-repo state init |
+
+All 9 default to A-class because each step is idempotent + reversible
+(re-running bootstrap is a no-op; configuration writes are
+recoverable by re-running with `--force` or by manual edit). The
+architect can promote any of them to R via `autonomy_overrides:`
+on a per-repo basis when stricter governance is needed.
 
 ### 4. Trust evolution clause
 

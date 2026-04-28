@@ -95,7 +95,7 @@ follow-up PR once unblocked.
 | `migrating-repo-version` | Molecular | deferred to v1-complete | Migration becomes meaningful starting from v0.2.x → v0.3.x transitions; the v0.2.0 ship establishes the baseline. |
 | `board-canon` | Atomic | **v1-minimum** | True SPOT — every other v1-minimum skill consumes its state machine + schema + WIP rules. |
 | `enforcing-pr-contract` | Atomic | **v1-minimum** | True SPOT — Consumer's F-C12 PR submit + Manager's F-02 Review Queue both depend on it. |
-| `classifying-actions` | Atomic | shipped (v0.3.0) | True SPOT shipped in v0.3.0 — every mutating SKILL consumes its D-AUTONOMY-1 14-row matrix + 5-step triage rule + autonomy_overrides parsing. |
+| `classifying-actions` | Atomic | shipped (v0.3.0) | True SPOT shipped in v0.3.0 — every mutating SKILL consumes its D-AUTONOMY-1 matrix (14 Producer + 14 Consumer + 9 Bootstrap rows) + 5-step triage rule + autonomy_overrides parsing. |
 | `auditing-actions` | Atomic | shipped (v0.3.0) | True SPOT shipped in v0.3.0 — every mutating SKILL invokes audit-log-write.sh through this skill's payload templates and propose/resolve sequencing rules. |
 
 **Cross-platform hook delivery**: `hooks/session-start.sh` is
@@ -338,7 +338,9 @@ means for board-superpowers" #3 for the full rationale.
 - **Role**: D-AUTONOMY-1 14-row Producer matrix + Consumer
   subaction catalog (`action_id` 100-113: 100-111 review-cycle
   actions, 112 PR-submit pre-flight card body sync, 113
-  post-merge cleanup) + 5-step triage rule +
+  post-merge cleanup) + Bootstrap subaction catalog (`action_id`
+  200-208: host manifest write + per-repo bootstrap sub-steps
+  2a-2g + step 4 routing-block injection) + 5-step triage rule +
   `autonomy_overrides:` parsing (project + user layers via
   `bsp_resolve_autonomy_class`). The caller hands in an
   action_id; this skill returns the A / R / N decision.
@@ -348,8 +350,9 @@ means for board-superpowers" #3 for the full rationale.
 - **Called by**: every mutating skill (5 of them).
 - **Calls**: nothing.
 - **SPOT consolidates**: ADR-0006 matrix would otherwise be
-  inlined 5 times — Producer 14 rows + Consumer 14 rows × 5 =
-  140 lines of duplicated rule encoding drifting independently.
+  inlined 5 times — Producer 14 rows + Consumer 14 rows +
+  Bootstrap 9 rows = 37 rows × 5 callers = 185 lines of
+  duplicated rule encoding drifting independently.
 - **Tier 2 frontmatter**: `user-invocable: false` (atomic
   reflex, never user-driven directly).
 

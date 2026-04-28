@@ -45,17 +45,108 @@ case "${SCHEME}" in
     *) bsp_die "unsupported scheme: ${SCHEME} (allowlist: sqlite/sqlite3/postgresql/postgres/mysql/mysql+pymysql)" ;;
 esac
 
-# Step 4: dispatch DDL apply.
+# Step 4: pre-init schema-version detection. Determines whether we need
+# to run lazy migrations BEFORE applying fresh-init DDL. A v1-shape DB
+# (no event_uuid column) cannot accept the v2 DDL's
+# `CREATE UNIQUE INDEX … ON audit_log(event_uuid)` until the column has
+# been added by audit-v1-to-v2.sh. A pre-existing DB at the target
+# version is detected here and migration is skipped (no-op). Fresh
+# (non-existent) DBs report version 0 — fresh-init DDL handles those.
+TARGET_VERSION=2
+
+# Compute SQLite db_path early so we can stat the file (presence = pre-existing DB).
 SCHEMA_DIR="${SCRIPT_DIR}/lib"
+DB_PATH=""
+if [ "${SCHEME}" = "sqlite" ] || [ "${SCHEME}" = "sqlite3" ]; then
+    DB_PATH="$(printf '%s' "${AUDIT_DB_URL}" | sed -E 's|^sqlite[3]?://||; s|^/||')"
+    case "${AUDIT_DB_URL}" in
+        sqlite:////*|sqlite3:////*) DB_PATH="/$(printf '%s' "${AUDIT_DB_URL}" | sed -E 's|^sqlite[3]?:////||')" ;;
+    esac
+    mkdir -p "$(dirname "${DB_PATH}")"
+fi
+
+# Read the current schema version. Heredoc swallows errors and prints 0
+# (treated as fresh-init below). The migrations are themselves idempotent
+# so a false-zero on a target-version DB just no-ops.
+SCHEMA_VERSION=$(BSP_AUDIT_DB_URL="${AUDIT_DB_URL}" "${VENV_PYTHON}" - <<'PY' 2>/dev/null || echo 0
+import os
+from urllib.parse import urlparse
+url_str = os.environ['BSP_AUDIT_DB_URL']
+url = urlparse(url_str)
+scheme = url.scheme
+try:
+    if scheme in ('sqlite', 'sqlite3'):
+        import sqlite3
+        db_path = url_str.replace(scheme + '://', '', 1)
+        if not db_path.startswith('/'): db_path = '/' + db_path.lstrip('/')
+        if not os.path.exists(db_path):
+            print(0)
+        else:
+            conn = sqlite3.connect(db_path)
+            cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='audit_schema_meta'")
+            if cur.fetchone() is None:
+                print(0)
+            else:
+                row = conn.execute("SELECT version FROM audit_schema_meta WHERE id=1").fetchone()
+                print(int(row[0]) if row else 0)
+            conn.close()
+    elif scheme in ('postgresql', 'postgres'):
+        import psycopg2
+        conn = psycopg2.connect(url_str)
+        with conn.cursor() as c:
+            c.execute("""SELECT to_regclass('public.audit_schema_meta')""")
+            if c.fetchone()[0] is None:
+                print(0)
+            else:
+                c.execute("SELECT version FROM audit_schema_meta WHERE id=1")
+                r = c.fetchone()
+                print(int(r[0]) if r else 0)
+        conn.close()
+    elif scheme in ('mysql', 'mysql+pymysql'):
+        import pymysql
+        canonical = url_str.replace('mysql+pymysql://', 'mysql://')
+        u = urlparse(canonical)
+        conn = pymysql.connect(host=u.hostname, port=u.port or 3306, user=u.username, password=u.password, database=u.path.lstrip('/'))
+        with conn.cursor() as c:
+            c.execute("""SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='audit_schema_meta'""")
+            if c.fetchone()[0] == 0:
+                print(0)
+            else:
+                c.execute("SELECT version FROM audit_schema_meta WHERE id=1")
+                r = c.fetchone()
+                print(int(r[0]) if r else 0)
+        conn.close()
+    else:
+        print(0)
+except Exception:
+    print(0)
+PY
+)
+case "${SCHEMA_VERSION}" in
+    ''|*[!0-9]*) SCHEMA_VERSION=0 ;;
+esac
+
+# Step 5: dispatch lazy migration FIRST when we detected a pre-existing
+# DB below the target version. This brings the schema shape up so the
+# fresh-init DDL in step 6 (with its v2-shape CREATE UNIQUE INDEX on
+# event_uuid) can apply idempotently.
+if [ "${SCHEMA_VERSION}" -gt 0 ] && [ "${SCHEMA_VERSION}" -lt "${TARGET_VERSION}" ]; then
+    bsp_log "audit-init: schema v${SCHEMA_VERSION} < v${TARGET_VERSION}; dispatching migration"
+    VER_FROM=${SCHEMA_VERSION}
+    while [ "${VER_FROM}" -lt "${TARGET_VERSION}" ]; do
+        VER_TO=$((VER_FROM + 1))
+        MIGRATION="${SCRIPT_DIR}/migrations/audit-v${VER_FROM}-to-v${VER_TO}.sh"
+        if [ -x "${MIGRATION}" ]; then
+            bsp_log "audit-init: running ${MIGRATION}"
+            bash "${MIGRATION}" || bsp_die "migration v${VER_FROM} → v${VER_TO} failed"
+        fi
+        VER_FROM=${VER_TO}
+    done
+fi
+
+# Step 6: dispatch fresh-init DDL apply (idempotent — IF NOT EXISTS guards).
 case "${SCHEME}" in
     sqlite|sqlite3)
-        DB_PATH="$(printf '%s' "${AUDIT_DB_URL}" | sed -E 's|^sqlite[3]?://||; s|^/||')"
-        # SQLAlchemy 4-slash convention → leading / preserved by stripping only 3.
-        # Re-add leading / for absolute paths.
-        case "${AUDIT_DB_URL}" in
-            sqlite:////*|sqlite3:////*) DB_PATH="/$(printf '%s' "${AUDIT_DB_URL}" | sed -E 's|^sqlite[3]?:////||')" ;;
-        esac
-        mkdir -p "$(dirname "${DB_PATH}")"
         BSP_DB_PATH="${DB_PATH}" \
         BSP_SCHEMA_FILE="${SCHEMA_DIR}/audit-schema.sqlite.sql" \
         "${VENV_PYTHON}" - <<'PY'
@@ -108,7 +199,7 @@ PY
         ;;
 esac
 
-# Step 5: verify audit_schema_meta.version=1.
+# Step 7: verify final schema version meets target.
 case "${SCHEME}" in
     sqlite|sqlite3)
         VER=$(sqlite3 "${DB_PATH}" "SELECT version FROM audit_schema_meta LIMIT 1")
@@ -140,9 +231,9 @@ PY
         ;;
 esac
 
-if [ "${VER}" != "1" ]; then
-    bsp_die "audit_schema_meta.version=${VER}, expected 1"
+if [ "${VER}" != "${TARGET_VERSION}" ]; then
+    bsp_die "audit_schema_meta.version=${VER}, expected ${TARGET_VERSION}"
 fi
 
-bsp_log "audit DB initialized at ${AUDIT_DB_URL} (schema v1)"
+bsp_log "audit DB initialized at ${AUDIT_DB_URL} (schema v${TARGET_VERSION})"
 exit 0

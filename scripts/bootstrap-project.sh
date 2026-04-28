@@ -173,6 +173,12 @@ fi
 
 bsp_log "F-B2 starting for ${OWNER}/${PROJECT_NUM} in ${REPO_ROOT}"
 
+# Record bootstrap-window start timestamp (UTC ISO 8601). Anchors the
+# AC5 audit-health summary's DB query at end-of-script so it counts
+# only rows emitted by THIS bootstrap, not prior ones on the same DB.
+# Per design.md §3.5 (Codex blocker fix).
+BOOTSTRAP_SESSION_TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
 # --- Step 2a — standard labels (delegate to setup-labels.sh) -------------
 
 # Pass through --repo OWNER/NAME if we can derive it from origin. This
@@ -1080,6 +1086,42 @@ else
     write_state_yml "${NOW_TS}" "${PLUGIN_VERSION}" \
         "${ROUTING_HASH_AGENTS}" "${ROUTING_HASH_CLAUDE}" "${NOW_TS}"
     bsp_log "wrote ${STATE_FILE}"
+fi
+
+# --- Step 3.5 — fast-path audit flush (Task 7 / AC4) ---------------------
+#
+# Sync flush of bootstrap-pending outbox rows so the DB reflects the
+# just-completed bootstrap before this script returns. This closes the
+# observe-vs-act loop in the same session: the architect sees pending
+# rows resolved against their RDBMS without waiting for the next
+# SessionStart hook to advertise drift.
+#
+# Failure is non-fatal — pending rows stay in the per-repo
+# audit-local.jsonl and the SessionStart observer (hooks/session-start.sh)
+# will surface a dep-alert at the next session so the architect can run
+# scripts/audit-flush-pending.sh manually.
+
+FLUSH_SCRIPT="${PLUGIN_ROOT}/scripts/audit-flush-pending.sh"
+if [ -x "${FLUSH_SCRIPT}" ] || [ -r "${FLUSH_SCRIPT}" ]; then
+    bsp_log "step 3.5: fast-path audit flush"
+    if ! bash "${FLUSH_SCRIPT}" --quiet >&2; then
+        bsp_warn "step 3.5: fast-path flush exited non-zero; pending rows preserved in audit-local.jsonl for next flush"
+    fi
+fi
+
+# --- Step 3.6 — audit-health summary (Task 8 / AC5) ----------------------
+#
+# Observational summary: how many bootstrap audit rows (action_id
+# 200..208) reached the BYO RDBMS during this bootstrap window. The
+# helper queries the DB for rows with timestamp >= BOOTSTRAP_SESSION_TS
+# (recorded at the top of this script before any audit emit happened).
+# Helper is non-fatal — it only logs to stderr and always returns 0.
+#
+# `declare -F` guard tolerates older common.sh versions without the
+# helper (e.g., if a downstream consumer pins an older plugin
+# checkout against a newer bootstrap script).
+if declare -F bsp_audit_health_summary >/dev/null 2>&1; then
+    bsp_audit_health_summary "${BOOTSTRAP_SESSION_TS}"
 fi
 
 bsp_log "F-B2 slice 4 complete (steps 2a-2g + step 4 routing block injection + state.yml with routing_blocks)."

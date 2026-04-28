@@ -13,4 +13,9 @@ dependencies = [
     # PyMySQL lower bound 1.1.1 to exclude CVE-2024-36039 (SQL injection
     # in pymysql 1.1.0 and earlier). The committed uv.lock pins 1.1.2+.
     "pymysql>=1.1.1",
+    # psycopg2-binary for PostgreSQL audit-log writes. Required by
+    # audit-flush-impl.py + audit-log-write.sh's Python heredoc + audit-init.sh
+    # + migrations/audit-v1-to-v2-impl.py. Without this dependency, PG users
+    # hit ModuleNotFoundError when the bootstrap fast-path flush runs.
+    "psycopg2-binary>=2.9",
 ]

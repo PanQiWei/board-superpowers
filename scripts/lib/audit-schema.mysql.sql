@@ -1,11 +1,19 @@
 -- board-superpowers audit log schema (MySQL dialect).
--- 8 columns, literally aligned with postgres + sqlite siblings.
+-- 9 columns (8 core + event_uuid for idempotent replay), literally aligned
+-- with postgres + sqlite siblings.
 
 -- Use VARCHAR + CHECK (not ENUM) for actor_role / outcome /
 -- approval_stage so the constraint is identical across postgres /
 -- mysql / sqlite. MySQL 8.0.16+ enforces CHECK; on older mysql with
 -- non-strict sql_mode, ENUM would silently coerce invalid values to ''
 -- — VARCHAR + CHECK avoids that quiet-corruption mode.
+--
+-- event_uuid declared inline as UNIQUE KEY (not a separate
+-- CREATE UNIQUE INDEX statement) so the whole schema stays
+-- idempotent under CREATE TABLE IF NOT EXISTS — re-running on a
+-- fresh-init host does not raise "duplicate key name" errors.
+-- MySQL InnoDB treats NULLs as distinct in UNIQUE indexes, so
+-- multiple NULL event_uuid rows coexist (matches sqlite + postgres).
 CREATE TABLE IF NOT EXISTS audit_log (
     id              BIGINT AUTO_INCREMENT PRIMARY KEY,
     timestamp       DATETIME(3) NOT NULL,
@@ -16,6 +24,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
     payload         JSON NOT NULL,
     outcome         VARCHAR(16) NOT NULL CHECK (outcome IN ('success','failure')),
     approval_stage  VARCHAR(16) NOT NULL CHECK (approval_stage IN ('auto','propose','approved','rejected')),
+    event_uuid      VARCHAR(36) NULL,
+    UNIQUE KEY audit_event_uuid_uniq (event_uuid),
     INDEX audit_project_timestamp_idx (project, timestamp DESC),
     INDEX audit_session_idx (session_id),
     INDEX audit_action_id_idx (action_id),
@@ -29,5 +39,8 @@ CREATE TABLE IF NOT EXISTS audit_schema_meta (
     migrated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)
 );
 
-INSERT INTO audit_schema_meta (id, version) VALUES (1, 1)
-    ON DUPLICATE KEY UPDATE id=id;
+-- v2 schema baseline (fresh init); existing v1 DBs migrate via scripts/migrations/audit-v1-to-v2.sh (Task 4b).
+-- migrated_at is passed explicitly so the INSERT works even when a user
+-- has dropped the column-side DEFAULT (#43 followup-2 robustness).
+INSERT INTO audit_schema_meta (id, version, migrated_at) VALUES (1, 2, CURRENT_TIMESTAMP(3))
+    ON DUPLICATE KEY UPDATE version = 2, migrated_at = CURRENT_TIMESTAMP(3);

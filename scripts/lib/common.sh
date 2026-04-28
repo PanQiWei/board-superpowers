@@ -321,7 +321,7 @@ sys.exit(1)
 #   On no match: no migration; just create the new path and append.
 
 bsp_audit_local_write() {
-    local repo_root="${1:?usage: bsp_audit_local_write <repo_root> <action_id> <class> <skill> <summary> [<mode>]}"
+    local repo_root="${1:?usage: bsp_audit_local_write <repo_root> <action_id> <class> <skill> <summary> [<mode>] [--event-uuid <uuid>] [--status <s>] [--retry-count <n>] [--pending-since <ts>]}"
     local action_id="${2:?}"
     local decision="${3:?}"
     local skill="${4:?}"
@@ -330,8 +330,49 @@ bsp_audit_local_write() {
     # for back-compat with callers (e.g., bootstrap scripts) that haven't
     # been updated to pass an explicit mode. New callers (audit-log-write.sh)
     # pass one of the v0.3.0 enum values: no-db / degraded-db-unavailable /
-    # degraded-uv-missing / degraded-venv-create-failed.
+    # degraded-uv-missing / degraded-venv-create-failed. v0.4.0 adds three
+    # more: contract-violation (caller passed non-integer action_id) /
+    # bootstrap-pending (outbox row awaiting flush) / audit-dead-letter
+    # (pending row exhausted retries / TTL).
     local mode="${6:-v1-minimum-degraded}"
+    shift $(( $# < 6 ? $# : 6 ))
+
+    # Optional outbox-shaped fields (#43 AC4 write). Empty by default; only
+    # emitted into the jsonl row when set. Caller (audit-log-write.sh in
+    # mode=bootstrap-pending branch) passes all four together.
+    #
+    # --project (#43 final review): partitioning column per spec 06
+    # AuditTrail. When emitted into the jsonl row the flush worker
+    # propagates it into the DB INSERT instead of falling back to
+    # 'unknown/0'. Empty by default (e.g., host bootstrap before any
+    # per-repo config.yml exists).
+    local event_uuid="" status="" retry_count="" pending_since="" project=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --event-uuid)    event_uuid="$2"; shift 2 ;;
+            --status)        status="$2"; shift 2 ;;
+            --retry-count)   retry_count="$2"; shift 2 ;;
+            --pending-since) pending_since="$2"; shift 2 ;;
+            --project)       project="$2"; shift 2 ;;
+            *)
+                bsp_warn "bsp_audit_local_write: unknown arg '$1'"
+                return 2
+                ;;
+        esac
+    done
+
+    # Per AC3 (#43): explicit mode whitelist. Unknown modes are rejected
+    # (return 2) to prevent silent jsonl pollution by typos / outdated
+    # callers. The whitelist runs BEFORE any side effects (mkdir / write
+    # / log) so a rejected call leaves no trace.
+    case "${mode}" in
+        no-db|degraded-db-unavailable|degraded-uv-missing|degraded-venv-create-failed|\
+v1-minimum-degraded|contract-violation|bootstrap-pending|audit-dead-letter) ;;
+        *)
+            bsp_warn "bsp_audit_local_write: unknown mode '${mode}' (allowed: no-db, degraded-db-unavailable, degraded-uv-missing, degraded-venv-create-failed, v1-minimum-degraded, contract-violation, bootstrap-pending, audit-dead-letter)"
+            return 2
+            ;;
+    esac
 
     # Re-derive PATH defensively. Caller may have a stripped PATH; we need
     # dirname / mkdir / python3 / git regardless. Append caller PATH so
@@ -468,21 +509,50 @@ bsp_audit_local_write() {
     session_id="${BSP_SESSION_ID:-$(bsp_resolve_session_id)}"
 
     bsp_require_cmd python3
-    python3 -c "
-import json, sys, time
+    BSP_REPO_ROOT="${repo_root}" \
+    BSP_SESSION_ID="${session_id}" \
+    BSP_ACTION_ID="${action_id}" \
+    BSP_DECISION="${decision}" \
+    BSP_SKILL="${skill}" \
+    BSP_SUMMARY="${summary}" \
+    BSP_MODE="${mode}" \
+    BSP_PATH="${path}" \
+    BSP_EVENT_UUID="${event_uuid}" \
+    BSP_STATUS="${status}" \
+    BSP_RETRY_COUNT="${retry_count}" \
+    BSP_PENDING_SINCE="${pending_since}" \
+    BSP_PROJECT="${project}" \
+    python3 -c '
+import json, os, time
 entry = {
-    'ts': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-    'repo_root': sys.argv[1],
-    'session_id': sys.argv[2],
-    'action_id': sys.argv[3],
-    'decision_class': sys.argv[4],
-    'skill': sys.argv[5],
-    'summary': sys.argv[6],
-    'mode': sys.argv[7],
+    "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    "repo_root": os.environ["BSP_REPO_ROOT"],
+    "session_id": os.environ["BSP_SESSION_ID"],
+    "action_id": os.environ["BSP_ACTION_ID"],
+    "decision_class": os.environ["BSP_DECISION"],
+    "skill": os.environ["BSP_SKILL"],
+    "summary": os.environ["BSP_SUMMARY"],
+    "mode": os.environ["BSP_MODE"],
 }
-with open(sys.argv[8], 'a') as f:
-    f.write(json.dumps(entry) + '\n')
-" "${repo_root}" "${session_id}" "${action_id}" "${decision}" "${skill}" "${summary}" "${mode}" "${path}"
+# Outbox-shaped optional fields (#43 AC4 write). Emit only when set, so
+# legacy rows stay byte-identical to their pre-AC4 shape.
+if os.environ.get("BSP_EVENT_UUID"):
+    entry["event_uuid"] = os.environ["BSP_EVENT_UUID"]
+if os.environ.get("BSP_STATUS"):
+    entry["status"] = os.environ["BSP_STATUS"]
+rc = os.environ.get("BSP_RETRY_COUNT", "")
+if rc != "":
+    entry["retry_count"] = int(rc)
+if os.environ.get("BSP_PENDING_SINCE"):
+    entry["pending_since"] = os.environ["BSP_PENDING_SINCE"]
+# project field (#43 final review): partitioning column per spec 06
+# AuditTrail. Emitted only when caller passed --project; the flush worker
+# falls back to "unknown/0" otherwise.
+if os.environ.get("BSP_PROJECT"):
+    entry["project"] = os.environ["BSP_PROJECT"]
+with open(os.environ["BSP_PATH"], "a") as f:
+    f.write(json.dumps(entry) + "\n")
+'
 
     bsp_log "audit-local: ${decision}-class action ${action_id} (${skill}) → ${path}"
 }
@@ -1243,6 +1313,201 @@ PY
     fi
 
     printf '%s\n' "${default_class}"
+    return 0
+}
+
+# --- audit-health summary (AC5 — bootstrap末尾) ---------------------------
+#
+# Emit one [bsp] log line summarizing how many bootstrap audit rows
+# (action_id 200..208) reached the BYO RDBMS during the just-closed
+# bootstrap window.
+#
+# Per design.md §3.5 (Codex blocker fix): the original AC5 plan
+# computed TOTAL by counting jsonl rows, but Task 6+ flush
+# deletes/transitions rows after success → TOTAL=0 in the normal path
+# → "9 of 9" never printed. The pragmatic fix anchors the query on a
+# bootstrap-session start timestamp recorded by the caller before any
+# audit emit happens, then counts DB rows in the [start_ts, now]
+# window with action_id BETWEEN 200 AND 208. Prior bootstraps' rows
+# are filtered out by the timestamp predicate.
+#
+# Args:
+#   $1 — bootstrap_start_ts (ISO 8601 UTC; rows with timestamp >= this
+#        are counted). Required.
+#
+# Side effects:
+#   - bsp_log line on stderr (no stdout output by design — caller
+#     should not depend on parse-able output).
+#
+# Behavior matrix (post-#43-followup-1: jsonl scan is independent of DB
+# reachability — DB-side query is anchored on start_ts; jsonl-side scan
+# counts pending bootstrap rows across all per-repo audit-local.jsonl
+# files. Both feed every report so a DSN-configured-but-unreachable run
+# still surfaces the pending backlog instead of "nothing to report"):
+#   - audit_db_url unset, jsonl pending=0   → "0 of 9 ... no DB configured (jsonl only)"
+#   - audit_db_url unset, jsonl pending=N   → "0 of 9 ... N remain in jsonl (no DB configured)"
+#   - venv unavailable, jsonl pending=N     → "0 of 9 ... N remain in jsonl (venv unavailable, cannot query DB)"
+#   - DB returns >=1 row                    → "${N} of 9 ... ${jsonl_pending} remain in jsonl"
+#   - DB returns 0, jsonl pending=N         → "0 of N ... N remain in jsonl (DB query returned 0; check connectivity)"
+#   - DB returns 0, jsonl pending=0         → "0 of 0 bootstrap audit rows since <start_ts> (no rows in window; nothing to report)"
+#
+# jsonl scan needs only host python3 stdlib (os, json, glob) — works
+# even when the per-repo venv is not yet provisioned.
+#
+# Returns: 0 always (summary is observational; caller never aborts on it).
+
+bsp_audit_health_summary() {
+    local start_ts="${1:-}"
+    local TOTAL=9  # bootstrap action_id range 200..208 (9 inclusive rows)
+    local audit_db_url
+    audit_db_url="$(bsp_resolve_audit_db_url 2>/dev/null || true)"
+
+    # Step 1: jsonl scan — count pending bootstrap rows across all
+    # per-repo audit-local.jsonl. This is independent of audit_db_url
+    # state and uses host python3 stdlib only (no venv dependency), so
+    # it runs even in degraded scenarios (DSN unreachable, venv missing,
+    # DB configured but query throws).
+    local jsonl_pending=0
+    if command -v python3 >/dev/null 2>&1; then
+        jsonl_pending="$(BSP_START_TS="${start_ts}" python3 - <<'PY' 2>/dev/null || echo 0
+import os, json, glob
+start_ts = os.environ.get('BSP_START_TS', '')
+home = os.path.expanduser('~/.board-superpowers/repos')
+count = 0
+for path in glob.glob(os.path.join(home, '*', 'audit-local.jsonl')):
+    try:
+        with open(path) as f:
+            for line in f:
+                try:
+                    r = json.loads(line)
+                except Exception:
+                    continue
+                try:
+                    aid_int = int(r.get('action_id', ''))
+                except (ValueError, TypeError):
+                    continue
+                if 200 <= aid_int <= 208 \
+                    and r.get('status') == 'pending' \
+                    and r.get('ts', '') >= start_ts:
+                    count += 1
+    except Exception:
+        continue
+print(count)
+PY
+)"
+        case "${jsonl_pending}" in
+            ''|*[!0-9]*) jsonl_pending=0 ;;
+        esac
+    fi
+
+    if [ -z "${audit_db_url}" ]; then
+        if [ "${jsonl_pending}" -gt 0 ]; then
+            bsp_log "audit health: 0 of ${TOTAL} bootstrap audit rows landed in DB; ${jsonl_pending} remain in jsonl (no DB configured)"
+        else
+            bsp_log "audit health: 0 of ${TOTAL} bootstrap audit rows landed in DB; no DB configured (jsonl only)"
+        fi
+        return 0
+    fi
+
+    local repo_root venv_python
+    repo_root="$(bsp_primary_repo_root "${PWD}" 2>/dev/null || echo "${PWD}")"
+    venv_python="$(bsp_ensure_venv "${repo_root}" 2>/dev/null || true)"
+    if [ -z "${venv_python}" ]; then
+        bsp_log "audit health: 0 of ${TOTAL} bootstrap audit rows landed in DB; ${jsonl_pending} remain in jsonl (venv unavailable, cannot query DB)"
+        return 0
+    fi
+
+    local db_rows
+    db_rows="$(BSP_AUDIT_DB_URL="${audit_db_url}" \
+               BSP_START_TS="${start_ts}" \
+               "${venv_python}" - <<'PY' 2>/dev/null || echo 0
+import os
+from urllib.parse import urlparse
+
+url_str = os.environ.get('BSP_AUDIT_DB_URL', '')
+start_ts = os.environ.get('BSP_START_TS', '')
+url = urlparse(url_str)
+scheme = url.scheme
+try:
+    if scheme in ('sqlite', 'sqlite3'):
+        import sqlite3
+        # Strip scheme://; sqlite URLs use 4-slash absolute path
+        # convention (sqlite:////abs/path/db.sqlite). After scheme
+        # strip we get either /abs/path or //abs/path; normalize.
+        db_path = url_str.split('://', 1)[1] if '://' in url_str else url_str
+        if not db_path.startswith('/'):
+            db_path = '/' + db_path.lstrip('/')
+        conn = sqlite3.connect(db_path)
+        n = conn.execute(
+            "SELECT COUNT(*) FROM audit_log "
+            "WHERE action_id BETWEEN 200 AND 208 AND timestamp >= ?",
+            (start_ts,)
+        ).fetchone()[0]
+        print(int(n))
+        conn.close()
+    elif scheme in ('postgresql', 'postgres'):
+        import psycopg2
+        conn = psycopg2.connect(url_str)
+        with conn.cursor() as c:
+            c.execute(
+                "SELECT COUNT(*) FROM audit_log "
+                "WHERE action_id BETWEEN 200 AND 208 AND timestamp >= %s",
+                (start_ts,)
+            )
+            print(int(c.fetchone()[0]))
+        conn.close()
+    elif scheme in ('mysql', 'mysql+pymysql'):
+        import pymysql
+        canonical = url_str.replace('mysql+pymysql://', 'mysql://')
+        u = urlparse(canonical)
+        conn = pymysql.connect(
+            host=u.hostname, port=u.port or 3306,
+            user=u.username, password=u.password,
+            database=u.path.lstrip('/'),
+        )
+        with conn.cursor() as c:
+            c.execute(
+                "SELECT COUNT(*) FROM audit_log "
+                "WHERE action_id BETWEEN 200 AND 208 AND timestamp >= %s",
+                (start_ts,)
+            )
+            print(int(c.fetchone()[0]))
+        conn.close()
+    else:
+        print(0)
+except Exception:
+    print(0)
+PY
+)"
+
+    case "${db_rows}" in
+        ''|*[!0-9]*) db_rows=0 ;;
+    esac
+
+    if [ "${db_rows}" = 0 ]; then
+        if [ "${jsonl_pending}" -gt 0 ]; then
+            # DB query returned zero but jsonl scan found pending rows
+            # — DSN may be unreachable / table missing / query throwing.
+            # Surface the backlog so the architect doesn't see a quiet
+            # "nothing to report" while N rows actually remain unflushed.
+            bsp_log "audit health: 0 of ${jsonl_pending} bootstrap audit rows landed in DB; ${jsonl_pending} remain in jsonl (DB query returned 0; check connectivity)"
+        else
+            # Both DB and jsonl are empty in this window — truly nothing
+            # happened. Quiet line so the caller doesn't read it as a
+            # "9 lost" alarm.
+            bsp_log "audit health: 0 of 0 bootstrap audit rows since ${start_ts} (no rows in window; nothing to report)"
+        fi
+        return 0
+    fi
+
+    # db_rows > 0: TOTAL is the canonical 9 (bootstrap action_id range
+    # cardinality). jsonl_pending captures any rows the flush worker
+    # has not yet drained — these are NOT counted in db_rows but ARE
+    # in flight. Reporting the literal jsonl_pending rather than
+    # ${TOTAL} - ${db_rows} avoids the historical bug where re-emits
+    # (e.g., bootstrap re-run after a partial failure) made the
+    # subtraction go negative.
+    bsp_log "audit health: ${db_rows} of ${TOTAL} bootstrap audit rows landed in DB; ${jsonl_pending} remain in jsonl"
     return 0
 }
 

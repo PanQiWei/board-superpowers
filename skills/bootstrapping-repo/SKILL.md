@@ -79,25 +79,81 @@ For every mutating action this skill performs, follow the 5-step governance sequ
 
 Bootstrap is mostly R-class (see "Why bootstrap is mostly R-class" above). Architects can promote specific rows to A via `autonomy_overrides:`.
 
+**Bootstrap audit rows (200-208) are outbox-shaped**: all 9 emissions invoke `audit-log-write.sh --mode bootstrap-pending` (see § "Outbox emission protocol" below). The auditing-actions skill's payload templates carry the integer action_id; this skill's invocation must include the `--mode bootstrap-pending` flag so the row goes to the jsonl outbox rather than a direct DB INSERT (the audit_log table is not guaranteed to exist during the bootstrap window).
+
 ### Action ID catalog (bootstrap actions)
 
+The 9 mutating bootstrap actions are integer-tracked in the
+200-range action_id namespace (see
+[`docs/architecture/0005-contracts/06-audit-log-schema.md`](../../docs/architecture/0005-contracts/06-audit-log-schema.md)
+"Bootstrap rows — 200–208"). Numbering follows execution order.
+
 ```
-bootstrap-host          — host manifest write (mode 0644, ts + version)
-bootstrap-project-2a    — labels create (delegates to setup-labels.sh)
-bootstrap-project-2b    — Status field validation (read-only; no audit)
-bootstrap-project-2c    — config.yml + config.local.yml write
-bootstrap-project-2d    — .gitignore append (idempotent block)
-bootstrap-project-2e    — credentials.yml write (chmod 0600; DSN allowlist)
-bootstrap-project-2f    — uv sync per-repo venv create
-bootstrap-project-2g    — audit-init.sh dispatch (DDL apply)
-bootstrap-project-4     — routing block injection (CLAUDE.md + AGENTS.md;
-                                                    stub-redirect targets skipped)
-bootstrap-project-3     — state.yml write (host-local per-repo)
+200 → bootstrap-host                  (host manifest write; mode 0644, ts + version)
+201 → bootstrap-project-2a            (labels create; delegates to setup-labels.sh)
+                                      (2b read-only Status-field validation; no audit)
+202 → bootstrap-project-2c            (config.yml + config.local.yml write)
+203 → bootstrap-project-2d            (.gitignore append; idempotent block)
+204 → bootstrap-project-2e            (credentials.yml write; chmod 0600; DSN allowlist)
+205 → bootstrap-project-2f            (uv sync per-repo venv create)
+206 → bootstrap-project-2g            (audit-init.sh dispatch; DDL apply)
+207 → bootstrap-project-4             (routing block injection; CLAUDE.md + AGENTS.md;
+                                       stub-redirect targets skipped)
+208 → bootstrap-project-3             (state.yml write; host-local per-repo)
 ```
 
 For the full default class (A/R) of each action_id, consult the
 `action-id-catalog.md` file inside the
 `board-superpowers:classifying-actions` skill's `references/`.
+
+### Outbox emission protocol (bootstrap-only)
+
+**All 9 bootstrap audit emissions MUST pass `--mode bootstrap-pending` to
+`audit-log-write.sh`.** This routes the row through the outbox path
+(jsonl暂存 with `status: pending` + `event_uuid` + `retry_count: 0` +
+`pending_since`) instead of attempting a direct DB INSERT during the
+bootstrap window — necessary because the `audit_log` table itself may
+not yet exist (step 2g creates it) and earlier sub-steps (2e
+credentials, 2f venv) are prerequisites of step 2g. The flush worker
+(`audit-flush-pending.sh`) reconciles outbox rows into the DB at
+bootstrap end (fast-path), via the audit-log-write.sh opportunistic
+guard, or via the SessionStart hook observer dep-alert. See
+[`docs/architecture/0005-contracts/06-audit-log-schema.md`](../../docs/architecture/0005-contracts/06-audit-log-schema.md)
+§ "Migration model" + § "Bootstrap rows — 200–208" for the full
+contract.
+
+Producer rows (1-14) and Consumer rows (100-113) do NOT use
+`--mode bootstrap-pending` — they emit directly via the standard
+DB-or-jsonl-fallback path. Only bootstrap rows (200-208) are
+outbox-shaped.
+
+#### Host bootstrap special case — action_id 200
+
+Action_id 200 (host manifest write) emits **before** any per-repo
+`config.yml` exists, so `audit-log-write.sh`'s default repo-root
+resolution (PWD → primary repo) would land the jsonl row at an
+arbitrary repo's outbox directory (orphan if PWD is outside any
+git repo). To pin the host audit row to a canonical location, the
+host emission MUST also pass `--repo-root "${HOME}/.board-superpowers/__host__"`:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/audit-log-write.sh" \
+  --action-id 200 \
+  --decision A \
+  --skill bootstrapping-repo \
+  --approval-stage auto \
+  --outcome success \
+  --payload '{"host_manifest_path":"...","schema_version":2,...}' \
+  --mode bootstrap-pending \
+  --repo-root "${HOME}/.board-superpowers/__host__"
+```
+
+`bootstrap-host.sh` creates `${HOME}/.board-superpowers/__host__/`
+(idempotent mkdir) so this directory always exists when the SKILL
+emits action 200. Other 8 actions (201-208) emit during per-repo
+bootstrap and use the default per-repo repo-root resolution
+(no `--repo-root` flag needed; the per-repo `config.yml` carries
+the project mapping).
 
 ## Procedure
 
@@ -121,7 +177,7 @@ The script:
 
 `--force` is available as an escape hatch (overwrites unconditionally) but should be reserved for migration / dev scenarios; the architect must explicitly request it.
 
-Apply the governance sequence above for the manifest write (action_id: `bootstrap-host`).
+Apply the governance sequence above for the manifest write (action_id: 200).
 
 ### Step 2 — preflight check for per-repo bootstrap
 
