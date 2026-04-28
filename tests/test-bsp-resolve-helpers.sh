@@ -46,10 +46,25 @@ test_session_pwd_fallback() {
     || fail "session pwd-fallback: got '$result', expected '$expected'"
 }
 
+test_render_block_cc() {
+  expected_sid='cc_xyz'
+  result=$(env -i HOME="$HOME" PATH="$PATH" PWD="$PWD" CLAUDE_SESSION_ID=cc_xyz \
+    bash -c "source '$COMMON' && bsp_render_creator_trace_block")
+  echo "$result" | grep -qx '<!-- board-superpowers:creator-trace -->' \
+    || fail "render: missing open marker"
+  echo "$result" | grep -qx '<!-- /board-superpowers:creator-trace -->' \
+    || fail "render: missing close marker"
+  echo "$result" | grep -qx '\*\*Created-by:\*\* claude-code' \
+    || fail "render: wrong Created-by"
+  echo "$result" | grep -qx "\\*\\*Session-id:\\*\\* ${expected_sid}" \
+    || fail "render: wrong Session-id"
+}
+
 test_platform_cc
 test_platform_codex
 test_platform_unknown
 test_session_cc
 test_session_codex
 test_session_pwd_fallback
-echo 'PASS: 6/6'
+test_render_block_cc
+echo 'PASS: 7/7'

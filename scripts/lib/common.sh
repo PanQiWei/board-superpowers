@@ -1281,3 +1281,28 @@ bsp_resolve_platform() {
 bsp_resolve_session_id() {
   printf '%s\n' "${CLAUDE_SESSION_ID:-${CODEX_THREAD_ID:-${PWD//\//-}}}"
 }
+
+# bsp_render_creator_trace_block — emit the creator-trace marker
+# block (with currently-resolved values) to stdout. Intake-path
+# callers prepend the output to a card body before `gh issue create`,
+# keeping each call site a one-liner.
+#
+# Output (4 lines):
+#   <!-- board-superpowers:creator-trace -->
+#   **Created-by:** <platform>
+#   **Session-id:** <session-id>
+#   <!-- /board-superpowers:creator-trace -->
+#
+# Marker pair is machine-managed; hand edits inside the markers
+# are rejected by enforcing-pr-contract filler-detection.
+bsp_render_creator_trace_block() {
+  local platform session_id
+  platform="$(bsp_resolve_platform)"
+  session_id="$(bsp_resolve_session_id)"
+  cat <<EOF
+<!-- board-superpowers:creator-trace -->
+**Created-by:** ${platform}
+**Session-id:** ${session_id}
+<!-- /board-superpowers:creator-trace -->
+EOF
+}
