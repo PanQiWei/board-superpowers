@@ -1252,13 +1252,13 @@ PY
 #   - docs/architecture/0005-contracts/08-environment-variables.md
 #   - openai/codex#8923 / openai/codex#10096
 bsp_resolve_platform() {
-  if [ -n "${CLAUDE_SESSION_ID:-}" ]; then
-    printf '%s\n' 'claude-code'
-  elif [ -n "${CODEX_THREAD_ID:-}" ]; then
-    printf '%s\n' 'codex-cli'
-  else
-    printf '%s\n' 'unknown'
-  fi
+    if [ -n "${CLAUDE_SESSION_ID:-}" ]; then
+        printf '%s\n' 'claude-code'
+    elif [ -n "${CODEX_THREAD_ID:-}" ]; then
+        printf '%s\n' 'codex-cli'
+    else
+        printf '%s\n' 'unknown'
+    fi
 }
 
 # bsp_resolve_session_id — return the session identifier for the
@@ -1279,7 +1279,7 @@ bsp_resolve_platform() {
 #   to hold. In practice both happen back-to-back inside the
 #   same intake routine.
 bsp_resolve_session_id() {
-  printf '%s\n' "${CLAUDE_SESSION_ID:-${CODEX_THREAD_ID:-${PWD//\//-}}}"
+    printf '%s\n' "${CLAUDE_SESSION_ID:-${CODEX_THREAD_ID:-${PWD//\//-}}}"
 }
 
 # bsp_render_creator_trace_block — emit the creator-trace marker
@@ -1296,10 +1296,10 @@ bsp_resolve_session_id() {
 # Marker pair is machine-managed; hand edits inside the markers
 # are rejected by enforcing-pr-contract filler-detection.
 bsp_render_creator_trace_block() {
-  local platform session_id
-  platform="$(bsp_resolve_platform)"
-  session_id="$(bsp_resolve_session_id)"
-  cat <<EOF
+    local platform session_id
+    platform="$(bsp_resolve_platform)"
+    session_id="$(bsp_resolve_session_id)"
+    cat <<EOF
 <!-- board-superpowers:creator-trace -->
 **Created-by:** ${platform}
 **Session-id:** ${session_id}

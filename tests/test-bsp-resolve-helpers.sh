@@ -60,6 +60,34 @@ test_render_block_cc() {
     || fail "render: wrong Session-id"
 }
 
+test_render_block_codex() {
+  expected_sid='t_xyz'
+  result=$(env -i HOME="$HOME" PATH="$PATH" PWD="$PWD" CODEX_THREAD_ID=t_xyz \
+    bash -c "source '$COMMON' && bsp_render_creator_trace_block")
+  echo "$result" | grep -qx '<!-- board-superpowers:creator-trace -->' \
+    || fail "render codex: missing open marker"
+  echo "$result" | grep -qx '<!-- /board-superpowers:creator-trace -->' \
+    || fail "render codex: missing close marker"
+  echo "$result" | grep -qx '\*\*Created-by:\*\* codex-cli' \
+    || fail "render codex: wrong Created-by"
+  echo "$result" | grep -qx "\\*\\*Session-id:\\*\\* ${expected_sid}" \
+    || fail "render codex: wrong Session-id"
+}
+
+test_render_block_unknown() {
+  expected_sid="${PWD//\//-}"
+  result=$(env -i HOME="$HOME" PATH="$PATH" PWD="$PWD" \
+    bash -c "source '$COMMON' && bsp_render_creator_trace_block")
+  echo "$result" | grep -qx '<!-- board-superpowers:creator-trace -->' \
+    || fail "render unknown: missing open marker"
+  echo "$result" | grep -qx '<!-- /board-superpowers:creator-trace -->' \
+    || fail "render unknown: missing close marker"
+  echo "$result" | grep -qx '\*\*Created-by:\*\* unknown' \
+    || fail "render unknown: wrong Created-by"
+  echo "$result" | grep -qx "\\*\\*Session-id:\\*\\* ${expected_sid}" \
+    || fail "render unknown: wrong Session-id"
+}
+
 test_platform_cc
 test_platform_codex
 test_platform_unknown
@@ -67,4 +95,6 @@ test_session_cc
 test_session_codex
 test_session_pwd_fallback
 test_render_block_cc
-echo 'PASS: 7/7'
+test_render_block_codex
+test_render_block_unknown
+echo 'PASS: 9/9'
