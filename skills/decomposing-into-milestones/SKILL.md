@@ -150,7 +150,7 @@ Render a text-only dep graph in the outline narrative (Step 7) using ASCII or in
 
 Produce a single artifact for architect review:
 
-1. **Per-card body** — one full body per card, formatted to the converged schema (thin-pointer block + Goal / Acceptance criteria / Out of scope / Dependencies / Notes + optional Execution Hints + bottom marker `<!-- board-superpowers:card -->`).
+1. **Per-card body** — one full body per card, formatted to the converged schema (thin-pointer block + Goal / Acceptance criteria / Out of scope / Dependencies / Notes + optional Execution Hints + bottom marker `<!-- board-superpowers:audit-trail -->`).
 2. **Outline narrative** — a single paragraph naming the N cards, the dep graph, the recommended ordering, and any soft / hard cross-card constraints.
 3. **Batch summary** — total card count, size distribution (e.g., "1 XS, 3 S, 2 M"), expected total LOC range.
 
@@ -216,7 +216,7 @@ Before invoking Step 8 (batch create), every card in the batch MUST satisfy:
 - [ ] Passes INVEST 6-letter gate (per `references/invest-checklist.md`).
 - [ ] Is a vertical slice (zero cards in the batch are layer-only or wire-up-only).
 - [ ] Sized within `XS|S|M|L` (no card exceeds the L ceiling).
-- [ ] Card body matches the converged schema exactly (thin-pointer block + 5 visible sections + optional Execution Hints + idiomatic bottom marker `<!-- board-superpowers:card -->`).
+- [ ] Card body matches the converged schema exactly (thin-pointer block + 5 visible sections + optional Execution Hints + idiomatic bottom marker `<!-- board-superpowers:audit-trail -->`).
 - [ ] Cross-card dep graph is complete (every `depends-on` is declared on the dependent card; every reverse dependency mirrored as `depended-on-by` on the prerequisite).
 - [ ] Acceptance criteria are operationalized (no "feels good" / "works well" / "tests pass" without naming which tests).
 - [ ] Out of scope explicitly delineated (no implicit "we'll figure out later").

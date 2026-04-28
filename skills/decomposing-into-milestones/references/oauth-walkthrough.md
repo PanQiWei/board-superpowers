@@ -81,9 +81,9 @@ Users can sign in to the dashboard using their Google account from the sign-in p
 ## Notes
 Driver: P0 intake — sign-in friction blocks trial conversion. SPIDR Paths split: Google ships first as the highest-volume provider.
 
-<!-- board-superpowers:card -->
+<!-- board-superpowers:audit-trail -->
 **Audit trail**: query ~/.board-superpowers/repos/<normalized>/audit-local.jsonl by `card_number = N`.
-<!-- /board-superpowers:card -->
+<!-- /board-superpowers:audit-trail -->
 ```
 
 ### Card 2 — GitHub OAuth happy-path sign-in
@@ -116,9 +116,9 @@ Users can sign in to the dashboard using their GitHub account from the sign-in p
 ## Notes
 SPIDR Paths split: second provider, smaller card because abstractions from Card 1 are reusable.
 
-<!-- board-superpowers:card -->
+<!-- board-superpowers:audit-trail -->
 **Audit trail**: query ~/.board-superpowers/repos/<normalized>/audit-local.jsonl by `card_number = N`.
-<!-- /board-superpowers:card -->
+<!-- /board-superpowers:audit-trail -->
 ```
 
 ### Card 3 — Sign-out
@@ -150,9 +150,9 @@ Users can sign out from any authenticated page; the session and OAuth refresh-to
 ## Notes
 Uniform across providers — same logic for Google + GitHub.
 
-<!-- board-superpowers:card -->
+<!-- board-superpowers:audit-trail -->
 **Audit trail**: query ~/.board-superpowers/repos/<normalized>/audit-local.jsonl by `card_number = N`.
-<!-- /board-superpowers:card -->
+<!-- /board-superpowers:audit-trail -->
 ```
 
 ### Card 4 — Error flows + rate limiting
@@ -185,9 +185,9 @@ OAuth callback errors are surfaced to the user with actionable messages, and the
 ## Notes
 SPIDR Rules: rate-limit is a deferred rule that doesn't block happy path but defends against abuse.
 
-<!-- board-superpowers:card -->
+<!-- board-superpowers:audit-trail -->
 **Audit trail**: query ~/.board-superpowers/repos/<normalized>/audit-local.jsonl by `card_number = N`.
-<!-- /board-superpowers:card -->
+<!-- /board-superpowers:audit-trail -->
 ```
 
 ### Card 5 — Account linking for email-password users
@@ -220,9 +220,9 @@ Existing email-password users can link an OAuth identity to their account from t
 ## Notes
 SPIDR Paths: a third path-like capability that touches the existing email-password authentication. Ships independently of Cards 1+2 once those are Done.
 
-<!-- board-superpowers:card -->
+<!-- board-superpowers:audit-trail -->
 **Audit trail**: query ~/.board-superpowers/repos/<normalized>/audit-local.jsonl by `card_number = N`.
-<!-- /board-superpowers:card -->
+<!-- /board-superpowers:audit-trail -->
 ```
 
 ## INVEST gate per card

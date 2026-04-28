@@ -57,7 +57,7 @@ The marker is **protocol, not decoration**. Tooling (managing-board's Review Que
 > recognizes all three):
 > - **v0.1.x – v0.3.x**: `<!-- bsp-bottom-marker:do-not-edit -->` … `<!-- /bsp-bottom-marker:do-not-edit -->`
 > - **v0.4.0 transition**: renamed to `<!-- board-superpowers:card -->` … `<!-- /board-superpowers:card -->` (intermediate form; visible on issues #1–#34)
-> - **v0.4.x onward (current)**: renamed to `<!-- board-superpowers:audit-trail -->` … `<!-- /board-superpowers:audit-trail -->` (current form; visible on issues #35+; emitted by `bsp_render_creator_trace_block` and live intake helpers — broader spec/skill alignment for stale `:card` references in `docs/architecture/`, `bootstrapping-repo`, and `decomposing-into-milestones` is a follow-up issue, out of #44 scope)
+> - **v0.4.x onward (current)**: renamed to `<!-- board-superpowers:audit-trail -->` … `<!-- /board-superpowers:audit-trail -->` (current form; visible on issues #35+; emitted by `bsp_render_creator_trace_block` and live intake helpers — some legacy spec and skill files still reference the v0.4.0-transition `:card` form; readers should accept all three marker forms when reading existing cards)
 >
 > When reading existing card bodies, accept any of the three. When writing
 > new card bodies, emit only the current form (`audit-trail`). The
@@ -72,7 +72,7 @@ Rationale: Producer/Consumer governance is **prospective** — the R-class machi
 
 ## Creator-trace marker
 
-Cards created **after card #44 lands** carry a machine-managed
+Cards created via the canonical intake path carry a machine-managed
 marker block recording the platform and session id of the
 session that created them.
 
@@ -102,14 +102,14 @@ session that created them.
       path) into public GitHub issue bodies. Trade-off: loses forensic
       readability of the underlying PWD; preserves uniqueness within a
       host's PWD layout.
-  - Equality with `audit_log.session_id` (matched by `card_number = N` in payload) is an architectural invariant (AC4 of card #44); see `tests/test-creator-trace-equality.sh` (lands later in this PR).
+  - Equality with `audit_log.session_id` (matched by `card_number = N` in payload) is an architectural invariant: the session that created the card must match the session recorded in the audit log; see `tests/test-creator-trace-equality.sh`.
 
 ### Lifetime
 
-- One-time-write at NEW card intake (post-card-#44 land).
+- One-time-write at NEW card intake.
 - Hand-edits inside the marker are rejected by `enforcing-pr-contract` filler-detection.
-- Cards created BEFORE card #44 lands do NOT carry the marker and are NOT retrofitted (per #44 AC3 No-retrofit policy).
+- Cards created before this contract was introduced retain their original form and are NOT retrofitted.
 
-### Self-non-retrofit (#44)
+### Self-non-retrofit
 
-This card itself does NOT carry the marker; its forensic trace lives in the `action_id = 1` audit_log row matching `card_number = 44`.
+The card that introduced this marker class does not itself carry the marker; its forensic trace lives in the audit_log row recording its creation event (matched by `card_number` in the audit log).

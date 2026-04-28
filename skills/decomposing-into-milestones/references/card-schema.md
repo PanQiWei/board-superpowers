@@ -41,9 +41,9 @@ Every card emitted by `decomposing-into-milestones` Step 7 (synthesize batch) MU
 ## Notes
 <freeform rationale, driver, cross-card context, retro-folded lessons>
 
-<!-- board-superpowers:card -->
+<!-- board-superpowers:audit-trail -->
 **Audit trail**: query ~/.board-superpowers/repos/<normalized>/audit-local.jsonl by `card_number = N`.
-<!-- /board-superpowers:card -->
+<!-- /board-superpowers:audit-trail -->
 ```
 
 > **Creator-trace block note**: the `<!-- board-superpowers:creator-trace -->` block shown at the
@@ -120,12 +120,12 @@ If genuinely empty, write `- (none — driver fully captured in Goal)`.
 Exactly:
 
 ```
-<!-- board-superpowers:card -->
+<!-- board-superpowers:audit-trail -->
 **Audit trail**: query ~/.board-superpowers/repos/<normalized>/audit-local.jsonl by `card_number = N`.
-<!-- /board-superpowers:card -->
+<!-- /board-superpowers:audit-trail -->
 ```
 
-The marker is **protocol, not decoration**. Tooling (`managing-board`'s Review Queue routine, the daily briefing's filter logic) keys off the marker. The legacy `<!-- bsp-bottom-marker:do-not-edit -->` is forbidden — every card body landed by this skill uses the idiomatic marker.
+The marker is **protocol, not decoration**. Tooling (`managing-board`'s Review Queue routine, the daily briefing's filter logic) keys off the marker. The legacy `<!-- bsp-bottom-marker:do-not-edit -->` and `<!-- board-superpowers:card -->` forms are forbidden in new cards — every card body landed by this skill uses the idiomatic `audit-trail` marker.
 
 ## Filler detection
 
