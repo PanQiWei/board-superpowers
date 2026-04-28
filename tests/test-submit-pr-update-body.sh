@@ -394,6 +394,128 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Scenario (f) — mid-body Closes-style references in user prose preserved
+# ---------------------------------------------------------------------------
+#
+# A retro-note that legitimately mentions "Closes #53" mid-body (e.g., a
+# sentence inside the Retro Notes section discussing the Contract C
+# semantics) MUST NOT be stripped by --update-body. Only the
+# tail-anchored canonical block is in scope. Codex review (P2) flagged
+# the previous (?im)+$ regex as eating mid-body matches.
+printf '\nScenario (f): mid-body Closes-style references preserved\n'
+
+STATE_F="${TMPSCRATCH}/state-f"
+mkdir -p "${STATE_F}"
+cp "${STATE_A}/pr-body.md" "${STATE_F}/pr-body.md"  # reset to canonical body w/ trailer
+
+MIDBODY_BODY="${TMPSCRATCH}/midbody-body.md"
+# This fixture has a mid-body line that LITERALLY starts with
+# "Closes #53" — the exact case Codex flagged. Without the (?i)+\Z
+# anchor fix, the (?im)+$ regex would match this mid-body line and
+# silently strip the user-authored sentence + everything after.
+cat > "${MIDBODY_BODY}" <<'BODY'
+## Summary
+
+Update with a literal mid-body line that starts with `Closes #53`.
+
+## Automated Verification
+
+- [x] `bash tests/test-submit-pr-update-body.sh` — pass
+
+## Retro Notes
+
+Closes #53 was opened to address Contract C trailer preservation.
+This sentence is user content authored by the Consumer; the regex
+strip MUST NOT remove it just because it starts with Closes #N.
+A second line of user content follows so we can detect over-deletion.
+BODY
+
+run_submit "${STATE_F}" \
+    --update-body \
+    --pr 123 \
+    --body-file "${MIDBODY_BODY}" \
+    --card 53
+
+check "exit 0 on body with mid-body Closes-line reference" test "${RC}" -eq 0
+
+if grep -q 'A second line of user content follows' "${STATE_F}/pr-body.md"; then
+    printf '  PASS — content following mid-body Closes line preserved\n'
+    PASS=$((PASS + 1))
+else
+    printf '  FAIL — mid-body user content was stripped (regex anchor bug)\n' >&2
+    FAIL=$((FAIL + 1))
+fi
+
+if grep -q 'Closes #53 was opened to address' "${STATE_F}/pr-body.md"; then
+    printf '  PASS — mid-body user prose starting with Closes #53 preserved\n'
+    PASS=$((PASS + 1))
+else
+    printf '  FAIL — mid-body Closes-line user prose was stripped\n' >&2
+    FAIL=$((FAIL + 1))
+fi
+
+# Two ^Closes #53 lines expected: (1) the mid-body user line; (2) the
+# canonical trailer at the body's tail.
+TRAILER_COUNT_F="$(count_grep '^Closes #53' "${STATE_F}/pr-body.md")"
+if [ "${TRAILER_COUNT_F}" = "2" ]; then
+    printf '  PASS — both mid-body Closes line and canonical trailer present (2 lines)\n'
+    PASS=$((PASS + 1))
+else
+    printf '  FAIL — expected 2 Closes #53 lines (mid-body + trailer), got %s\n' \
+        "${TRAILER_COUNT_F}" >&2
+    FAIL=$((FAIL + 1))
+fi
+
+# ---------------------------------------------------------------------------
+# Scenario (g) — update-mode rejects malformed body (missing required section)
+# ---------------------------------------------------------------------------
+#
+# Codex review (P2) flagged that --update-body bypassed Contract A
+# validation, so a partial body without `## Automated Verification` /
+# `## Retro Notes` could land via gh pr edit. Update mode now runs the
+# same validation as create mode before touching the live PR body.
+printf '\nScenario (g): update-mode rejects body missing Contract A sections\n'
+
+STATE_G="${TMPSCRATCH}/state-g"
+mkdir -p "${STATE_G}"
+cp "${STATE_A}/pr-body.md" "${STATE_G}/pr-body.md"
+
+MALFORMED_BODY="${TMPSCRATCH}/malformed-body.md"
+cat > "${MALFORMED_BODY}" <<'BODY'
+## Summary
+
+Body that drops the Automated Verification + Retro Notes sections —
+must be rejected by Contract A validation before gh pr edit lands.
+BODY
+
+run_submit "${STATE_G}" \
+    --update-body \
+    --pr 123 \
+    --body-file "${MALFORMED_BODY}" \
+    --card 53
+
+check_not "non-zero exit on malformed body in update mode" test "${RC}" -eq 0
+
+if printf '%s' "${OUT}" | grep -qiE 'validation|missing|required section'; then
+    printf '  PASS — refusal message references Contract A validation\n'
+    PASS=$((PASS + 1))
+else
+    printf '  FAIL — refusal message did not mention validation. stderr=%q\n' \
+        "${OUT}" >&2
+    FAIL=$((FAIL + 1))
+fi
+
+# Confirm gh pr edit was not invoked — body stays the canonical one.
+if grep -q '^Closes #53' "${STATE_G}/pr-body.md" \
+   && ! grep -q 'must be rejected' "${STATE_G}/pr-body.md"; then
+    printf '  PASS — gh pr edit was not invoked (body unchanged)\n'
+    PASS=$((PASS + 1))
+else
+    printf '  FAIL — body was mutated despite validation failure\n' >&2
+    FAIL=$((FAIL + 1))
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 

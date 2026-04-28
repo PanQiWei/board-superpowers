@@ -74,6 +74,60 @@ done
 bsp_require_cmd gh
 bsp_require_cmd python3
 
+# --- shared: Contract A body validation ---------------------------------
+#
+# Validates the markdown file at $1 satisfies Contract A (three-section
+# shape — `## Automated Verification` mandatory + non-empty + non-filler;
+# `## Human Verification TODO` optional but non-filler if present;
+# `## Retro Notes` mandatory + non-empty). Used by both create mode (PR
+# OPEN) and update-body mode (post-OPEN body update). Validation rules
+# live in skills/enforcing-pr-contract/references/validation-rules.md;
+# this enforces the regex subset.
+#
+# Exits 0 on pass with a one-line `PR body validation passed` on stdout;
+# exits non-zero on fail with `FAIL: <reason>` lines on stderr. The
+# python heredoc must NOT depend on shell vars beyond the file path.
+
+bsp_validate_pr_body() {
+    python3 - "$1" <<'PY'
+import re, sys
+body = open(sys.argv[1]).read()
+
+required = [
+    ('## Automated Verification', True),
+    ('## Human Verification TODO', False),
+    ('## Retro Notes', True),
+]
+errors = []
+for heading, mandatory in required:
+    if heading not in body:
+        if mandatory:
+            errors.append(f"missing required section: {heading}")
+        continue
+    pattern = re.escape(heading) + r"\s*\n+(.*?)(?=\n##\s|\Z)"
+    m = re.search(pattern, body, re.DOTALL)
+    if not m or not m.group(1).strip():
+        errors.append(f"section is empty: {heading}")
+
+filler_phrases = [
+    "TBD", "todo: write tests", "no notes", "(none)", "n/a", "N/A",
+]
+auto_section_match = re.search(
+    r"## Automated Verification\s*\n+(.*?)(?=\n##\s|\Z)",
+    body, re.DOTALL)
+if auto_section_match:
+    auto_text = auto_section_match.group(1).strip()
+    if any(f.lower() == auto_text.lower() for f in filler_phrases):
+        errors.append("Automated Verification is filler — list the actual checks run")
+
+if errors:
+    for e in errors:
+        print(f"FAIL: {e}", file=sys.stderr)
+    sys.exit(1)
+print("PR body validation passed")
+PY
+}
+
 # --- update-body mode ---------------------------------------------------
 #
 # The Contract C trailer (Closes/Fixes/Resolves #<CARD>) is what GitHub
@@ -99,6 +153,15 @@ bsp_require_cmd python3
 if [ "${MODE}" = "update-body" ]; then
     [ -n "${PR}" ] || bsp_die "missing --pr (required in --update-body mode)"
 
+    # Contract A applies to body updates too — without this guard a
+    # retro-note expansion that accidentally drops `## Automated
+    # Verification` / `## Retro Notes` could overwrite the PR body and
+    # silently violate the three-section contract. Fail before any
+    # `gh pr edit` call so the live PR body never observes the bad shape.
+    VALIDATION_OUTPUT="$(bsp_validate_pr_body "${BODY_FILE}")" \
+        || bsp_die "PR body validation failed in update-body mode — fix before retry"
+    bsp_log "${VALIDATION_OUTPUT}"
+
     CURRENT_BODY="$(gh pr view "${PR}" --json body --jq '.body')"
 
     if ! CARD="${CARD}" CURRENT_BODY="${CURRENT_BODY}" python3 - <<'PY'
@@ -123,13 +186,16 @@ import os, re, sys
 body = open(sys.argv[1]).read()
 card = os.environ['CARD']
 # Strip ONLY the tail-anchored canonical trailer block (separator +
-# auto-close keyword line for THIS card). Mid-body Closes-style
-# references inside user prose are preserved — they are not the
-# canonical trailer and stripping them would lose user content.
+# auto-close keyword line for THIS card). Anchored to end-of-string
+# via \Z (NOT (?m) + $, which would match end of any line and silently
+# delete mid-body user prose that happens to start with `Closes #N`).
+# The `\s*` before `\Z` consumes the trailer's own final newline; on
+# mid-body matches `\s*` cannot reach `\Z` because non-whitespace
+# follows on subsequent lines, so user prose is preserved.
 trailer_block_re = re.compile(
-    r'(?im)(?:\n+---\s*)?\n+[ \t]*(?:Close[ds]?|Fix(?:e[ds])?|Resolve[ds]?)\s+#' +
+    r'(?i)(?:\n+---\s*)?\n+[ \t]*(?:Close[ds]?|Fix(?:e[ds])?|Resolve[ds]?)\s+#' +
     re.escape(card) +
-    r'[^\n]*\s*$'
+    r'[^\n]*\s*\Z'
 )
 while True:
     stripped = trailer_block_re.sub('', body)
@@ -151,59 +217,13 @@ fi
 
 [ -n "${TITLE}" ] || bsp_die "missing --title"
 
-# --- Validate PR body shape ---------------------------------------------
+# --- Validate PR body shape (Contract A) --------------------------------
 #
-# Validation rules live in skills/enforcing-pr-contract/references/
-# validation-rules.md. This script enforces a subset; the full filler
-# detection is delegated to the SKILL body.
+# Delegates to bsp_validate_pr_body (defined above). Validation rules
+# live in skills/enforcing-pr-contract/references/validation-rules.md.
 
-# Pass BODY_FILE as the positional arg to `python3 -`. The arg MUST sit
-# between `python3 -` and the here-doc opener: bash treats tokens after
-# the closing here-doc delimiter as the *next* command, not as args to
-# the here-doc-receiving command. The previous "PY\n${BODY_FILE})" form
-# silently dropped the arg, producing IndexError on sys.argv[1] and a
-# spurious "Permission denied" as bash tried to execute the body file.
-VALIDATION_OUTPUT="$(python3 - "${BODY_FILE}" <<'PY'
-import re, sys
-body = open(sys.argv[1]).read()
-
-required = [
-    ('## Automated Verification', True),
-    ('## Human Verification TODO', False),
-    ('## Retro Notes', True),
-]
-errors = []
-for heading, mandatory in required:
-    if heading not in body:
-        if mandatory:
-            errors.append(f"missing required section: {heading}")
-        continue
-    # Ensure the section has *some* content beyond the heading itself.
-    pattern = re.escape(heading) + r"\s*\n+(.*?)(?=\n##\s|\Z)"
-    m = re.search(pattern, body, re.DOTALL)
-    if not m or not m.group(1).strip():
-        errors.append(f"section is empty: {heading}")
-
-# Filler detection — minimal subset (full set is in the SKILL body).
-filler_phrases = [
-    "TBD", "todo: write tests", "no notes", "(none)", "n/a", "N/A",
-]
-auto_section_match = re.search(
-    r"## Automated Verification\s*\n+(.*?)(?=\n##\s|\Z)",
-    body, re.DOTALL)
-if auto_section_match:
-    auto_text = auto_section_match.group(1).strip()
-    if any(f.lower() == auto_text.lower() for f in filler_phrases):
-        errors.append("Automated Verification is filler — list the actual checks run")
-
-if errors:
-    for e in errors:
-        print(f"FAIL: {e}", file=sys.stderr)
-    sys.exit(1)
-print("PR body validation passed")
-PY
-)" || bsp_die "PR body validation failed — fix before retry"
-
+VALIDATION_OUTPUT="$(bsp_validate_pr_body "${BODY_FILE}")" \
+    || bsp_die "PR body validation failed — fix before retry"
 bsp_log "${VALIDATION_OUTPUT}"
 
 # --- Contract C — PR↔Issue auto-close keyword (idempotent) -------------
