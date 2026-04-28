@@ -65,6 +65,33 @@ whose `platforms` does not match. A `codex-only` stage is
 invisible to a CC session's lifecycle diff; `never-run` /
 `stale` / `deprecated` never apply on the wrong platform.
 
+**Composition with `applicable_when`** (per ADR-0020):
+`platforms` is the **coarse special-case predicate** — a
+fixed enum of platform identities that the hook resolves
+purely from runtime context (no settings lookup). The
+generic `applicable_when` predicate (declarative
+setting-path / board-capability / Python escape hatch)
+runs *after* `platforms` filtering. Both must evaluate true
+for a stage to participate in the lifecycle. Concretely:
+
+1. Hook detects platform (`cc` vs `codex`).
+2. Hook drops stages whose `platforms` does not match
+   (these never appear in any lifecycle state on this
+   platform — not even `not-applicable`).
+3. For surviving stages, hook evaluates `applicable_when`
+   (if present). False → stage enters `not-applicable`
+   state per ADR-0020. True / absent → stage participates
+   normally (`never-run` / `completed` / `stale` /
+   `deprecated`).
+
+This split keeps `platforms` cheap and registry-static
+(no settings dependency for the platform decision) while
+letting `applicable_when` handle the data-driven
+conditionals (kanban backend, capability presence, etc.).
+Conflating the two would force the hook to load settings
+just to compute platform applicability, breaking the
+hook-cheap invariant.
+
 Concrete v0.4.0-redesign consequences:
 
 - **`m9.host.register-codex-hooks` is `platforms:

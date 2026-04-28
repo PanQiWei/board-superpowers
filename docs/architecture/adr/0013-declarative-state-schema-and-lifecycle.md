@@ -1,4 +1,4 @@
-# ADR 0013: Declarative state schema + 4-state lifecycle + K8s-style three-layer fingerprint
+# ADR 0013: Declarative state schema + 5-state lifecycle + K8s-style three-layer fingerprint
 
 **Status:** proposed
 **Date:** 2026-04-28
@@ -41,11 +41,13 @@ entries in partitioned status files. Each entry carries a
 (fast-path) + derived `target_state_hash` (verification) +
 structured `target_state` (ground truth) — that the unified
 check script (ADR-0012) compares against the stage registry
-(ADR-0014) to compute one of four lifecycle states.
+(ADR-0014) to compute one of five lifecycle states.
 
-The four states (per design doc § "Stage lifecycle states"):
+The five states (per design doc § "Stage lifecycle states"):
 
-- **`never-run`** — no entry exists for this `stage_id`.
+- **`never-run`** — no entry exists for this `stage_id` AND
+  the stage's `applicable_when` predicate (per ADR-0020) is
+  true (or absent).
 - **`completed`** — entry exists; recorded `generation` and
   `target_state_hash` both match the current registry.
 - **`stale`** — entry exists; `generation` differs (maintainer
@@ -54,6 +56,12 @@ The four states (per design doc § "Stage lifecycle states"):
   recorded and current `target_state` surfaces diagnostics.
 - **`deprecated`** — recorded `stage_id` no longer appears in
   the current registry. Entry preserved as history.
+- **`not-applicable`** — the stage's `applicable_when`
+  predicate evaluates false against current settings (per
+  ADR-0020). Hook does not emit a marker; SKILL does not
+  execute. State flips back to `never-run` (no historical
+  entry) or `completed` (prior applicable-window entry exists)
+  when the predicate later evaluates true.
 
 Plus two **transient SKILL-only states** the SKILL writes
 mid-flow and the lifecycle treats as effectively `never-run`:

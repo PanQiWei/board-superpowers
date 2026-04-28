@@ -56,8 +56,11 @@ each consumer reads only what it needs:
    `depends_on`, `executor`, `generation`, `target_state_schema`,
    `target_state_schema_version`, `hash_excluded_fields`,
    `external_ttl_seconds`, plus M7-only `kind` /
-   `block_max_bytes`). Bash hooks parse it with `pyyaml` (in the
-   per-repo venv) without invoking any stage module.
+   `block_max_bytes`, plus the conditional-applicability
+   `applicable_when` predicate and the architect-projection
+   `module_section_path` field per ADR-0020 / ADR-0021).
+   Bash hooks parse it with `pyyaml` (in the per-repo venv)
+   without invoking any stage module.
 2. **`scripts/stages_lib/<stage_id>.py`** — one Python module
    per stage with four typed callables: `executor`,
    `idempotency_check`, `target_state_predicate`,
@@ -106,6 +109,17 @@ lifecycle model asks of each stage"):
 - `target_state_predicate()` — confirms the outcome landed; on
   `external`-locality stages it performs the GitHub / RDBMS
   query feeding the lifecycle's layer-3 structural diff.
+
+Each stage MAY additionally provide (per ADR-0020 / ADR-0021):
+
+- An `applicable_when` predicate (declarative setting-path,
+  declarative board-capability, or Python escape hatch) —
+  conditional gate that resolves to `not-applicable` when
+  false. Cheap to evaluate (hook-side); never blocks for IO.
+- A `module_section_path` — overrides the default
+  `modules.<derived>` projection target if the stage's
+  `target_state` should be visible to architects under a
+  custom path in the settings file's modular layering.
 
 The schema validates declarative fields; CI round-trip-tests
 each callable to validate the dynamic contract.
