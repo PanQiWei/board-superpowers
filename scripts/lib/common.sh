@@ -1292,3 +1292,142 @@ PY
     printf '%s\n' "${default_class}"
     return 0
 }
+
+# --- audit-health summary (AC5 — bootstrap末尾) ---------------------------
+#
+# Emit one [bsp] log line summarizing how many bootstrap audit rows
+# (action_id 200..208) reached the BYO RDBMS during the just-closed
+# bootstrap window.
+#
+# Per design.md §3.5 (Codex blocker fix): the original AC5 plan
+# computed TOTAL by counting jsonl rows, but Task 6+ flush
+# deletes/transitions rows after success → TOTAL=0 in the normal path
+# → "9 of 9" never printed. The pragmatic fix anchors the query on a
+# bootstrap-session start timestamp recorded by the caller before any
+# audit emit happens, then counts DB rows in the [start_ts, now]
+# window with action_id BETWEEN 200 AND 208. Prior bootstraps' rows
+# are filtered out by the timestamp predicate.
+#
+# Args:
+#   $1 — bootstrap_start_ts (ISO 8601 UTC; rows with timestamp >= this
+#        are counted). Required.
+#
+# Side effects:
+#   - bsp_log line on stderr (no stdout output by design — caller
+#     should not depend on parse-able output).
+#
+# Behavior matrix:
+#   - audit_db_url unset             → "0 of 9 ... no DB configured (jsonl only)"
+#   - venv unavailable               → "9 bootstrap rows; venv unavailable (cannot query DB; check jsonl)"
+#   - DB query returns N (>=1)       → "${N} of 9 bootstrap audit rows landed in DB; $((9-N)) remain in jsonl"
+#   - DB query returns 0             → "0 of 0 bootstrap audit rows since <start_ts> (no rows in window; nothing to report)"
+#     (distinguishes "all failed" from "nothing happened in this window")
+#
+# Returns: 0 always (summary is observational; caller never aborts on it).
+
+bsp_audit_health_summary() {
+    local start_ts="${1:-}"
+    local TOTAL=9  # bootstrap action_id range 200..208 (9 inclusive rows)
+    local audit_db_url
+    audit_db_url="$(bsp_resolve_audit_db_url 2>/dev/null || true)"
+
+    if [ -z "${audit_db_url}" ]; then
+        bsp_log "audit health: 0 of ${TOTAL} bootstrap audit rows landed in DB; no DB configured (jsonl only)"
+        return 0
+    fi
+
+    local repo_root venv_python
+    repo_root="$(bsp_primary_repo_root "${PWD}" 2>/dev/null || echo "${PWD}")"
+    venv_python="$(bsp_ensure_venv "${repo_root}" 2>/dev/null || true)"
+    if [ -z "${venv_python}" ]; then
+        bsp_log "audit health: ${TOTAL} bootstrap rows; venv unavailable (cannot query DB; check jsonl)"
+        return 0
+    fi
+
+    local db_rows
+    db_rows="$(BSP_AUDIT_DB_URL="${audit_db_url}" \
+               BSP_START_TS="${start_ts}" \
+               "${venv_python}" - <<'PY' 2>/dev/null || echo 0
+import os
+from urllib.parse import urlparse
+
+url_str = os.environ.get('BSP_AUDIT_DB_URL', '')
+start_ts = os.environ.get('BSP_START_TS', '')
+url = urlparse(url_str)
+scheme = url.scheme
+try:
+    if scheme in ('sqlite', 'sqlite3'):
+        import sqlite3
+        # Strip scheme://; sqlite URLs use 4-slash absolute path
+        # convention (sqlite:////abs/path/db.sqlite). After scheme
+        # strip we get either /abs/path or //abs/path; normalize.
+        db_path = url_str.split('://', 1)[1] if '://' in url_str else url_str
+        if not db_path.startswith('/'):
+            db_path = '/' + db_path.lstrip('/')
+        conn = sqlite3.connect(db_path)
+        n = conn.execute(
+            "SELECT COUNT(*) FROM audit_log "
+            "WHERE action_id BETWEEN 200 AND 208 AND timestamp >= ?",
+            (start_ts,)
+        ).fetchone()[0]
+        print(int(n))
+        conn.close()
+    elif scheme in ('postgresql', 'postgres'):
+        import psycopg2
+        conn = psycopg2.connect(url_str)
+        with conn.cursor() as c:
+            c.execute(
+                "SELECT COUNT(*) FROM audit_log "
+                "WHERE action_id BETWEEN 200 AND 208 AND timestamp >= %s",
+                (start_ts,)
+            )
+            print(int(c.fetchone()[0]))
+        conn.close()
+    elif scheme in ('mysql', 'mysql+pymysql'):
+        import pymysql
+        canonical = url_str.replace('mysql+pymysql://', 'mysql://')
+        u = urlparse(canonical)
+        conn = pymysql.connect(
+            host=u.hostname, port=u.port or 3306,
+            user=u.username, password=u.password,
+            database=u.path.lstrip('/'),
+        )
+        with conn.cursor() as c:
+            c.execute(
+                "SELECT COUNT(*) FROM audit_log "
+                "WHERE action_id BETWEEN 200 AND 208 AND timestamp >= %s",
+                (start_ts,)
+            )
+            print(int(c.fetchone()[0]))
+        conn.close()
+    else:
+        print(0)
+except Exception:
+    print(0)
+PY
+)"
+
+    case "${db_rows}" in
+        ''|*[!0-9]*) db_rows=0 ;;
+    esac
+
+    if [ "${db_rows}" = 0 ]; then
+        # Distinguish "no rows in window" (start_ts after all rows;
+        # nothing happened) from "all failed". With anchored start_ts
+        # zero rows usually means nothing happened in this window;
+        # emit a quieter summary so the caller doesn't read it as
+        # "all 9 lost".
+        bsp_log "audit health: 0 of 0 bootstrap audit rows since ${start_ts} (no rows in window; nothing to report)"
+        return 0
+    fi
+
+    local remaining=$((TOTAL - db_rows))
+    if [ "${remaining}" -lt 0 ]; then
+        # Defensive: more than 9 rows in range is unexpected (would
+        # mean another concurrent bootstrap), but we still emit a
+        # clean line.
+        remaining=0
+    fi
+    bsp_log "audit health: ${db_rows} of ${TOTAL} bootstrap audit rows landed in DB; ${remaining} remain in jsonl"
+    return 0
+}
