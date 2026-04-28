@@ -340,13 +340,20 @@ bsp_audit_local_write() {
     # Optional outbox-shaped fields (#43 AC4 write). Empty by default; only
     # emitted into the jsonl row when set. Caller (audit-log-write.sh in
     # mode=bootstrap-pending branch) passes all four together.
-    local event_uuid="" status="" retry_count="" pending_since=""
+    #
+    # --project (#43 final review): partitioning column per spec 06
+    # AuditTrail. When emitted into the jsonl row the flush worker
+    # propagates it into the DB INSERT instead of falling back to
+    # 'unknown/0'. Empty by default (e.g., host bootstrap before any
+    # per-repo config.yml exists).
+    local event_uuid="" status="" retry_count="" pending_since="" project=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --event-uuid)    event_uuid="$2"; shift 2 ;;
             --status)        status="$2"; shift 2 ;;
             --retry-count)   retry_count="$2"; shift 2 ;;
             --pending-since) pending_since="$2"; shift 2 ;;
+            --project)       project="$2"; shift 2 ;;
             *)
                 bsp_warn "bsp_audit_local_write: unknown arg '$1'"
                 return 2
@@ -505,6 +512,7 @@ v1-minimum-degraded|contract-violation|bootstrap-pending|audit-dead-letter) ;;
     BSP_STATUS="${status}" \
     BSP_RETRY_COUNT="${retry_count}" \
     BSP_PENDING_SINCE="${pending_since}" \
+    BSP_PROJECT="${project}" \
     python3 -c '
 import json, os, time
 entry = {
@@ -527,6 +535,11 @@ if rc != "":
     entry["retry_count"] = int(rc)
 if os.environ.get("BSP_PENDING_SINCE"):
     entry["pending_since"] = os.environ["BSP_PENDING_SINCE"]
+# project field (#43 final review): partitioning column per spec 06
+# AuditTrail. Emitted only when caller passed --project; the flush worker
+# falls back to "unknown/0" otherwise.
+if os.environ.get("BSP_PROJECT"):
+    entry["project"] = os.environ["BSP_PROJECT"]
 with open(os.environ["BSP_PATH"], "a") as f:
     f.write(json.dumps(entry) + "\n")
 '

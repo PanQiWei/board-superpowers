@@ -14,6 +14,14 @@ Per pending row:
 
 Writes back jsonl in-place (atomic rename).
 
+Concurrency: per-jsonl exclusive lock acquired on entry via Python stdlib
+  fcntl.flock(LOCK_EX). Lock file is `${BSP_JSONL}.lock`. Replaces the
+  prior bash-side `flock -x 9` wrapping (which required the util-linux
+  `flock` binary — absent on stock macOS). fcntl.flock is POSIX stdlib
+  (Linux + macOS + BSD). On Windows / non-POSIX hosts the lock is skipped;
+  UNIQUE event_uuid in DB still prevents duplicate INSERTs in the
+  unlikely case of concurrent flushes there.
+
 Exit codes:
   0 - flush complete (all pending succeeded or transitioned)
   1 - corrupt jsonl rows detected (preserved as raw text + dead-letter mode)
@@ -156,7 +164,7 @@ def insert_row(audit_db_url, row):
     return False
 
 
-def main():
+def _flush_locked():
     rows = []
     raw_lines = []
     corrupt_count = 0
@@ -232,16 +240,60 @@ def main():
                 f.write(raw_lines[i])
                 continue
             if "_corrupt_raw" in row:
-                f.write(row["_corrupt_raw"] + '\n')
+                # Write a JSON envelope wrapping the original raw bytes so
+                # the dead-letter classification (mode=audit-dead-letter,
+                # status=failed) persists across re-runs. Without the
+                # envelope the row is plain non-JSON text and every
+                # subsequent flush re-classifies it as corrupt — preventing
+                # idempotent re-runs and inflating the corrupt-count metric.
+                f.write(json.dumps({
+                    "mode": "audit-dead-letter",
+                    "status": "failed",
+                    "_corrupt_raw": row["_corrupt_raw"],
+                }) + '\n')
             else:
                 f.write(json.dumps(row) + '\n')
     tmp.replace(JSONL)
 
     if corrupt_count > 0:
-        sys.exit(1)
+        return 1
     if insert_failures > 0:
+        return 2
+    return 0
+
+
+def main():
+    """Acquire per-jsonl exclusive lock, then run flush.
+
+    Lock implementation: stdlib fcntl.flock(LOCK_EX) on a sibling
+    `.jsonl.lock` file. On exit the lock file's fd is closed (via the
+    `with` block), which atomically releases the advisory lock. POSIX
+    only — Windows / non-POSIX hosts skip the lock.
+    """
+    lock_path = JSONL.with_suffix('.jsonl.lock')
+    try:
+        lockf = open(lock_path, 'w')
+    except OSError as e:
+        sys.stderr.write(
+            "audit-flush-impl: cannot open lock {}: {}\n".format(lock_path, e)
+        )
         sys.exit(2)
-    sys.exit(0)
+    try:
+        try:
+            import fcntl
+            fcntl.flock(lockf.fileno(), fcntl.LOCK_EX)
+        except (ImportError, AttributeError, OSError):
+            # Windows / non-POSIX, or fcntl unavailable. Accept the small
+            # race-on-rewrite risk; UNIQUE event_uuid in DB still prevents
+            # duplicate INSERTs.
+            pass
+        rc = _flush_locked()
+    finally:
+        try:
+            lockf.close()
+        except OSError:
+            pass
+    sys.exit(rc)
 
 
 if __name__ == '__main__':

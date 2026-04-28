@@ -73,6 +73,25 @@ done
 
 [ -z "${REPO_ROOT}" ] && REPO_ROOT="$(bsp_primary_repo_root "${PWD}" 2>/dev/null || echo "${PWD}")"
 
+# Resolve project identifier as `OWNER/NUMBER` per the BoardAdapter
+# contract (spec 06 § Core schema). Read from <repo>/.board-superpowers/
+# config.yml; fall back to repo basename only when the config.yml is
+# missing or has no project: field (e.g., bootstrap not yet run on a
+# fresh repo, or non-BoardAdapter context).
+#
+# Resolved BEFORE the bootstrap-pending short-circuit so outbox jsonl
+# rows carry the project field — otherwise the flush worker has to fall
+# back to 'unknown/0' and AuditTrail's per-Project partitioning column
+# (spec 06) is lost. Genuine projectless cases (host bootstrap before
+# per-repo config.yml exists) leave PROJECT_NAME empty and the row's
+# project field is omitted; the flush worker's 'unknown/0' fallback
+# still applies for those.
+# `|| true` suppresses pipefail when grep finds no match.
+PROJECT_FROM_CONFIG="$( { grep -E '^project[[:space:]]*:' "${REPO_ROOT}/.board-superpowers/config.yml" 2>/dev/null \
+        | head -n1 \
+        | sed -E 's/^project[[:space:]]*:[[:space:]]*//; s/^"//; s/"$//'; } || true)"
+PROJECT_NAME="${PROJECT_FROM_CONFIG:-}"
+
 # Integer validation — MUST happen before any mode/DB branching.
 # Per design.md §3.2 + Codex blocker fix: non-integer action_id is a contract
 # violation distinguishable from DB outage. The check must be pre-mode-branch
@@ -82,9 +101,16 @@ done
 # non-integers because the shell-side rejection runs first.
 if ! [[ "${ACTION_ID}" =~ ^[0-9]+$ ]]; then
     bsp_warn "contract violation: --action-id is not integer: ${ACTION_ID}"
-    bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
-        "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
-        "contract-violation"
+    if [ -n "${PROJECT_NAME}" ]; then
+        bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
+            "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
+            "contract-violation" \
+            --project "${PROJECT_NAME}"
+    else
+        bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
+            "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
+            "contract-violation"
+    fi
     exit 1
 fi
 
@@ -102,22 +128,37 @@ fi
 
 # --- opportunistic flush guard -------------------------------------------
 # Per #43 AC4 design: every audit-log-write call checks whether outbox
-# rows are pending and bg-forks the flush daemon when the 60s backoff
-# window has elapsed. The sentinel is touched after each
-# bootstrap-pending row write (below); audit-last-flush is owned by
-# audit-flush-pending.sh and updated each flush attempt. The
-# BSP_SKIP_GUARD env guard prevents the flush script from re-entering
-# itself when it invokes audit-log-write.sh internally.
+# rows are pending and bg-forks the flush daemon when the backoff window
+# has elapsed. The sentinel is touched after each bootstrap-pending row
+# write (below); audit-last-flush is owned by audit-flush-pending.sh
+# and updated each flush attempt.
+#
+# 600s window: real bootstrap emits 9 actions in seconds; 600s prevents
+# any mid-emit guard fire that would mutate jsonl while the loop is
+# still iterating. The shorter 60s prior window could fire mid-emit
+# during slow bootstraps (e.g., uv sync first install), transitioning
+# some rows to status=processed before the loop completed. 600s gives
+# the entire bootstrap envelope plenty of headroom; the explicit
+# end-of-bootstrap flush (bootstrap-project.sh Step 3.5) takes over
+# from there.
+#
+# BSP_SKIP_GUARD=1 is a TEST-ONLY override (see
+# tests/e2e/test-bootstrap-audit-e2e.sh + tests/unit/test-audit-log-
+# write-outbox.sh). It is also used internally when the flush script
+# invokes audit-log-write.sh (reentry prevention). Do NOT set it in
+# production: the guard is the only opportunistic flush trigger
+# between explicit flush points.
 SENTINEL="${HOME}/.board-superpowers/audit-pending.sentinel"
 LAST_FLUSH_FILE="${HOME}/.board-superpowers/audit-last-flush"
 FLUSH_SCRIPT="${SCRIPT_DIR}/audit-flush-pending.sh"
+GUARD_WINDOW_SEC=600
 if [ -f "${SENTINEL}" ] && [ -x "${FLUSH_SCRIPT}" ] && [ -z "${BSP_SKIP_GUARD:-}" ]; then
     NOW_SEC=$(date +%s)
     LAST_FLUSH_SEC=$(cat "${LAST_FLUSH_FILE}" 2>/dev/null || echo 0)
     case "${LAST_FLUSH_SEC}" in
         ''|*[!0-9]*) LAST_FLUSH_SEC=0 ;;
     esac
-    if [ $((NOW_SEC - LAST_FLUSH_SEC)) -gt 60 ]; then
+    if [ $((NOW_SEC - LAST_FLUSH_SEC)) -gt "${GUARD_WINDOW_SEC}" ]; then
         echo "${NOW_SEC}" > "${LAST_FLUSH_FILE}"
         BSP_SKIP_GUARD=1 bash "${FLUSH_SCRIPT}" --quiet >/dev/null 2>&1 &
     fi
@@ -128,17 +169,30 @@ fi
 # resolvable), short-circuit the DB INSERT and write a single
 # outbox-shaped jsonl row tagged with event_uuid + status=pending.
 # Touch the sentinel so the next non-guarded audit-log-write call
-# (after the 60s backoff window) fires the flush daemon.
+# (after the GUARD_WINDOW_SEC backoff window) fires the flush daemon.
 if [ "${MODE}" = "bootstrap-pending" ]; then
     EVENT_UUID="$(python3 -c 'import uuid; print(uuid.uuid4())')"
     PENDING_SINCE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
-        "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
-        "bootstrap-pending" \
-        --event-uuid "${EVENT_UUID}" \
-        --status "pending" \
-        --retry-count 0 \
-        --pending-since "${PENDING_SINCE}"
+    if [ -n "${PROJECT_NAME}" ]; then
+        bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
+            "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
+            "bootstrap-pending" \
+            --event-uuid "${EVENT_UUID}" \
+            --status "pending" \
+            --retry-count 0 \
+            --pending-since "${PENDING_SINCE}" \
+            --project "${PROJECT_NAME}"
+    else
+        # Host bootstrap before per-repo config.yml exists — projectless
+        # by design. Flush worker's 'unknown/0' fallback applies.
+        bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
+            "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
+            "bootstrap-pending" \
+            --event-uuid "${EVENT_UUID}" \
+            --status "pending" \
+            --retry-count 0 \
+            --pending-since "${PENDING_SINCE}"
+    fi
     mkdir -p "$(dirname "${SENTINEL}")"
     : > "${SENTINEL}"
     exit 0
@@ -165,9 +219,16 @@ if [ -z "${VENV_PYTHON}" ]; then
         # surfaces via the bsp_warn log line below for forensic use.
         *) MODE="degraded-venv-create-failed"; bsp_warn "venv unavailable (rc=${VENV_RC}); degrading to jsonl" ;;
     esac
-    bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
-        "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
-        "${MODE}"
+    if [ -n "${PROJECT_NAME}" ]; then
+        bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
+            "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
+            "${MODE}" \
+            --project "${PROJECT_NAME}"
+    else
+        bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
+            "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
+            "${MODE}"
+    fi
     exit 0
 fi
 
@@ -175,23 +236,24 @@ fi
 AUDIT_DB_URL="$(bsp_resolve_audit_db_url)"
 if [ -z "${AUDIT_DB_URL}" ]; then
     bsp_warn "audit_db_url unset; degrading to jsonl mode=no-db"
-    bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
-        "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
-        "no-db"
+    if [ -n "${PROJECT_NAME}" ]; then
+        bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
+            "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
+            "no-db" \
+            --project "${PROJECT_NAME}"
+    else
+        bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
+            "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
+            "no-db"
+    fi
     exit 0
 fi
 
-# Resolve project identifier as `OWNER/NUMBER` per the BoardAdapter
-# contract (spec 06 § Core schema). Read from <repo>/.board-superpowers/
-# config.yml; fall back to repo basename only when the config.yml is
-# missing or has no project: field (e.g., bootstrap not yet run on a
-# fresh repo, or non-BoardAdapter context).
-# `|| true` suppresses pipefail when grep finds no match (no config.yml,
-# or no project: line).
-PROJECT_FROM_CONFIG="$( { grep -E '^project[[:space:]]*:' "${REPO_ROOT}/.board-superpowers/config.yml" 2>/dev/null \
-        | head -n1 \
-        | sed -E 's/^project[[:space:]]*:[[:space:]]*//; s/^"//; s/"$//'; } || true)"
-PROJECT_NAME="${PROJECT_FROM_CONFIG:-$(basename "${REPO_ROOT}")}"
+# For DB INSERT path, fall back to repo basename when no project
+# resolved from config.yml — preserves prior behavior for the in-DB
+# `project` column. Only the jsonl fallback paths above use the empty
+# default + flush-worker fallback.
+[ -z "${PROJECT_NAME}" ] && PROJECT_NAME="$(basename "${REPO_ROOT}")"
 
 # --- INSERT via venv-python -----------------------------------------------
 INSERT_RC=0
@@ -283,7 +345,8 @@ if [ ${INSERT_RC} -ne 0 ]; then
     bsp_warn "DB insert failed (rc=${INSERT_RC}); degrading to jsonl mode=degraded-db-unavailable"
     bsp_audit_local_write "${REPO_ROOT}" "${ACTION_ID}" "${DECISION}" "${SKILL}" \
         "approval=${APPROVAL_STAGE} outcome=${OUTCOME} payload=${PAYLOAD}" \
-        "degraded-db-unavailable"
+        "degraded-db-unavailable" \
+        --project "${PROJECT_NAME}"
     exit 0
 fi
 

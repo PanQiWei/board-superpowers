@@ -30,6 +30,12 @@ grep -q '"retry_count": 0' "${JSONL}" || { echo "FAIL: retry_count=0 missing"; e
 grep -qE '"pending_since": "[0-9]{4}-[0-9]{2}-[0-9]{2}T' "${JSONL}" \
     || { echo "FAIL: pending_since missing"; exit 1; }
 grep -q '"mode": "bootstrap-pending"' "${JSONL}" || { echo "FAIL: mode=bootstrap-pending missing"; exit 1; }
+# project field — resolved from this repo's .board-superpowers/config.yml
+# (PanQiWei/4). Asserts the #43 final-review fix that PROJECT_NAME is
+# resolved BEFORE the bootstrap-pending short-circuit so the outbox row
+# carries it (otherwise the flush worker fell back to 'unknown/0').
+grep -q '"project": "PanQiWei/4"' "${JSONL}" \
+    || { echo "FAIL: project field missing or wrong; flush worker would lose partitioning"; cat "${JSONL}"; exit 1; }
 
 # Test 2: sentinel created
 [ -f "${HOME}/.board-superpowers/audit-pending.sentinel" ] || { echo "FAIL: sentinel missing after first bootstrap-pending write"; exit 1; }
