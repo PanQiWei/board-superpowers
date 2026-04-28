@@ -117,14 +117,38 @@ description but aren't sure which row it lives in.
 
 ## Bootstrap rows (200-208)
 
-| `action_id` | Action | Examples |
-|-------------|--------|----------|
-| 200 | Bootstrap host (manifest write) | Writing `~/.board-superpowers/manifest.yml` after host bootstrap. |
-| 201 | Bootstrap project step 2a (labels create) | Delegating to `setup-labels.sh` to create 9 standard labels. |
-| 202 | Bootstrap project step 2c (config write) | Rendering `<repo>/.board-superpowers/config.yml` + `config.local.yml`. |
-| 203 | Bootstrap project step 2d (.gitignore append) | Appending idempotent `.board-superpowers/claims/` + `.venv/` blocks. |
-| 204 | Bootstrap project step 2e (credentials.yml write) | BYO-RDBMS DSN walkthrough; writing `~/.board-superpowers/credentials.yml` chmod 0600. |
-| 205 | Bootstrap project step 2f (uv sync per-repo venv) | Creating `<repo>/.board-superpowers/.venv/` via `uv sync`. |
-| 206 | Bootstrap project step 2g (audit-init dispatch) | Dispatching `audit-init.sh` to apply DDL schema. |
-| 207 | Bootstrap project step 4 (routing block injection) | Appending board-superpowers routing block to CLAUDE.md + AGENTS.md. |
-| 208 | Bootstrap project step 3 (state.yml write) | Writing `~/.board-superpowers/repos/<normalized>/state.yml`. |
+- **200: Bootstrap host (manifest write)** | action_id 200 | class A
+  - Examples: writing `~/.board-superpowers/manifest.yml` after host bootstrap completes; persisting plugin version + uv version + host_bootstrapped_at.
+  - Why A-class: first-time setup is architect-initiated; manifest write is idempotent (re-running detects existing manifest at current version and no-ops).
+
+- **201: Bootstrap project step 2a (labels create)** | action_id 201 | class A
+  - Examples: delegating to `setup-labels.sh` which creates the 9 standard labels (`type:feature`, `type:bug`, `size:S`, etc.).
+  - Why A-class: label creation is idempotent (existing labels skipped) and reversible (architect can hand-delete via GitHub UI).
+
+- **202: Bootstrap project step 2c (config write)** | action_id 202 | class A
+  - Examples: rendering `<repo>/.board-superpowers/config.yml` (team-shared) and `config.local.yml` (per-user) with sensible defaults.
+  - Why A-class: write is idempotent (existing files preserved unless `--force`); architect controls the config content via CLI flags or post-bootstrap hand-edit.
+
+- **203: Bootstrap project step 2d (.gitignore append)** | action_id 203 | class A
+  - Examples: appending idempotent block ignoring `.board-superpowers/claims/` and `.board-superpowers/.venv/` to repo `.gitignore`.
+  - Why A-class: append is idempotent (re-running detects existing block and skips); reversible via hand-edit.
+
+- **204: Bootstrap project step 2e (credentials.yml write)** | action_id 204 | class A
+  - Examples: BYO-RDBMS DSN walkthrough; writing `~/.board-superpowers/credentials.yml` chmod 0600.
+  - Why A-class: DSN was already approved by the architect via interactive prompt or `--audit-db-url` flag; write itself is mechanical.
+
+- **205: Bootstrap project step 2f (uv sync per-repo venv)** | action_id 205 | class A
+  - Examples: running `uv sync` against the committed `pyproject.toml` + `uv.lock` to create `<repo>/.board-superpowers/.venv/`.
+  - Why A-class: venv creation is idempotent and reversible (architect can `rm -rf .venv` and re-run).
+
+- **206: Bootstrap project step 2g (audit-init dispatch)** | action_id 206 | class A
+  - Examples: dispatching `audit-init.sh` to apply DDL schema to the BYO RDBMS audit_log table; idempotent via `IF NOT EXISTS`.
+  - Why A-class: DDL apply is idempotent (existing schema preserved); upgrades go through the canonical migration runner under `scripts/migrations/`.
+
+- **207: Bootstrap project step 4 (routing block injection)** | action_id 207 | class A
+  - Examples: appending the canonical routing block to `CLAUDE.md` AND `AGENTS.md` between the marker pair `<!-- board-superpowers:routing -->` / `<!-- /board-superpowers:routing -->`; recording each block's SHA256 hash for tamper detection.
+  - Why A-class: injection is idempotent (existing markers detected and updated); architect can remove via marker pair deletion.
+
+- **208: Bootstrap project step 3 (state.yml write)** | action_id 208 | class A
+  - Examples: writing `~/.board-superpowers/repos/<normalized>/state.yml` with `schema_version`, `repo_bootstrapped_at`, `last_seen_version_in_repo`, `features_enabled`, and `routing_blocks[]` array.
+  - Why A-class: state.yml is plugin-managed (silently overwritten by plugin on next state-update cycle if hand-edited); first write is the natural home of host-local state.

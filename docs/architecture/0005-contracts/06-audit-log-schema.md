@@ -177,6 +177,35 @@ has no Producer counterpart (claim, surface, terminate, etc.).
 | 112 | PR-submit pre-flight — card body sync (toggle ACs to `[x]`, write implementation summary) | A | none |
 | 113 | Post-merge cleanup — remove worktree + delete local claim branch + write close audit row | A | none |
 
+#### Numbering rationale
+
+- 100-range chosen to avoid collision with future Producer rows
+  (matrix-numbering reserves 1–99 for Producer expansion).
+- Six rows is the minimum to cover the lifecycle moments listed
+  in §1.4 (claim, surface, success-terminate, failure-terminate,
+  retro write, review-cycle). Smaller sub-actions (F-C2 fetch,
+  F-C3 worktree-entry, F-C7 hard-floor block) are folded into
+  the surrounding row's payload (e.g., F-C3 transition emits
+  a Producer row 13 entry with `actor_role = consumer` because
+  it's a status transition, not a Consumer-specific action).
+- F-C9 / F-C10 / F-C11 verification-chain invocations do NOT each
+  get their own `action_id` — they emit one AuditEntry per
+  invocation under `action_id = 105` with a `subaction` field in
+  the payload distinguishing them. Rationale: the verification
+  chain is one logical Consumer action ("run pre-submit checks");
+  the per-skill outcomes are payload detail.
+
+#### Consumer rows that REUSE Producer row numbers
+
+- `actor_role = consumer` + `action_id = 5` — Consumer transitions
+  Ready → In Progress at F-C3 (re-uses row 5 because the action
+  semantics are identical to Producer's Backlog → Ready
+  transition). Per §1.4.1 F-C3 + 0003 § 3.3.3.
+- `actor_role = consumer` + `action_id = 13` — Mode-2 wake-up of a
+  suspended Consumer (re-uses row 13 because dispatch is
+  dispatch). Per §1.4 cross-cutting note "rows 8/12/13 apply
+  symmetrically".
+
 ### Bootstrap rows — 200–208
 
 The `bootstrapping-repo` skill records 9 mutating actions when
@@ -209,35 +238,6 @@ validation) is read-only and does NOT receive an `action_id`.
 - Higher numbers (above the current ceiling of 208) are NOT
   pre-reserved per the SPOT contract — new bootstrap actions
   take the next free integer at the time they are added.
-
-#### Numbering rationale
-
-- 100-range chosen to avoid collision with future Producer rows
-  (matrix-numbering reserves 1–99 for Producer expansion).
-- Six rows is the minimum to cover the lifecycle moments listed
-  in §1.4 (claim, surface, success-terminate, failure-terminate,
-  retro write, review-cycle). Smaller sub-actions (F-C2 fetch,
-  F-C3 worktree-entry, F-C7 hard-floor block) are folded into
-  the surrounding row's payload (e.g., F-C3 transition emits
-  a Producer row 13 entry with `actor_role = consumer` because
-  it's a status transition, not a Consumer-specific action).
-- F-C9 / F-C10 / F-C11 verification-chain invocations do NOT each
-  get their own `action_id` — they emit one AuditEntry per
-  invocation under `action_id = 105` with a `subaction` field in
-  the payload distinguishing them. Rationale: the verification
-  chain is one logical Consumer action ("run pre-submit checks");
-  the per-skill outcomes are payload detail.
-
-#### Consumer rows that REUSE Producer row numbers
-
-- `actor_role = consumer` + `action_id = 5` — Consumer transitions
-  Ready → In Progress at F-C3 (re-uses row 5 because the action
-  semantics are identical to Producer's Backlog → Ready
-  transition). Per §1.4.1 F-C3 + 0003 § 3.3.3.
-- `actor_role = consumer` + `action_id = 13` — Mode-2 wake-up of a
-  suspended Consumer (re-uses row 13 because dispatch is
-  dispatch). Per §1.4 cross-cutting note "rows 8/12/13 apply
-  symmetrically".
 
 ---
 
