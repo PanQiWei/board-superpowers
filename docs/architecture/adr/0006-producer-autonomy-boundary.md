@@ -54,8 +54,9 @@ Producer follows three rules, in this order:
    a proposal and awaits the next architect prompt for approval.
 
 We name the three classes **A** (Auto), **R** (Reserved), and
-**N** (No-go, permanent). At v1 the matrix has 7 A, 7 R, and 0 N.
-The N=0 result is itself a decision — see §4 below.
+**N** (No-go, permanent). At v1 the Producer matrix has 7 A, 7 R,
+and 0 N. The Bootstrap rows add 9 A. Across the full matrix:
+16 A, 7 R, 0 N. The N=0 result is itself a decision — see §4 below.
 
 ### 2. Triage rule (short-circuit, top-to-bottom)
 

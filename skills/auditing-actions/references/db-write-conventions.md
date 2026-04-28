@@ -76,8 +76,8 @@ common shapes; for the full per-row schema, the implementation lives in
 ```
 
 For the full per-row catalog (all 14 Producer rows + 14 Consumer rows + 9 Bootstrap rows),
-read the `audit-log-write.sh` source — each row's INSERT path documents
-its required and optional payload fields.
+see `docs/architecture/0005-contracts/06-audit-log-schema.md` § "Per-action_id payload sub-schemas"
+and the payload templates in this file.
 
 ## Quoting and escape
 
@@ -108,7 +108,7 @@ each writes one entry on success / failure.
 |-------------|--------|
 | 200 | Bootstrap host (manifest write) |
 | 201 | Bootstrap project step 2a (labels create) |
-| 202 | Bootstrap project step 2c (config write) |
+| 202 | Bootstrap project step 2c (config.yml + config.local.yml write) |
 | 203 | Bootstrap project step 2d (.gitignore append) |
 | 204 | Bootstrap project step 2e (credentials.yml write) |
 | 205 | Bootstrap project step 2f (uv sync per-repo venv) |
@@ -138,7 +138,7 @@ each writes one entry on success / failure.
 }
 ```
 
-### `action_id = 202` (Bootstrap config write)
+### `action_id = 202` (Bootstrap config.yml + config.local.yml write)
 
 ```json
 {
