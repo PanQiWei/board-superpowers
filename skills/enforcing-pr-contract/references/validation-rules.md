@@ -85,7 +85,7 @@ The sanctioned post-OPEN body-update path is `bash scripts/submit-pr.sh --update
 
 1. Fetches the PR's current body (`gh pr view --json body`).
 2. Refuses if the current body has no Closes/Fixes/Resolves keyword for the linked card — that signals the OPEN-time body never had the trailer (e.g., direct `gh pr create`), the webhook chain is unrecoverable, and silently re-injecting would be misleading audit-trail. Surfaces the manual recovery path in the error message.
-3. Otherwise: strips any tail-anchored canonical trailer block in the new body via the `^(?:Close[ds]?|Fix(?:e[ds])?|Resolve[ds]?)\s+#<N>` regex (only at the body's tail — mid-body Closes-style references in user prose are preserved), then re-appends the canonical line. Idempotent under repeated invocation: every call produces exactly one trailer block regardless of whether the input body had zero, one, or many.
+3. Otherwise: strips any tail-anchored canonical trailer block in the new body via `(?i)(?:\n+---\s*)?\n+[ \t]*(?:Close[ds]?|Fix(?:e[ds])?|Resolve[ds]?)\s+#<N>\b[^\n]*\s*\Z` (anchored to end-of-string via `\Z`, NOT `(?m)` + `$` which would match end-of-line and silently delete mid-body user prose; `\b` after `<N>` prevents `#530` from matching when `<N>` is `53`), then re-appends the canonical line. Idempotent under repeated invocation: every call produces exactly one trailer block regardless of whether the input body had zero, one, or many.
 4. Writes back via `gh pr edit --body-file`.
 
 Direct `gh pr edit --body-file` on a Consumer PR is treated as a contract violation by `consuming-card` Step 10. The Consumer's Step 10 "Common rationalizations to reject" table catches the most common slip ("I'll just use `gh pr edit` for a quick retro-note tweak").

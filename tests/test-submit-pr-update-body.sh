@@ -516,6 +516,68 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Scenario (h) — word-boundary protects unrelated cards' tail trailers
+# ---------------------------------------------------------------------------
+#
+# Reviewer finding (C1): the strip regex omitted `\b` after the card
+# number, so `Closes #530 different card.` at body tail would match
+# when --card 53 (greedy [^\n]* swallowed the trailing digits and
+# everything else). Without the fix this is silent data loss across
+# unrelated card references at body tail. With `\b` the unrelated
+# trailer is preserved.
+printf '\nScenario (h): word-boundary keeps unrelated card trailers (C1 regression)\n'
+
+STATE_H="${TMPSCRATCH}/state-h"
+mkdir -p "${STATE_H}"
+cp "${STATE_A}/pr-body.md" "${STATE_H}/pr-body.md"  # canonical body w/ Closes #53
+
+WORDBOUND_BODY="${TMPSCRATCH}/wordbound-body.md"
+cat > "${WORDBOUND_BODY}" <<'BODY'
+## Summary
+
+Body whose tail mentions an unrelated card's Closes line — must
+survive --update-body --card 53 because the strip regex anchors on
+\b after the card number.
+
+## Automated Verification
+
+- [x] `bash tests/test-submit-pr-update-body.sh` — pass
+
+## Retro Notes
+
+- An unrelated card was referenced at body tail.
+
+---
+Closes #530 — different card, not the one this PR closes.
+BODY
+
+run_submit "${STATE_H}" \
+    --update-body \
+    --pr 123 \
+    --body-file "${WORDBOUND_BODY}" \
+    --card 53
+
+check "exit 0 on body whose tail trailer is for unrelated card #530" \
+    test "${RC}" -eq 0
+
+if grep -q 'Closes #530 — different card' "${STATE_H}/pr-body.md"; then
+    printf '  PASS — unrelated card #530 tail trailer preserved (\\b word-boundary)\n'
+    PASS=$((PASS + 1))
+else
+    printf '  FAIL — unrelated card #530 tail trailer was stripped (regex word-boundary bug)\n' >&2
+    FAIL=$((FAIL + 1))
+fi
+
+# Canonical Closes #53 trailer must still be present at end of body.
+if tail -1 "${STATE_H}/pr-body.md" | grep -q '^Closes #53'; then
+    printf '  PASS — canonical Closes #53 trailer at the very end\n'
+    PASS=$((PASS + 1))
+else
+    printf '  FAIL — canonical Closes #53 trailer missing at body tail\n' >&2
+    FAIL=$((FAIL + 1))
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 

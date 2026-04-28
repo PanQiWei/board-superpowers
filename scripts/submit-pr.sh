@@ -175,7 +175,24 @@ keyword_re = re.compile(
 sys.exit(0 if keyword_re.search(body) else 1)
 PY
     then
-        bsp_die "PR #${PR} current body has no Closes/Fixes/Resolves #${CARD} trailer — the PR↔Issue auto-close webhook chain is unrecoverable for this PR. Manual recovery required (see consuming-card Step 12 stage a). Refusing to silently re-inject (would mislead audit trail)."
+        # The script cannot tell from the current body alone whether
+        # the trailer was never present at OPEN (case 1 — webhook
+        # chain unrecoverable) OR was stripped by a post-OPEN
+        # `gh pr edit` (case 2 — link can still be restored before
+        # merge by re-adding any matching trailer line, since GitHub
+        # re-derives closingIssuesReferences on every body update).
+        # Surface BOTH paths so the Consumer can pick the right one.
+        bsp_die "PR #${PR} current body has no Closes/Fixes/Resolves #${CARD} trailer.
+This means one of:
+  (1) The PR was opened without submit-pr.sh, so the trailer never
+      existed at PR-OPEN. The auto-close webhook chain cannot be
+      recovered. Follow consuming-card Step 12 stage (a) for manual
+      Issue close + manual ProjectV2 Status flip.
+  (2) A previous gh pr edit --body-file stripped the trailer
+      post-OPEN. If the PR has not yet merged, the link can still be
+      restored: manually add a single line containing 'Closes #${CARD}'
+      via gh pr edit, then retry --update-body to canonicalize.
+Refusing to silently re-inject (cannot distinguish the two cases)."
     fi
 
     NEW_BODY="$(mktemp)"
@@ -192,10 +209,16 @@ card = os.environ['CARD']
 # The `\s*` before `\Z` consumes the trailer's own final newline; on
 # mid-body matches `\s*` cannot reach `\Z` because non-whitespace
 # follows on subsequent lines, so user prose is preserved.
+#
+# `\b` after the card number is load-bearing — without it, `#530`
+# matches when card="53" (greedy [^\n]* would gladly consume the
+# trailing digits), silently stripping a tail line that references a
+# different card. Mirror of the detection regex above which already
+# uses \b after the card number.
 trailer_block_re = re.compile(
     r'(?i)(?:\n+---\s*)?\n+[ \t]*(?:Close[ds]?|Fix(?:e[ds])?|Resolve[ds]?)\s+#' +
     re.escape(card) +
-    r'[^\n]*\s*\Z'
+    r'\b[^\n]*\s*\Z'
 )
 while True:
     stripped = trailer_block_re.sub('', body)
