@@ -60,6 +60,18 @@
 # has already verified the lib's integrity (per spec § "Self-contained
 # scripts at the dep-check layer" — only check-deps.sh and the
 # SessionStart hook are barred from sourcing common.sh).
+#
+# Audit emission convention (Task 7 / AC4 / Open Q-C):
+#   action_id 200 (host bootstrap manifest write) is a host-level
+#   action, NOT a per-repo action. SKILL invocations of
+#   audit-log-write.sh for action_id 200 MUST pass
+#   `--repo-root "${HOME}/.board-superpowers/__host__"` so the
+#   resulting bootstrap-pending row lands at
+#   ~/.board-superpowers/repos/<host-normalized>/audit-local.jsonl
+#   (a stable host-scoped path) rather than a PWD-derived repo path
+#   that would orphan the row across jsonls. This script ensures the
+#   `__host__` sentinel directory exists so the SKILL invocation
+#   succeeds without per-architect setup.
 
 set -euo pipefail
 
@@ -295,6 +307,17 @@ if ! mkdir -p "${STATE_DIR}"; then
     bsp_die "failed to create ${STATE_DIR}"
 fi
 chmod 0700 "${STATE_DIR}"
+
+# Ensure the __host__ sentinel directory exists so SKILL-side audit
+# emissions for action_id 200 (which pass
+# `--repo-root "${HOME}/.board-superpowers/__host__"`) resolve to a
+# stable host-scoped jsonl path. Idempotent. See header comment
+# § "Audit emission convention" for the full contract (Task 7 / Open Q-C).
+HOST_AUDIT_REPO_ROOT="${STATE_DIR}/__host__"
+if ! mkdir -p "${HOST_AUDIT_REPO_ROOT}"; then
+    bsp_die "failed to create ${HOST_AUDIT_REPO_ROOT}"
+fi
+chmod 0700 "${HOST_AUDIT_REPO_ROOT}"
 
 # Detect or install uv (sets UV_VERSION). Passes BSP_INSTALL_UV_ARG so
 # --auto-install-uv flag or BSP_AUTO_INSTALL_UV=1 env activates tier 3.

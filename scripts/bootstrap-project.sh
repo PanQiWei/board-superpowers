@@ -1082,5 +1082,26 @@ else
     bsp_log "wrote ${STATE_FILE}"
 fi
 
+# --- Step 3.5 — fast-path audit flush (Task 7 / AC4) ---------------------
+#
+# Sync flush of bootstrap-pending outbox rows so the DB reflects the
+# just-completed bootstrap before this script returns. This closes the
+# observe-vs-act loop in the same session: the architect sees pending
+# rows resolved against their RDBMS without waiting for the next
+# SessionStart hook to advertise drift.
+#
+# Failure is non-fatal — pending rows stay in the per-repo
+# audit-local.jsonl and the SessionStart observer (hooks/session-start.sh)
+# will surface a dep-alert at the next session so the architect can run
+# scripts/audit-flush-pending.sh manually.
+
+FLUSH_SCRIPT="${PLUGIN_ROOT}/scripts/audit-flush-pending.sh"
+if [ -x "${FLUSH_SCRIPT}" ] || [ -r "${FLUSH_SCRIPT}" ]; then
+    bsp_log "step 3.5: fast-path audit flush"
+    if ! bash "${FLUSH_SCRIPT}" --quiet >&2; then
+        bsp_warn "step 3.5: fast-path flush exited non-zero; pending rows preserved in audit-local.jsonl for next flush"
+    fi
+fi
+
 bsp_log "F-B2 slice 4 complete (steps 2a-2g + step 4 routing block injection + state.yml with routing_blocks)."
 exit 0
