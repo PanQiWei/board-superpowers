@@ -22,11 +22,34 @@ hook authoring. The full platform contract lives in
 `PLUGIN_DEVELOPMENT.md`; this file is the thin "what every PR
 under `hooks/` must satisfy" view.
 
-## v1 events wired
+## Events wired
 
-The plugin currently wires only `SessionStart`. Other events
-(`PreToolUse`, `PostToolUse`, `Stop`) are not yet active but
-must use the same payload pattern when added later.
+The plugin wires three events:
+
+| Event | Script | Role |
+|-------|--------|------|
+| `SessionStart` (`startup` matcher) | `session-start.sh` | Layer 1 dep alert + intent injection (advisory; never blocks). |
+| `PreToolUse` (`Edit` / `Write` / `MultiEdit` matchers) | `pre-tool-use.sh` | skills/AGENTS.md Process gate enforcement (CC-only — see Codex parity gap below). Blocks file mutations under `skills/**` until `example-skills:skill-creator` is invoked in the session. Inverts the "never block" stance — see Invariant 5. Canonical block path is `hookSpecificOutput.permissionDecision: "deny"` JSON on stdout (with belt-and-suspenders exit 2 + stderr legacy path). |
+| `PostToolUse` (`Skill` matcher, CC-only) | `post-tool-use.sh` | Companion to the gate hook. Records `*skill-creator` invocations into a per-session flag file under `${TMPDIR:-/tmp}/board-superpowers-sessions/<session_id>/skill-creator-invoked.flag`. The Skill-tool input field is not canonically documented; the hook scans every string value in `tool_input` for a value ending in `skill-creator` to stay robust against field-name variation. |
+
+Other events (`Stop`, `UserPromptSubmit`, etc.) are not yet active
+but must use the same payload pattern when added later.
+
+**Codex parity gap — gate hook pair is CC-only**: Codex CLI has
+no `Skill` model-facing tool to PostToolUse-hook into, so the
+flag-file lifecycle cannot complete on Codex. Registering
+PreToolUse on Codex without a working PostToolUse companion would
+deadlock every `skills/` edit. `scripts/register-codex-hooks.sh`
+therefore writes only `SessionStart` to `~/.codex/hooks.json`;
+earlier rollouts that briefly registered the gate pair on Codex
+get auto-cleaned by the merge logic on the next install. The
+gate degrades to doctrinal text in `skills/AGENTS.md` for Codex
+sessions. Full rationale + recovery path:
+[`../docs/architecture/0005-contracts/02-hook-contracts.md`](../docs/architecture/0005-contracts/02-hook-contracts.md)
+§ "Codex parity gap — gate enforcement".
+
+Full per-event contract:
+[`../docs/architecture/0005-contracts/02-hook-contracts.md`](../docs/architecture/0005-contracts/02-hook-contracts.md).
 
 ## INVOKE / REASON marker grammar
 
@@ -102,17 +125,33 @@ cite "invariants 1–4" as a fixed enumeration.
    unsanitized REASON breaks the JSON envelope at best and
    leaks unintended content into the model's context at
    worst.
-3. **Never block.** Hooks MUST exit `0` even when internal
-   checks fail — non-zero exit codes block session start,
-   which is a strictly worse failure than the plugin running
-   unconfigured. Per
+3. **Never block (advisory hooks).** Advisory hooks
+   (`SessionStart`, future `Stop`, etc.) MUST exit `0` even
+   when internal checks fail — non-zero exit codes block
+   session start, which is a strictly worse failure than the
+   plugin running unconfigured. Per
    [`../docs/architecture/0005-contracts/02-hook-contracts.md`](../docs/architecture/0005-contracts/02-hook-contracts.md)
-   § "Exit codes": *"board-superpowers' invariant: hook
-   failures MUST NEVER block session start."*
+   § "Exit codes": *"board-superpowers' invariant: advisory
+   hook failures MUST NEVER block session start."* Safety
+   hooks (Invariant 5) are exempt.
 4. **10-second budget.** Declared in `hooks.json` (see
    "10-second timeout" section below). Keep new work well
    under it; long-running work should fork-and-exit a
    background process and return the marker fast.
+5. **Gate-blocking inversion (safety hooks only).** When a
+   hook's purpose is to enforce a safety gate (e.g.,
+   `pre-tool-use.sh` blocking `skills/` edits until
+   `example-skills:skill-creator` is invoked), the hook
+   DELIBERATELY exits `2` to block the tool call — the
+   inverse of Invariant 3. Trade-off: allowing the ungated
+   action is strictly worse than blocking it (this is the
+   doctrine the gate enforces). Such hooks MUST still fail
+   OPEN on internal errors (parser failure, missing python3,
+   etc.) — Invariant 5 only applies on the gate's positive
+   match. Each gate-blocking hook MUST be cited by name in
+   the spec section that documents its contract; the only
+   gate-blocking hook today is `hooks/pre-tool-use.sh`
+   (skills/AGENTS.md Process gate).
 
 ## Where the long-form rules live
 

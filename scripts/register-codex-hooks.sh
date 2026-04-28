@@ -26,6 +26,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(bsp_plugin_root)"
 HOOK_SCRIPT="${PLUGIN_ROOT}/hooks/session-start.sh"
 
+# Codex parity gap (intentional): Codex CLI has no Skill tool that
+# fires PostToolUse — the skills are loaded by Codex's runtime, not
+# called as a model-facing tool. So the gate's flag-file lifecycle
+# (post-tool-use.sh writes flag on Skill, pre-tool-use.sh reads flag
+# on Edit/Write) cannot complete on Codex; the gate would block
+# without ever clearing. We therefore do NOT register PreToolUse +
+# PostToolUse on the Codex side. The Process gate stays
+# doctrine-only (skills/AGENTS.md "⛔ STOP" block) on Codex; CC users
+# get tool-level enforcement via hooks/hooks.json. See
+# docs/architecture/0005-contracts/02-hook-contracts.md § "Codex
+# parity gap — gate enforcement".
+
 [ -f "${HOOK_SCRIPT}" ] || bsp_die "hook script not found: ${HOOK_SCRIPT}"
 
 bsp_require_cmd python3
@@ -114,6 +126,9 @@ EOF
 
         # Merge into existing file. Use python to preserve other plugins'
         # hooks, abort on board-superpowers entry already present.
+        # Codex registration covers SessionStart only — see top-of-file
+        # rationale "Codex parity gap" for why PreToolUse + PostToolUse
+        # are not registered on Codex.
         python3 - "${TARGET}" "${HOOK_SCRIPT}" <<'PY'
 import json, sys, os, shutil
 
@@ -145,6 +160,20 @@ data['hooks']['SessionStart'].append({
     'name': 'board-superpowers'
 })
 
+# Defensive cleanup: previous register-codex-hooks.sh versions briefly
+# also registered PreToolUse + PostToolUse on Codex. Those entries are
+# now known to deadlock the Process gate (no Skill tool on Codex →
+# flag never written → gate never clears). Remove them on every
+# install to drain any pre-existing rollouts.
+for stale_event in ('PreToolUse', 'PostToolUse'):
+    if stale_event in data['hooks']:
+        kept = [h for h in data['hooks'][stale_event]
+                if h.get('name') != 'board-superpowers']
+        if kept:
+            data['hooks'][stale_event] = kept
+        else:
+            del data['hooks'][stale_event]
+
 # Atomic write: stage to .tmp, then rename.
 tmp = target + '.tmp'
 backup = target + '.bak'
@@ -168,18 +197,28 @@ import json, sys, os, shutil
 target = sys.argv[1]
 with open(target) as f:
     data = json.load(f)
-hooks = data.get('hooks', {}).get('SessionStart', [])
-before = len(hooks)
-hooks = [h for h in hooks if h.get('name') != 'board-superpowers']
-after = len(hooks)
-if before == after:
+hooks_block = data.get('hooks') or {}
+removed_count = 0
+# Drain SessionStart entries (the canonical Codex registration target)
+# AND any stale PreToolUse / PostToolUse entries from a prior rollout
+# that briefly registered them — those are known-broken on Codex
+# (Codex parity gap; see top-of-file rationale).
+for event in ('SessionStart', 'PreToolUse', 'PostToolUse'):
+    entries = hooks_block.get(event, [])
+    before = len(entries)
+    kept = [h for h in entries if h.get('name') != 'board-superpowers']
+    removed_count += before - len(kept)
+    if kept:
+        hooks_block[event] = kept
+    elif event in hooks_block:
+        # Empty after removal — drop the key entirely.
+        del hooks_block[event]
+if removed_count == 0:
     print(f"no board-superpowers entry found in {target}", file=sys.stderr)
     sys.exit(0)
-data['hooks']['SessionStart'] = hooks
-# If the SessionStart array is now empty, drop the key entirely.
-if not hooks:
-    del data['hooks']['SessionStart']
-if not data.get('hooks'):
+if hooks_block:
+    data['hooks'] = hooks_block
+elif 'hooks' in data:
     del data['hooks']
 backup = target + '.bak'
 shutil.copy2(target, backup)
@@ -187,7 +226,7 @@ tmp = target + '.tmp'
 with open(tmp, 'w') as f:
     json.dump(data, f, indent=2)
 os.replace(tmp, target)
-print(f"removed board-superpowers entry from {target} (backup at {backup})", file=sys.stderr)
+print(f"removed {removed_count} board-superpowers entry/entries from {target} (backup at {backup})", file=sys.stderr)
 PY
         ;;
 esac

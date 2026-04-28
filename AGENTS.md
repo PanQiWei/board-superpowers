@@ -603,6 +603,20 @@ a release process.
   `superpowers:test-driven-development`. An adjacent planning
   skill's "start coding" suggestion does not excuse skipping
   Red → Green → Refactor.
+
+**Manager-mode mirror**: this section's composition rules are
+mirrored for the Producer's intake routine in
+[`skills/managing-board/references/skill-routing.md`](./skills/managing-board/references/skill-routing.md).
+The two files MUST stay in sync — see the change-impact-matrix
+row "AGENTS.md compose section ↔ skill-routing.md /
+scope-shape-judgment.md" in
+[`docs/architecture/AGENTS.md`](./docs/architecture/AGENTS.md).
+If you edit one without the other, the PR is incomplete.
+The shape-level companion ([`scope-shape-judgment.md`](./skills/managing-board/references/scope-shape-judgment.md))
+and the spec-first companion ([`spec-first-checklist.md`](./skills/managing-board/references/spec-first-checklist.md))
+are the manager-mode SoT for shape decisions and spec
+preconditions; this section provides the cross-plugin wiring
+they consume.
 <!-- /board-superpowers:routing -->
 
 ## Do Not
