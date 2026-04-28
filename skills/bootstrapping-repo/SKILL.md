@@ -81,18 +81,23 @@ Bootstrap is mostly R-class (see "Why bootstrap is mostly R-class" above). Archi
 
 ### Action ID catalog (bootstrap actions)
 
+The 9 mutating bootstrap actions are integer-tracked in the
+200-range action_id namespace (see
+[`docs/architecture/0005-contracts/06-audit-log-schema.md`](../../docs/architecture/0005-contracts/06-audit-log-schema.md)
+"Bootstrap rows — 200–208"). Numbering follows execution order.
+
 ```
-bootstrap-host          — host manifest write (mode 0644, ts + version)
-bootstrap-project-2a    — labels create (delegates to setup-labels.sh)
-bootstrap-project-2b    — Status field validation (read-only; no audit)
-bootstrap-project-2c    — config.yml + config.local.yml write
-bootstrap-project-2d    — .gitignore append (idempotent block)
-bootstrap-project-2e    — credentials.yml write (chmod 0600; DSN allowlist)
-bootstrap-project-2f    — uv sync per-repo venv create
-bootstrap-project-2g    — audit-init.sh dispatch (DDL apply)
-bootstrap-project-4     — routing block injection (CLAUDE.md + AGENTS.md;
-                                                    stub-redirect targets skipped)
-bootstrap-project-3     — state.yml write (host-local per-repo)
+200 → bootstrap-host                  (host manifest write; mode 0644, ts + version)
+201 → bootstrap-project-2a            (labels create; delegates to setup-labels.sh)
+                                      (2b read-only Status-field validation; no audit)
+202 → bootstrap-project-2c            (config.yml + config.local.yml write)
+203 → bootstrap-project-2d            (.gitignore append; idempotent block)
+204 → bootstrap-project-2e            (credentials.yml write; chmod 0600; DSN allowlist)
+205 → bootstrap-project-2f            (uv sync per-repo venv create)
+206 → bootstrap-project-2g            (audit-init.sh dispatch; DDL apply)
+207 → bootstrap-project-4             (routing block injection; CLAUDE.md + AGENTS.md;
+                                       stub-redirect targets skipped)
+208 → bootstrap-project-3             (state.yml write; host-local per-repo)
 ```
 
 For the full default class (A/R) of each action_id, consult the
@@ -121,7 +126,7 @@ The script:
 
 `--force` is available as an escape hatch (overwrites unconditionally) but should be reserved for migration / dev scenarios; the architect must explicitly request it.
 
-Apply the governance sequence above for the manifest write (action_id: `bootstrap-host`).
+Apply the governance sequence above for the manifest write (action_id: 200).
 
 ### Step 2 — preflight check for per-repo bootstrap
 

@@ -117,14 +117,21 @@ makes the dominant queries crisp:
 ## `action_id` catalog
 
 `action_id` is a stable integer reference into a documented
-matrix. The matrix has two halves:
+matrix. The matrix has three halves:
 
 - **Producer rows: 1–14** — from ADR-0006 §3 (canonical).
-- **Consumer rows: 100–111** — finalized here per TBD-3 (canonical
+- **Consumer rows: 100–113** — finalized here per TBD-3 (canonical
   numbering proposal in this file). Rows 105–111 split the prior
   single "review-cycle response" row into seven sub-action rows so
   retro queries can filter by sub-action at the column level
-  rather than via JSONB path extraction.
+  rather than via JSONB path extraction. Rows 112–113 cover the
+  Consumer's PR-submit pre-flight card body sync and the
+  post-merge cleanup terminal action.
+- **Bootstrap rows: 200–208** — the 9 mutating actions of the
+  `bootstrapping-repo` skill (host manifest write + 8 per-repo
+  sub-steps in execution order). All A-class by default; the
+  read-only Status-field validation sub-step (2b) does not get
+  an `action_id` because it does not mutate state.
 
 Producer-vantage rows that apply symmetrically to Consumer-side
 actions (per §1.4 cross-cutting note — rows 8 / 12 / 13) keep their
@@ -151,7 +158,7 @@ has no Producer counterpart (claim, surface, terminate, etc.).
 | 13 | Dispatch Consumer session | A |
 | 14 | Auto-trigger retro / weekly report (cadence-driven) | A |
 
-### Consumer rows — 100–111 (canonical, finalized per TBD-3)
+### Consumer rows — 100–113 (canonical, finalized per TBD-3)
 
 | `action_id` | Action | Default class | Symmetric Producer row? |
 |-------------|--------|---------------|------------------------|
@@ -167,6 +174,41 @@ has no Producer counterpart (claim, surface, terminate, etc.).
 | 109 | Review-cycle response — QA pass (`gstack:/qa` browser-real verification) | A | none |
 | 110 | Review-cycle response — security audit (`gstack:/cso` OWASP / STRIDE pass) | A | none |
 | 111 | Review-cycle response — cycle completion (final commit + reply summarizing what landed across rows 105–110 in this cycle) | A | none |
+| 112 | PR-submit pre-flight — card body sync (toggle ACs to `[x]`, write implementation summary) | A | none |
+| 113 | Post-merge cleanup — remove worktree + delete local claim branch + write close audit row | A | none |
+
+### Bootstrap rows — 200–208
+
+The `bootstrapping-repo` skill records 9 mutating actions when
+running first-time host + per-repo bootstrap. The numbering
+follows execution order (host manifest first, per-repo sub-steps
+2a → 2c → 2d → 2e → 2f → 2g → 4 → 3). Sub-step 2b (Status field
+validation) is read-only and does NOT receive an `action_id`.
+
+| `action_id` | Action | Default class |
+|-------------|--------|---------------|
+| 200 | Bootstrap host (manifest write) | A |
+| 201 | Bootstrap project step 2a (labels create) | A |
+| 202 | Bootstrap project step 2c (config.yml + config.local.yml write) | A |
+| 203 | Bootstrap project step 2d (.gitignore append) | A |
+| 204 | Bootstrap project step 2e (credentials.yml write) | A |
+| 205 | Bootstrap project step 2f (uv sync per-repo venv) | A |
+| 206 | Bootstrap project step 2g (audit-init dispatch) | A |
+| 207 | Bootstrap project step 4 (routing block injection) | A |
+| 208 | Bootstrap project step 3 (state.yml write) | A |
+
+#### Numbering rationale
+
+- 200-range chosen to avoid collision with future Producer
+  expansion (1–99 reserved) AND with future Consumer expansion
+  (100–199 reserved). The bootstrap namespace is its own block
+  because bootstrap actions are neither Producer nor Consumer
+  (they run before the role split exists on a fresh repo).
+- Rows numbered in execution order so a chronological scan of
+  the audit log reads as the linear bootstrap procedure.
+- Higher numbers (above the current ceiling of 208) are NOT
+  pre-reserved per the SPOT contract — new bootstrap actions
+  take the next free integer at the time they are added.
 
 #### Numbering rationale
 

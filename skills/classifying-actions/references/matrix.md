@@ -1,4 +1,4 @@
-# Decision matrix — Producer rows 1-14 + Consumer rows 100-113
+# Decision matrix — Producer rows 1-14 + Consumer rows 100-113 + Bootstrap rows 200-208
 
 This is the canonical decision table for the skill. Every mutating action
 maps to one row; the row's `default class` is the starting point for
@@ -43,6 +43,20 @@ overrides that may promote Reserved to Auto).
 | 111 | Review-cycle response — cycle completion | A |
 | 112 | PR-submit pre-flight — card body sync (toggle ACs to `[x]`, write implementation summary) | A |
 | 113 | Post-merge cleanup — remove worktree + delete local claim branch + write close audit row | A |
+
+## Bootstrap rows (200-208)
+
+| `action_id` | Action | Default class |
+|-------------|--------|---------------|
+| 200 | Bootstrap host (manifest write) | A |
+| 201 | Bootstrap project step 2a (labels create) | A |
+| 202 | Bootstrap project step 2c (config.yml + config.local.yml write) | A |
+| 203 | Bootstrap project step 2d (.gitignore append) | A |
+| 204 | Bootstrap project step 2e (credentials.yml write) | A |
+| 205 | Bootstrap project step 2f (uv sync per-repo venv) | A |
+| 206 | Bootstrap project step 2g (audit-init dispatch) | A |
+| 207 | Bootstrap project step 4 (routing block injection) | A |
+| 208 | Bootstrap project step 3 (state.yml write) | A |
 
 ## Reused Producer rows on the Consumer side
 

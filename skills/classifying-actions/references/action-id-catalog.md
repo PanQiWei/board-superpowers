@@ -114,3 +114,17 @@ description but aren't sure which row it lives in.
     condition (PR is merged). When run via cron, the cron itself is
     R-class (architect opted-in via `auto_post_merge_cleanup` in
     config), so individual cleanup runs inside the cron stay A.
+
+## Bootstrap rows (200-208)
+
+| `action_id` | Action | Examples |
+|-------------|--------|----------|
+| 200 | Bootstrap host (manifest write) | Writing `~/.board-superpowers/manifest.yml` after host bootstrap. |
+| 201 | Bootstrap project step 2a (labels create) | Delegating to `setup-labels.sh` to create 9 standard labels. |
+| 202 | Bootstrap project step 2c (config write) | Rendering `<repo>/.board-superpowers/config.yml` + `config.local.yml`. |
+| 203 | Bootstrap project step 2d (.gitignore append) | Appending idempotent `.board-superpowers/claims/` + `.venv/` blocks. |
+| 204 | Bootstrap project step 2e (credentials.yml write) | BYO-RDBMS DSN walkthrough; writing `~/.board-superpowers/credentials.yml` chmod 0600. |
+| 205 | Bootstrap project step 2f (uv sync per-repo venv) | Creating `<repo>/.board-superpowers/.venv/` via `uv sync`. |
+| 206 | Bootstrap project step 2g (audit-init dispatch) | Dispatching `audit-init.sh` to apply DDL schema. |
+| 207 | Bootstrap project step 4 (routing block injection) | Appending board-superpowers routing block to CLAUDE.md + AGENTS.md. |
+| 208 | Bootstrap project step 3 (state.yml write) | Writing `~/.board-superpowers/repos/<normalized>/state.yml`. |
