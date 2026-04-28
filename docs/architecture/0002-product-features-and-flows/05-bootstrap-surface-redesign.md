@@ -321,6 +321,25 @@ Which subsystem does this stage configure? Nine values
   registry; brought into bootstrap per G4
   (cross-platform parity) — see the `platforms` column
   in the Stages table.
+- **`M10` — BoardAdapter selection.** The architect
+  decides which kanban backend the repo uses
+  (`github-project-v2` / `linear` / `jira` per ADR-0005's
+  BoardAdapter contract). At v0.5.0 the enum has only
+  `github-project-v2`; the future `linear` / `jira`
+  options land via registry-only edits (the option's
+  `introduced_in` field gates re-prompt: a repo whose
+  `kanban_backend` is `github-project-v2` from v0.5.0
+  remains `completed` after the v0.6.0 enum bump because
+  its `target_state` matches an extant option).
+  **Why a separate module from M3 (GitHub Project
+  integration).** M3 holds the *operations* against a
+  selected board (label management, Status field
+  validation, etc.). M10 holds the *selection* of which
+  board adapter to operate against. Future Linear / Jira
+  adapters land as new M3-pattern modules (or as additive
+  M3 implementation routes); M10 stays the single
+  selection seam. M3 stages depend on
+  `m10.repo.choose-kanban-backend`.
 
 ## Stages
 
@@ -341,33 +360,38 @@ contract" below.
 | `m2.host.install-uv` | uv installer | Detect / install `uv` Python tool host-wide via `astral.sh/uv/install.sh` or PATH probe | M2 | automated | host-shared | both | `heavy`, `network-required` | v0.3.0 | — | `scripts/bootstrap-host.sh` |
 | `m2.repo.copy-uv-templates` | uv templates | Copy plugin's `pyproject.toml` + `uv.lock` from `<plugin>/scripts/templates/` into `<repo>/.board-superpowers/` | M2 | automated | repo-git | both | — | v0.3.0 | `m1.repo.write-state-yml` | `scripts/bootstrap-project.sh` |
 | `m2.repo.sync-venv` | venv sync | Run `uv sync` to materialize `<repo>/.board-superpowers/.venv/` from the copied lock | M2 | automated | repo-clone | both | `heavy` | v0.3.0 | `m2.host.install-uv`, `m2.repo.copy-uv-templates` | `scripts/bootstrap-project.sh` |
-| `m3.repo.ensure-labels` | standard labels | Ensure 13 standard GitHub Issue labels exist on the repo (idempotent via `gh` CLI) | M3 | automated | external | both | — | v0.1.0-minimum | — | `scripts/setup-labels.sh` |
-| `m3.repo.validate-status-field` | status field validation | Validate the GitHub Project's 6-option Status field schema; agentic only on failure (guide architect to GitHub UI) | M3 | agentic | external | both | `confirm-only`, `agentic-on-failure` | v0.1.0-minimum | — | `SKILL: bootstrapping-repo` (failure path) / `scripts/validate-status-field.sh` (read path) |
+| `m3.repo.ensure-labels` | standard labels | Ensure 13 standard GitHub Issue labels exist on the repo (idempotent via `gh` CLI); only runs when `kanban_backend == github-project-v2` | M3 | automated | external | both | — | v0.1.0-minimum | `m10.repo.choose-kanban-backend` | `scripts/setup-labels.sh` |
+| `m3.repo.validate-status-field` | status field validation | Validate the GitHub Project's 6-option Status field schema; agentic only on failure (guide architect to GitHub UI); only runs when `kanban_backend == github-project-v2` | M3 | agentic | external | both | `confirm-only`, `agentic-on-failure` | v0.1.0-minimum | `m10.repo.choose-kanban-backend` | `SKILL: bootstrapping-repo` (failure path) / `scripts/validate-status-field.sh` (read path) |
 | `m4.repo.acquire-dsn` | audit DSN | Acquire BYO RDBMS DSN; write per-repo `credentials.yml` (chmod 0600); first-time agentic, re-use automated | M4 | agentic | repo-shared | both | `confirm-only` (re-use path is automated) | v0.3.0 (host-shared); per-repo since vX.0.0 (this redesign) | `m1.repo.write-state-yml` | `SKILL: bootstrapping-repo` (first-time) / `scripts/bootstrap-project.sh` (re-use) |
 | `m4.repo.apply-audit-ddl` | audit DDL | Apply audit-log DDL to the resolved DB (3-dialect dispatch via `audit-init.sh`) | M4 | automated | external | both | — | v0.3.0 | `m4.repo.acquire-dsn` | `scripts/audit-init.sh` |
 | `m4.repo.flush-pending-audit` | audit flush | Replay `mode=bootstrap-pending` rows from jsonl into DB (idempotent via UNIQUE event_uuid) | M4 | automated | external | both | — | v0.3.0 | `m4.repo.apply-audit-ddl` | `scripts/audit-flush-pending.sh` |
 | `m4.repo.audit-health-check` | audit health | Print stderr summary of audit-row landing count vs jsonl pending count | M4 | automated | repo-shared | both | — | v0.3.0 | `m4.repo.flush-pending-audit` | `scripts/bootstrap-project.sh` |
 | `m5.repo.write-config-yml` | config.yml | Write `<repo>/.board-superpowers/config.yml` with project default knobs (committed to git) | M5 | automated | repo-git | both | — | v0.1.0-minimum | — | `scripts/bootstrap-project.sh` |
 | `m5.repo.write-config-local-yml` | config.local.yml | Write `<repo>/.board-superpowers/config.local.yml` with per-architect knobs (gitignored) | M5 | automated | repo-clone | both | — | v0.1.0-minimum | — | `scripts/bootstrap-project.sh` |
+| `m5.repo.set-wip-limit` | wip limit | Prompt architect for `wip_limit` (concurrent active Consumer cap) per repo; default 5; persist into `config.local.yml:wip_limit`; architect may accept default to advance | M5 | agentic | repo-clone | both | `confirm-only` | vX.0.0 (this redesign) | `m5.repo.write-config-local-yml` | `SKILL: bootstrapping-repo` |
 | `m6.repo.append-gitignore` | gitignore entries | Append three protective entries (`*.local.*`, `claims/`, `.venv/`) to `<repo>/.gitignore` (idempotent) | M6 | automated | repo-git | both | — | v0.1.0-minimum | — | `scripts/bootstrap-project.sh` |
 | `m7.repo.detect-agentsmd-form` | agentsmd form | Detect repo's routing-target form (`cc-only` / `codex-only` / `dual` / `neither`) by scanning AGENTS.md + CLAUDE.md presence; cache result in repo-shared state | M7 | automated | repo-shared | both | — | vX.0.0 (this redesign) | `m1.repo.write-state-yml` | `scripts/bootstrap-project.sh` |
 | `m7.repo.inject-block.routing-rule` | routing-rule block | Inject `routing-rule` required block (skill-routing trigger) into target file(s) per detected form; check 4 KiB single-block size cap; honor 8 KiB total Codex AGENTS.md budget | M7 | automated | repo-git | both | `kind=required`, `block-size-capped` | v0.1.0-minimum (single-block); per-block stage since vX.0.0 (this redesign) | `m7.repo.detect-agentsmd-form` | `scripts/bootstrap-project.sh` |
 | `m7.repo.inject-block.skill-routing` | skill-routing block | Inject `skill-routing` required block (Manager / Consumer dispatch rules) into target file(s) per detected form | M7 | automated | repo-git | both | `kind=required`, `block-size-capped` | v0.1.0-minimum (single-block); per-block stage since vX.0.0 (this redesign) | `m7.repo.detect-agentsmd-form` | `scripts/bootstrap-project.sh` |
 | `m9.host.register-codex-hooks` | codex hook registration | Register `~/.codex/config.toml` `[hooks]` table to wire `SessionStart` to `hooks/session-start.sh` | M9 | automated | host-shared | codex-only | `platform-specific` | vX.0.0 (this redesign) | `m1.host.write-manifest` | `scripts/register-codex-hooks.sh` |
-| `m8.host.bootstrap-overrides-yml` | autonomy overrides | Prompt architect with curated autonomy-override presets; write `~/.board-superpowers/overrides.yml` (architect may select subset including "no presets, skip" → empty file + completed) | M8 | agentic | host-shared | both | `confirm-only` | vX.0.0 (this redesign) | `m1.host.write-manifest` | `SKILL: bootstrapping-repo` |
+| `m8.host.bootstrap-overrides-yml` | autonomy overrides | Prompt architect with curated autonomy-override presets; persist selected subset into the `host-shared` settings file (empty selection is a valid completed state) | M8 | agentic | host-shared | both | `confirm-only` | vX.0.0 (this redesign) | `m1.host.write-manifest` | `SKILL: bootstrapping-repo` |
+| `m10.repo.choose-kanban-backend` | kanban backend | Prompt architect to choose BoardAdapter backend per ADR-0005 (`github-project-v2` / `linear` / `jira`). At v0.5.0 the enum has only `github-project-v2`; M3 stages depend on this selection | M10 | agentic | repo-git | both | `confirm-only`, `single-choice-currently` | vX.0.0 (this redesign) | `m1.repo.write-state-yml` | `SKILL: bootstrapping-repo` |
 
-**20 stages** — 14 v0.4.0 baseline (M7 v0.4.0 single-block
-stage replaced) + 6 net new / restructured this redesign
+**22 stages** — 14 v0.4.0 baseline (M7 v0.4.0 single-block
+stage replaced) + 8 net new / restructured this redesign
 (`m7.repo.detect-agentsmd-form`,
 `m7.repo.inject-block.routing-rule`,
 `m7.repo.inject-block.skill-routing`,
 `m9.host.register-codex-hooks`,
-`m8.host.bootstrap-overrides-yml`, plus the M4
-`acquire-dsn` re-locality). Future `kind=optional` blocks
-add agentic stages of shape
-`m7.repo.inject-block.<name>` without registry-shape
-changes. The 32 KiB Codex AGENTS.md budget caps total
-M7 routing block size — see § "Functional modules" M7.
+`m8.host.bootstrap-overrides-yml`,
+`m5.repo.set-wip-limit`,
+`m10.repo.choose-kanban-backend`, plus the M4
+`acquire-dsn` re-locality). Future `kind=optional` M7 blocks
+or new BoardAdapter selections add agentic stages of shape
+`m7.repo.inject-block.<name>` or new M10 enum options
+without registry-shape changes. The 32 KiB Codex AGENTS.md
+budget caps total M7 routing block size — see § "Functional
+modules" M7.
 
 ### Cross-axis sparsity is the value of the table form
 
@@ -524,28 +548,53 @@ This split enables:
 
 ## Declarative state schema
 
-State is **partitioned by locality** — each of the four
-non-`external` Axis B values gets its own dedicated YAML
-status file. `external` stages cache their last-validation
-results inside `repo-shared`'s `state.yml` (no separate
-external status file).
+State is **partitioned by locality** and unified under the
+`settings.yml` family — each of the four non-`external` Axis B
+values gets its own dedicated YAML settings file. `external`
+stages cache their last-validation results inside `repo-shared`'s
+settings file (no separate external status file).
 
-### Four status files (one per locality)
+The `settings.yml` naming is the architect-facing surface (per
+§ "Architect UX"): every architect's plugin configuration is
+visible by reading the appropriate `settings.yml`. The same
+files are also the plugin runtime's lifecycle source-of-truth
+(stages_completed entries with three-layer fingerprint live
+inside). Pre-v1 breaking change: existing v0.4.0 plumbing
+filenames (`manifest.yml`, `state.yml`, `config.yml`,
+`config.local.yml`) rename to the unified family below; existing
+host-shared `overrides.yml` content folds into the host-shared
+`settings.yml` under a dedicated `autonomy_overrides` key.
 
-| File | Locality | Cross-clone? | Tracked in git? | Stage entries |
-|------|----------|--------------|-----------------|---------------|
-| `~/.board-superpowers/manifest.yml` | `host-shared` | n/a (host-wide) | No | M1 host stages, M2 install-uv, M9 codex-hook |
-| `~/.board-superpowers/repos/<repo-identity>/state.yml` | `repo-shared` | **Yes (cross-clone shared)** | No | M1 state.yml stage itself, M4 audit stages, external-stage TTL caches |
-| `<repo>/.board-superpowers/repo-state.yml` | `repo-git` | No (per-clone-physical, sync via git) | **Yes (committed)** | M2 templates, M5 config.yml, M6 gitignore, M7 routing-block stages |
-| `<repo>/.board-superpowers/clone-state.yml` | `repo-clone` | No (per-clone-physical) | No (gitignored) | M2 venv, M5 config.local.yml |
+### Four settings files (one per locality)
+
+| File | Locality | Cross-clone? | Tracked in git? | Replaces (v0.4.0) | Stage entries |
+|------|----------|--------------|-----------------|-------------------|---------------|
+| `~/.board-superpowers/settings.yml` | `host-shared` | n/a (host-wide) | No | `manifest.yml` + `overrides.yml` (folded) | M1 host stages, M2 install-uv, M8 autonomy presets, M9 codex-hook |
+| `~/.board-superpowers/repos/<repo-identity>/settings.yml` | `repo-shared` | **Yes (cross-clone shared)** | No | `state.yml` | M1 per-repo state stage itself, M4 audit stages, M7 form-detect cache, external-stage TTL caches |
+| `<repo>/.board-superpowers/settings.yml` | `repo-git` | No (per-clone-physical, sync via git) | **Yes (committed)** | `config.yml` | M2 templates, M5 config.yml, M6 gitignore, M7 routing-block stages, M10 kanban backend choice |
+| `<repo>/.board-superpowers/settings.local.yml` | `repo-clone` | No (per-clone-physical) | No (gitignored) | `config.local.yml` | M2 venv, M5 config.local.yml + WIP limit |
+
+`~/.board-superpowers/repos/<repo-identity>/credentials.yml`
+remains a separate file (mode 0600) for secret isolation; it
+is not part of the `settings.yml` family because settings files
+are mode 0644 and may be inspected casually.
 
 **Why partition?** A single monolithic state file would have
-to cross-cut localities (e.g., `<repo>/.board-superpowers/state.yml`
-holding stages whose outcomes live in `~/...` — confusing).
+to cross-cut localities (e.g., a `settings.yml` at repo root
+holding stages whose outcomes live under `~/...` — confusing).
 Partitioning makes each file's *ownership* clear: this file
 records progress for stages whose outcomes land in this
 locality. The hook reads four small files in parallel; each
 file's update path is owned by stages of one locality.
+
+**Why unify the names?** Pre-redesign v0.4.0 has four
+plumbing files with four different names (`manifest.yml`,
+`state.yml`, `config.yml`, `config.local.yml`) — the
+disparate naming reflects implementation history, not
+architectural meaning. The redesign makes `settings.yml` the
+single architect-facing concept, with `.local.yml` as the
+sole suffix variant (matching git-ignore convention). One
+mental model, one filename family.
 
 ### Per-stage entry shape
 
@@ -1036,10 +1085,139 @@ identifies." There is no separate migration code path.
 
 ## Architect UX
 
-> *To be filled in.* What architect sees on first session
-> after upgrade; how agentic stages prompt for input; how
-> automated-stage failures are surfaced; how idempotent
-> re-run is invoked.
+The architect's interaction with bootstrap is the **interactive
+configuration surface** for the plugin: every architect-facing
+decision the plugin needs to record (audit DSN scheme, autonomy
+override presets, WIP limit, kanban backend, future new
+features' configuration items) is mediated by an **agentic
+stage** in the registry. There is no separate "settings" UX —
+agentic stages *are* the settings UX. This section formalizes
+the protocol so future plugin versions can add new
+configuration items by registry-only edits, without writing
+bespoke prompt code per item.
+
+### The reframe: agentic stage = config-item elicitation flow
+
+A bootstrap stage's `character: agentic` means exactly: this
+stage requires architect input to compute its `target_state`.
+From the architect's vantage point that input is "make a
+configuration choice"; from the plugin runtime's vantage point
+it is "fill in this stage's `target_state` so the lifecycle
+flips to `completed`". The two perspectives are the same
+operation, the same persistence, the same lifecycle. Skip
+semantics evaporate — an empty / null / "no presets selected"
+choice is itself a valid `target_state` and produces
+`completed`. The lifecycle's 4 states (never-run / completed /
+stale / deprecated) cover all observable architect states; no
+fifth "skipped" or "deferred" state is introduced.
+
+### Sequential per-stage flow (decision: B)
+
+The SKILL handles agentic stages **one at a time**, not in a
+batch wizard. Flow:
+
+1. Hook emits `INVOKE: bootstrapping-repo + REASON: <N> stages
+   need running` (per § "Trigger model").
+2. SKILL is woken. Reads partitioned settings files; recomputes
+   lifecycle diff; topologically orders pending stages by
+   `depends_on`.
+3. SKILL iterates pending stages in topological order:
+   - For `automated` stages: invokes the stage's `executor`
+     via `Bash` tool autonomously; no architect attention.
+     Records completion in the appropriate settings file.
+   - For `agentic` stages: renders the stage's
+     `interactive_prompt` to the architect using the prompt
+     kind (single-choice / multi-choice / free-text /
+     boolean / numeric-range); waits for response; validates
+     against the stage's `target_state_schema`; persists
+     `target_state` into the settings file; marks completed.
+   - For `agentic` stages where the architect is unreachable
+     (CI, scripted environment): SKILL records
+     `status: pending-architect-input` and the stage stays
+     pending until next session.
+4. SKILL emits final summary: "N stages completed; M skipped
+   due to depends_on chain breakage (dependencies unmet); K
+   pending-architect-input."
+
+The sequential model means architects who interrupt mid-flow
+return to a partial state next session — pending stages that
+weren't reached pick up from where they left off; completed
+stages stay completed. There is no "wizard restart"; the
+lifecycle model is the resume primitive.
+
+### Config item protocol — the five required elements
+
+Every config item that the plugin elicits from the architect
+is encoded as an agentic stage that satisfies all five of the
+following protocol elements. New plugin features that need
+architect input add a registry entry that fills in all five;
+no bespoke prompt code is written per item.
+
+| Element | What it is | Where it lives | Reuses |
+|---------|-----------|----------------|--------|
+| **1. Schema declaration** | The stage's `target_state_schema` declares the shape of the architect's choice. Examples: `{wip_limit: int (1..20)}`; `{kanban_backend: enum [github-project-v2, linear, jira]}`; `{presets_chosen: list of enum [allow-pr-creation, ...]}`. Plus required-or-optional, default value, enum option list (with `introduced_in_version` per option for graceful enum-bump compat). | Stage registry entry's `target_state_schema` field (per ADR-0014). | ADR-0014 stage registry contract; ADR-0014 JSON Schema validation gate. |
+| **2. Detection** | "Has this config item already been set?" The lifecycle 4-state model answers this purely from local settings files. `never-run` / `stale` ⇒ needs eliciting; `completed` ⇒ already set; `deprecated` ⇒ ignore. | Lifecycle compute function (per ADR-0013) reads stage entries from settings files. | ADR-0013 4-state lifecycle + three-layer fingerprint. |
+| **3. Interaction** | How the agent prompts the architect. The stage registry's new `interactive_prompt` field declares the prompt template + kind (`single-choice` / `multi-choice` / `free-text` / `boolean` / `numeric-range`) + options-source (literal list, or computed-from-`target_state_schema.enum`, or runtime-derived). SKILL's prompt-renderer is generic — given an `interactive_prompt` declaration it generates the architect-facing question without per-stage code. | Stage registry entry's new `interactive_prompt` field. SKILL `prompt-renderer.py` is the single implementation. | The `interactive_prompt` field is added to the registry contract per this section. |
+| **4. Persistence** | "Where does the choice land on disk?" The stage's `locality` (Axis B) decides which settings file. `host-shared` → `~/.board-superpowers/settings.yml`; `repo-shared` → `~/.board-superpowers/repos/<id>/settings.yml`; `repo-git` → `<repo>/.board-superpowers/settings.yml`; `repo-clone` → `<repo>/.board-superpowers/settings.local.yml`. | Stage registry entry's `locality` field; SKILL writes the resolved settings file with atomic mktemp+mv. | Axis B locality semantics; § "Declarative state schema" partitioned files. |
+| **5. Re-prompt trigger** | When does the plugin ask again? Three triggers, all derived from the lifecycle: (a) plugin upgrade bumps the stage's `generation` int (e.g., new enum option added) → flips to `stale` → re-prompts; (b) architect manually edits the settings file in a way that no longer matches `target_state_schema` → load-time validation rejects, stage flips to `stale`; (c) architect explicitly invokes `scripts/bsp-stage-rerun.sh <stage_id>` → forces stage to `never-run`. | Lifecycle stale-detection rule + SKILL's response to stale entries. | ADR-0013 lifecycle; no new mechanism. |
+
+### Future-feature inclusion procedure
+
+When a future plugin version (vN+1) introduces a new feature
+that needs architect input:
+
+1. Author the new agentic stage's registry entry in
+   `scripts/stages-registry.yml`, filling all five protocol
+   elements (`target_state_schema`, `interactive_prompt`,
+   `locality`, `generation`, `introduced_in_version`).
+2. Author the per-stage Python helpers in
+   `scripts/stages_lib/<stage_id>.py` (per ADR-0014 naming
+   convention) implementing `compute_target_state`,
+   `idempotency_check`, `target_state_predicate`, `executor`.
+3. Bump the SKILL test fixture (a settings file fixture +
+   expected `target_state` after architect responds) so the
+   prompt-renderer + persistence path is regression-tested.
+4. **No SKILL code changes are required.** The
+   prompt-renderer reads the new stage's `interactive_prompt`
+   declaration and renders the question generically.
+
+This is the architectural contract the design relies on:
+**adding a config item is a registry edit + Python helpers,
+not a SKILL feature**. Failing to honor this constraint
+produces SKILL prompt-code drift across config items and
+re-introduces the per-feature bespoke-UX cost the redesign
+exists to eliminate.
+
+### Settings file naming
+
+Per decision: existing plumbing files are renamed to a
+unified `settings.yml` family (one per non-`external`
+locality). See § "Declarative state schema" for the rename
+table and the in-file structure (each `settings.yml` carries
+`schema_version` + `plugin_version` + `stages_completed[]` +
+optional human-readable `config_items` projection).
+
+### Failure surfaces (architect-facing)
+
+- **Automated stage failure** (executor non-zero exit):
+  SKILL records `status: failed` + `last_error` in the
+  appropriate settings file. Lifecycle treats `failed` as
+  effectively `never-run` for the next session. SKILL surfaces
+  a brief failure summary at end of current session: "stage X
+  failed: <one-line>; will retry next session". After 3
+  consecutive failed runs, SKILL emits a special
+  `INVOKE: bootstrapping-repo / REASON: stage X needs
+  troubleshooting` marker on next hook tick to escalate.
+- **Agentic stage abandoned** (architect leaves session
+  without responding): SKILL records
+  `status: pending-architect-input` so the next session's
+  hook re-emits the marker.
+- **Registry validation failure** (settings file violates
+  `target_state_schema`): hook detects via load-time JSON
+  Schema; emits a special marker
+  `INVOKE: bootstrapping-repo / REASON: settings.yml
+  validation failed for <stage_id>`; SKILL guides the
+  architect to inspect / repair / re-elicit.
 
 ## Open design choices
 
@@ -1101,11 +1279,40 @@ Resolved (as discussion progresses, decisions move down to the
   partitioned status, runs lifecycle diff, emits marker; SKILL
   is the single executor for all stages. Resolved by § "Trigger
   model".
-- **Status storage is partitioned by locality** — four files
-  (`manifest.yml`, `state.yml`, `repo-state.yml`,
-  `clone-state.yml`), one per non-`external` locality;
-  `external` stages cache TTL'd validation in `repo-shared`'s
-  `state.yml`. Resolved by § "Declarative state schema".
+- **Status storage is partitioned by locality, unified under
+  the `settings.yml` family** — four files (`settings.yml`
+  per locality + `settings.local.yml` for `repo-clone`), one
+  per non-`external` locality; `external` stages cache TTL'd
+  validation in `repo-shared`'s settings file. Pre-v1 breaking
+  rename of v0.4.0 plumbing names (manifest.yml / state.yml /
+  config.yml / config.local.yml). Resolved by § "Declarative
+  state schema".
+- **Architect UX uses sequential per-stage flow with config
+  item protocol (decision: B)** — SKILL processes pending
+  agentic stages one at a time in topological order; no batch
+  wizard. Every architect-facing decision is mediated by an
+  agentic stage that satisfies the five-element config item
+  protocol (schema declaration / detection / interaction /
+  persistence / re-prompt trigger). Resolved by § "Architect
+  UX".
+- **Skip semantics are eliminated** — an empty / null / "no
+  presets selected" choice is itself a valid `target_state`
+  and produces `completed`. The 4-state lifecycle (never-run
+  / completed / stale / deprecated) covers all observable
+  architect states; no fifth "skipped" / "deferred" state is
+  introduced. Resolved by § "Architect UX" reframe.
+- **M10 (BoardAdapter selection) is in-scope** — new module
+  with stage `m10.repo.choose-kanban-backend` (agentic,
+  repo-git, single-choice for v0.5.0 enum
+  `[github-project-v2]`; future Linear / Jira options land via
+  registry-only enum extension). M3's GitHub-Project-specific
+  stages depend on `m10.repo.choose-kanban-backend`, so non-GH
+  backends will skip M3 cleanly when their stages land. Per
+  ADR-0005's BoardAdapter contract.
+- **M5 stage `m5.repo.set-wip-limit` is in-scope** — new
+  agentic stage prompting architect for per-repo WIP limit
+  (default 5; numeric-range 1-20). Persists into
+  `settings.local.yml:wip_limit` per repo-clone locality.
 - **Repo identity is `<owner>-<repo>` from `origin` URL** —
   with `_path-...` fallback for local-only repos. Resolved by
   § "Repo identity". Triggers I-13 invariant revision.
@@ -1247,5 +1454,31 @@ Resolved (as discussion progresses, decisions move down to the
    `m8.host.bootstrap-overrides-yml` becomes a first-run
    guided agentic stage with curated presets list (presets
    list itself defined in registry).
-10. This `-redesign.md` file removed; content lives in
+10. M5 WIP-limit stage added — `m5.repo.set-wip-limit`
+    becomes an agentic stage persisting into
+    `settings.local.yml:wip_limit` (default 5; numeric-range
+    1-20).
+11. M10 BoardAdapter-selection module + stage added —
+    `m10.repo.choose-kanban-backend` (agentic, repo-git);
+    M3 stages gain `depends_on:
+    [m10.repo.choose-kanban-backend]`. Future Linear / Jira
+    enum options land via registry-only edits.
+12. Settings.yml rename — v0.4.0 plumbing names
+    (`manifest.yml`, `state.yml`, `config.yml`,
+    `config.local.yml`, host-shared `overrides.yml`)
+    rename to the unified `settings.yml` family per
+    § "Declarative state schema" → "Four settings files".
+    Pre-v1 breaking change; architects delete legacy files
+    on upgrade.
+13. Architect UX section formalized — § "Architect UX"
+    encodes the sequential per-stage flow + the five-element
+    config item protocol that future plugin features must
+    honor when adding new architect-input items.
+14. Companion ADRs land in the same series (extends ADR-0012..0019
+    to also cover): (i) Architect UX + config item protocol
+    (the five-element contract); (j) settings.yml rename;
+    (k) M10 BoardAdapter selection module + M5 wip-limit
+    stage (these may be one or two ADRs depending on cohesion
+    judgement at write time).
+15. This `-redesign.md` file removed; content lives in
     `05-bootstrap-surface.md`.
