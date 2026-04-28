@@ -26,7 +26,30 @@ test_platform_unknown() {
   [ "$result" = "unknown" ] || fail "platform unknown: got '$result'"
 }
 
+test_session_cc() {
+  result=$(env -i HOME="$HOME" PATH="$PATH" PWD="$PWD" CLAUDE_SESSION_ID=cc_xyz \
+    bash -c "source '$COMMON' && bsp_resolve_session_id")
+  [ "$result" = "cc_xyz" ] || fail "session CC: got '$result'"
+}
+
+test_session_codex() {
+  result=$(env -i HOME="$HOME" PATH="$PATH" PWD="$PWD" CODEX_THREAD_ID=t_xyz \
+    bash -c "source '$COMMON' && bsp_resolve_session_id")
+  [ "$result" = "t_xyz" ] || fail "session codex: got '$result'"
+}
+
+test_session_pwd_fallback() {
+  expected="${PWD//\//-}"
+  result=$(env -i HOME="$HOME" PATH="$PATH" PWD="$PWD" \
+    bash -c "source '$COMMON' && bsp_resolve_session_id")
+  [ "$result" = "$expected" ] \
+    || fail "session pwd-fallback: got '$result', expected '$expected'"
+}
+
 test_platform_cc
 test_platform_codex
 test_platform_unknown
-echo 'PASS: bsp_resolve_platform 3/3'
+test_session_cc
+test_session_codex
+test_session_pwd_fallback
+echo 'PASS: 6/6'

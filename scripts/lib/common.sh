@@ -1260,3 +1260,24 @@ bsp_resolve_platform() {
     printf '%s\n' 'unknown'
   fi
 }
+
+# bsp_resolve_session_id — return the session identifier for the
+# current session.  Codex's terminology is "thread id"; we bridge
+# it to the canonical "session id" used by the
+# audit_log.session_id column and the BSP_SESSION_ID export.
+#
+# Falls back to a PWD-derived string when no platform env var is
+# set, so audit rows still distinguish concurrent shells by cwd.
+#
+# IMPORTANT — PWD-fallback stability invariant (AC4):
+#   When the platform env vars are unset and the function falls
+#   back to ${PWD//\//-}, callers MUST NOT change directory
+#   between the intake-side call (writes session-id into card
+#   body) and the audit-write-side call (writes session-id into
+#   audit_log.session_id). Both calls must run in the same
+#   shell + same PWD for AC4 (card-body == audit-row session_id)
+#   to hold. In practice both happen back-to-back inside the
+#   same intake routine.
+bsp_resolve_session_id() {
+  printf '%s\n' "${CLAUDE_SESSION_ID:-${CODEX_THREAD_ID:-${PWD//\//-}}}"
+}
