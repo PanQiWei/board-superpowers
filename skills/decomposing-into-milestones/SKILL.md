@@ -162,7 +162,17 @@ The batch creation is a mutating action governed by the atomic SKILLs:
 
 1. Resolve `action_id = 1` (Producer matrix row 1: "Create cards (decomposition output)").
 2. Invoke `board-superpowers:classifying-actions` with action_id 1 → returns A/R/N decision (default A; project-level autonomy_overrides may demote to R).
-3. If A: batch `gh issue create` per Step 7's bodies → `gh project item-add` for each → flip Status to `Ready`.
+3. If A: for each card body, prepend `bsp_render_creator_trace_block` output (see
+   `scripts/lib/common.sh`) before running `gh issue create`, then `gh project item-add` +
+   flip Status to `Ready`. Prepend pattern:
+   ```bash
+   creator_trace="$(bsp_render_creator_trace_block)"
+   body="${creator_trace}
+   ${body}"
+   gh issue create --title "<title>" --body "${body}"
+   ```
+   See `skills/board-canon/references/card-body-schema.md` § "Creator-trace marker" for field
+   constraints.
 4. If R: surface the Step 7 artifact to the architect; wait for ack; on approve, run step 3.
 5. Invoke `board-superpowers:auditing-actions` with `action_id=1, decision_class=A|R, summary` carrying the batch metadata: `{batch_size: N, card_numbers: [...], total_loc_estimate: X, source_artifact_sha256: ...}`.
 6. Hand the batch back to `managing-board` to close out the intake (the board now has the new Ready cards; `managing-board` resumes its intake routine).
@@ -217,7 +227,9 @@ This skill performs one mutating action: batch card creation (`action_id = 1`). 
 
 1. Resolve `action_id = 1` (from `action-id-catalog.md` inside `board-superpowers:classifying-actions`).
 2. Invoke `board-superpowers:classifying-actions` with that action_id; receive a decision: A (auto), R (requires approval), or N (forbidden).
-3. If A: act → invoke `board-superpowers:auditing-actions` to record one entry covering the whole batch.
+3. If A: for each card body, prepend `bsp_render_creator_trace_block` output before `gh issue create`
+   (same pattern as Step 8 item 3 above), then invoke `board-superpowers:auditing-actions` to record
+   one entry covering the whole batch.
 4. If R:
    a. invoke `board-superpowers:auditing-actions` to record the proposal.
    b. surface the Step 7 artifact to the architect.

@@ -21,6 +21,11 @@ The router (`using-board-superpowers`) sees an intake-shaped phrase and routes t
 If you already know what you want to build and just need a card on the board, open your Project on GitHub, click "Add item", and paste a card body following the `board-canon` Card body schema. The schema has 5 mandatory sections plus a thin pointer at the top:
 
 ```
+<!-- board-superpowers:creator-trace -->
+**Created-by:** <platform>          ← auto-filled by bsp_render_creator_trace_block
+**Session-id:** <session-id>        ← auto-filled by bsp_render_creator_trace_block
+<!-- /board-superpowers:creator-trace -->
+
 **Spec**: <link or "(none)">
 **Owner**: <handle>
 **Estimate**: <XS|S|M|L>

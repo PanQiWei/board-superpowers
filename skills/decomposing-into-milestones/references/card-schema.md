@@ -9,6 +9,10 @@ Every card emitted by `decomposing-into-milestones` Step 7 (synthesize batch) MU
 ## Terminal schema — at a glance
 
 ```markdown
+<!-- board-superpowers:creator-trace -->
+**Created-by:** <platform>
+**Session-id:** <session-id>
+<!-- /board-superpowers:creator-trace -->
 <!-- thin-pointer -->
 **Spec**: <repo-relative-path-with-anchor>
 **Owner**: @<github-handle>
@@ -41,6 +45,13 @@ Every card emitted by `decomposing-into-milestones` Step 7 (synthesize batch) MU
 **Audit trail**: query ~/.board-superpowers/repos/<normalized>/audit-local.jsonl by `card_number = N`.
 <!-- /board-superpowers:card -->
 ```
+
+> **Creator-trace block note**: the `<!-- board-superpowers:creator-trace -->` block shown at the
+> top of the template uses `<platform>` and `<session-id>` as placeholders. In practice these
+> values are **auto-filled by `bsp_render_creator_trace_block`** in `scripts/lib/common.sh` at
+> `gh issue create` time — the Step 7 synthesis output should include the literal placeholder
+> text; the intake caller (Step 8 item 3) prepends the rendered block before creating the issue.
+> Do NOT hand-fill these fields in the synthesis output.
 
 ## Per-section authoring rules
 
