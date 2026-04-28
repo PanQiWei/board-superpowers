@@ -1,4 +1,4 @@
-# Skills system — board-superpowers v1 catalog (10 skills total: 8 shipped + 2 deferred to v1-complete, 3 layers)
+# Skills system — board-superpowers v1 catalog (10 skills total: 9 shipped + 1 deferred to v1-complete, 3 layers)
 
 > **Always loaded.** This document is referenced from
 > [`AGENTS.md`](./AGENTS.md) via `@SKILLS.md` and rides into
@@ -76,19 +76,21 @@ A9).
 
 ## v1 minimum vs v1 complete
 
-The full v1 catalog defines **10 skills**. As of `v0.3.0`,
-**8 skills ship** — enough to make the plugin self-hostable on
+The full v1 catalog defines **10 skills**. As of `v0.4.0`,
+**9 skills ship** — enough to make the plugin self-hostable on
 this very repo AND to bootstrap a fresh consuming repo from zero
 AND to govern every mutating action through classifying-actions +
-auditing-actions. The remaining **2 are deferred to v1-complete**
-and ship in follow-up PRs once each is unblocked.
+auditing-actions AND to decompose design artifacts into
+INVEST-compliant vertically-sliced cards via decomposing-into-milestones.
+The remaining **1 is deferred to v1-complete** and ships in a
+follow-up PR once unblocked.
 
 | Skill | Layer | v1 status | Why this scoping |
 |-------|-------|-----------|-------------------|
 | `using-board-superpowers` | Entry | **v1-minimum** | Required for routing every session into the right role. |
 | `managing-board` | Molecular | **v1-minimum** | Producer surface — required for "what should I work on" / Review Queue / intake on this repo. v1 ships F-01 + F-02 + F-08 only; F-03..F-07 + F-10..F-15 deferred to v1.x per ADR-0011 (pending demand pull). |
 | `consuming-card` | Molecular | **v1-minimum** | Consumer surface — required for the F-C0..F-C14 lifecycle that delivers each card's PR. |
-| `decomposing-into-milestones` | Molecular | deferred to v1-complete | Initial cards on this repo's board are hand-crafted by the architect; automatic decomposition is a v1-complete enhancement. |
+| `decomposing-into-milestones` | Molecular | **v1-complete** (shipped v0.4.0) | F-09 + §1.6 INVEST + vertical-slicing + card schema + size calibration engine. Lands alongside the schema-drift double-collapse (board-canon ↔ spec § 1.6.3) so the converged terminal Card body schema becomes architecturally authoritative. |
 | `bootstrapping-repo` | Molecular | **v1-minimum** (shipped in v0.2.0) | F-B1 (host bootstrap) + F-B2 (per-repo bootstrap, including step 4 routing-block injection) — the entry-skill state probe routes here on first session. |
 | `migrating-repo-version` | Molecular | deferred to v1-complete | Migration becomes meaningful starting from v0.2.x → v0.3.x transitions; the v0.2.0 ship establishes the baseline. |
 | `board-canon` | Atomic | **v1-minimum** | True SPOT — every other v1-minimum skill consumes its state machine + schema + WIP rules. |
@@ -135,7 +137,7 @@ means for board-superpowers" #3 for the full rationale.
 - **Tier 2 frontmatter**: `when_to_use` (extended trigger
   vocabulary outside the primary `description`).
 
-### Molecular layer (5 skills: 3 shipped + 2 deferred)
+### Molecular layer (5 skills: 4 shipped + 1 deferred)
 
 #### `managing-board` (v1-minimum)
 
@@ -187,17 +189,32 @@ means for board-superpowers" #3 for the full rationale.
   `arguments: [card_number]` (body uses `$card_number` with
   `$ARGUMENTS` fallback for Codex).
 
-#### `decomposing-into-milestones` (deferred to v1-complete)
+#### `decomposing-into-milestones` (v1-complete, shipped v0.4.0)
 
 - **Role**: F-09 + §1.6 (INVEST + vertical slicing + card
   schema + sizing) engine. Turns design artifact into Ready
-  cards on the board.
-- **Body target**: 300-400 lines.
+  cards on the board. Skeleton A — Discipline (per
+  `SKILL_DEVELOPMENT.md` § "SKILL.md body structure") because
+  INVEST and vertical-slicing are *refusal conditions* (Wake
+  2003 wording), not procedure steps.
+- **Body target**: 280-320 lines (current 277 — Iron Law +
+  8-step Process + Common Rationalizations + Red Flags +
+  Verification Checklist + Failure modes + Examples).
 - **References folder**:
-  `references/{card-schema,decomposition-patterns,invest-checklist,size-calibration}.md`.
-- **Composes (atomic)**: `board-canon` (schema authority),
-  `classifying-actions`, `auditing-actions`.
+  `references/{card-schema,decomposition-patterns,invest-checklist,size-calibration}.md`
+  — primary-source-grounded (Wake 2003 INVEST, Cohn SPIDR,
+  Reinertsen Little's Law, Fowler StoryCounting); AI-orchestration
+  reframes explicitly labeled "original framing" per memory
+  `feedback_research_canonical_practice_first`.
+- **Composes (atomic)**: `board-canon` (terminal Card body schema
+  authority), `classifying-actions`, `auditing-actions`.
 - **Composes (cross-plugin)**: see § "Cross-plugin edges" below.
+- **Tier 2 frontmatter**: `when_to_use` (extended trigger
+  vocabulary covering "decompose / 拆 / split / break this into
+  cards / intake 后落卡") + `argument-hint:
+  "[design-artifact-path | design-artifact-dir | -]"` +
+  `arguments: [artifact_path]` (Step 1 dispatches by argument
+  type — file / dir / freeform stdin).
 
 #### `bootstrapping-repo` (v1-minimum, shipped v0.2.0)
 

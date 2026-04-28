@@ -354,8 +354,13 @@ D-AUTONOMY-1 matrix rows; the audit-log requirement (ADR-0006
   GitHub) + (per ADR-0006 rows 1 and 3) initial create=A,
   re-split of existing card=R.
 - **Maps to (canonical)**: Cohn 2004 *User Stories Applied*
-  (story splitting); Wake's INVEST checklist; Cohn's SPIDR;
-  Lawrence patterns; the hamburger-method pattern.
+  (story splitting); Wake 2003 INVEST checklist
+  (*<https://xp123.com/articles/invest-in-good-stories-and-smart-tasks/>*);
+  Cohn SPIDR (*<https://www.mountaingoatsoftware.com/blog/five-simple-but-powerful-ways-to-split-user-stories>*).
+- **Community supplement**: Lawrence's nine patterns and the
+  hamburger-method pattern (Adzic) are widely cited but are
+  NOT Mountain-Goat-Software canonical — treat as supplementary
+  patterns, not primary; SPIDR is the canonical 5-set.
 - **Original framing**: the **A-on-create / R-on-resplit
   asymmetry** — creating new cards is forward-incremental and
   safe; re-splitting existing cards is structural and warrants

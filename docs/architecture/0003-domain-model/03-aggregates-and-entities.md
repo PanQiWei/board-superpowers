@@ -36,8 +36,8 @@ claim, the architect verifies. Spans Board context.
 **Member entities.**
 
 - **CardBody** — the markdown body following the §1.6.3 schema
-  (Context / Acceptance Criteria / Out of Scope / Size /
-  optional Execution Hints + trailing
+  (thin-pointer block + Goal / Acceptance criteria / Out of scope
+  / Dependencies / optional Execution Hints / Notes + trailing
   `<!-- board-superpowers:card -->` marker). Mutable while the
   card is in Backlog/Ready (Producer refines per ADR-0006 row
   2 = A); locked once In Progress (Consumer reads only,
