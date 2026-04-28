@@ -1,5 +1,6 @@
 -- board-superpowers audit log schema (Postgres dialect).
--- 8 columns, literally aligned with mysql + sqlite siblings.
+-- 9 columns (8 core + event_uuid for idempotent replay), literally aligned
+-- with mysql + sqlite siblings.
 -- Per docs/architecture/0005-contracts/06-audit-log-schema.md.
 
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -11,8 +12,14 @@ CREATE TABLE IF NOT EXISTS audit_log (
     action_id       SMALLINT NOT NULL,
     payload         JSONB NOT NULL,
     outcome         TEXT NOT NULL CHECK (outcome IN ('success','failure')),
-    approval_stage  TEXT NOT NULL CHECK (approval_stage IN ('auto','propose','approved','rejected'))
+    approval_stage  TEXT NOT NULL CHECK (approval_stage IN ('auto','propose','approved','rejected')),
+    event_uuid      TEXT
 );
+
+-- Idempotent replay UNIQUE — per AC4 design.md §3.4.4
+-- Postgres treats NULLs as distinct in UNIQUE indexes by default,
+-- so multiple NULL event_uuid rows coexist (matches sqlite behavior).
+CREATE UNIQUE INDEX IF NOT EXISTS audit_event_uuid_uniq ON audit_log(event_uuid);
 
 CREATE INDEX IF NOT EXISTS audit_project_timestamp_idx ON audit_log(project, timestamp DESC);
 CREATE INDEX IF NOT EXISTS audit_session_idx           ON audit_log(session_id);
@@ -27,5 +34,6 @@ CREATE TABLE IF NOT EXISTS audit_schema_meta (
     migrated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT INTO audit_schema_meta (id, version) VALUES (1, 1)
-    ON CONFLICT (id) DO NOTHING;
+-- v2 schema baseline (fresh init); existing v1 DBs migrate via scripts/migrations/audit-v1-to-v2.sh (Task 4b)
+INSERT INTO audit_schema_meta (id, version) VALUES (1, 2)
+    ON CONFLICT (id) DO UPDATE SET version = 2, migrated_at = CURRENT_TIMESTAMP;
