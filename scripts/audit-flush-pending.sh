@@ -9,13 +9,24 @@
 #   retry_count incremented per failed row; >=5 -> mode=audit-dead-letter
 #   pending_since > 24h ago -> mode=audit-dead-letter (TTL)
 #
-# Per Task 6a: single-process correctness + cross-driver dispatch.
-#   flock concurrency mutex is Task 6b's territory.
+# Concurrency: per-jsonl `flock -x` mutex serializes concurrent flushes
+#   against the same audit-local.jsonl. UNIQUE event_uuid in DB already
+#   absorbs duplicate INSERTs, but the jsonl rewrite step (read all rows
+#   -> mutate -> atomic rename) is only safe when one worker holds the
+#   per-file lock. Without flock two workers can read the original file
+#   in parallel and then race on rename, with the second rename silently
+#   overwriting the first worker's status transitions.
+#
+# Dependencies: flock (util-linux on Linux; `brew install flock` on
+#   macOS, OR via util-linux's flock binary). The file-descriptor form
+#   `flock -x 9` used inside a subshell (`( ... ) 9>"${LOCK}"`) is
+#   portable across both implementations.
 #
 # Exit codes:
 #   0 - flush complete (or no pending rows)
 #   1 - corrupt jsonl rows detected (transitioned to audit-dead-letter)
-#   2 - partial INSERT failure (rows kept pending or sent to dead-letter)
+#   2 - partial INSERT failure (rows kept pending or sent to dead-letter),
+#       OR flock acquisition failed for at least one jsonl
 #   3 - audit_db_url not configured (no target DB)
 
 set -euo pipefail
@@ -55,12 +66,24 @@ for jsonl in "${HOME}/.board-superpowers/repos/"*"/audit-local.jsonl"; do
     grep -qE "${PENDING_PATTERN}" "${jsonl}" 2>/dev/null || continue
     HAS_PENDING_ANY=1
 
+    LOCK="${jsonl}.lock"
+    # `flock -x 9` inside a subshell with FD 9 bound to the lock file.
+    # The exclusive lock auto-releases when the subshell exits (FD 9
+    # closes). Concurrent flush invocations against the same jsonl
+    # serialize on this lock; no row drift from rewrite race.
     rc=0
-    BSP_JSONL="${jsonl}" "${VENV_PYTHON}" "${SCRIPT_DIR}/audit-flush-impl.py" || rc=$?
+    (
+        flock -x 9 || exit 99
+        BSP_JSONL="${jsonl}" "${VENV_PYTHON}" "${SCRIPT_DIR}/audit-flush-impl.py"
+    ) 9>"${LOCK}" || rc=$?
     case "${rc}" in
         0) ;;
         1) [ "${EXIT_CODE}" -lt 1 ] && EXIT_CODE=1 ;;
         2) [ "${EXIT_CODE}" -lt 2 ] && EXIT_CODE=2 ;;
+        # 99 = flock could not acquire (e.g., flock binary missing or
+        # interrupted). Surface as exit 2 (partial-failure) so caller
+        # can re-run; lock file remains for next attempt.
+        99) [ "${EXIT_CODE}" -lt 2 ] && EXIT_CODE=2 ;;
         *) EXIT_CODE=2 ;;
     esac
 done
