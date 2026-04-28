@@ -1236,3 +1236,27 @@ PY
     printf '%s\n' "${default_class}"
     return 0
 }
+
+# bsp_resolve_platform — return the platform identifier for the
+# current session, derived from environment variables exposed by
+# Claude Code or Codex CLI.
+#
+# Output: "claude-code" | "codex-cli" | "unknown"
+#
+# Resolution order (first non-empty wins):
+#   1. CLAUDE_SESSION_ID (set by Claude Code at session start)
+#   2. CODEX_THREAD_ID   (set by Codex CLI >= rust-v0.125.0,
+#                         per openai/codex#10096)
+#
+# Cited rationale:
+#   - docs/architecture/0005-contracts/08-environment-variables.md
+#   - openai/codex#8923 / openai/codex#10096
+bsp_resolve_platform() {
+  if [ -n "${CLAUDE_SESSION_ID:-}" ]; then
+    printf '%s\n' 'claude-code'
+  elif [ -n "${CODEX_THREAD_ID:-}" ]; then
+    printf '%s\n' 'codex-cli'
+  else
+    printf '%s\n' 'unknown'
+  fi
+}
