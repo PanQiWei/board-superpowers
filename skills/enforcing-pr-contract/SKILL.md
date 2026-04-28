@@ -1,6 +1,6 @@
 ---
 name: enforcing-pr-contract
-description: Use whenever a PR is being authored from a board-superpowers card claim, OR a PR is being reviewed against the board's contract. Enforces the three required sections — Automated Verification, Human Verification TODO, Retro Notes — and rejects filler content. Apply on the Consumer side at PR submission AND on the Producer side during review-queue triage. Apply even when the user doesn't explicitly mention "PR contract" — any time a PR body is being drafted, edited, or reviewed in this plugin's loop, this skill governs.
+description: Use whenever a PR is being authored from a board-superpowers card claim, OR a PR is being reviewed against the board's contract. Enforces the three-part PR contract — Contract A (PR body sections: Automated Verification + Human Verification TODO + Retro Notes), Contract B (linked card body acceptance criteria all in terminal state), Contract C (PR body contains `Closes|Fixes|Resolves #<N>` auto-close keyword at PR-OPEN time) — and rejects filler. Apply on the Consumer side at PR submission AND on the Producer side during review-queue triage. Apply even when the user doesn't explicitly mention "PR contract" — any time a PR body is being drafted, edited, or reviewed in this plugin's loop, this skill governs.
 when_to_use: Use whenever drafting, editing, validating, or reviewing a PR body for a card claimed via the consuming-card skill. Also when the Producer reviews open PRs in their review-queue routine.
 user-invocable: false
 ---
@@ -18,12 +18,15 @@ flowchart TD
     CA -- yes --> CB{"Contract B:\ncard body ACs all\n[x] or [!] with reason?"}
     CB -- "no, has unchecked [ ]" --> Reject
     CB -- "no, [!] without reason" --> Reject
-    CB -- yes --> Pass(["Validation pass\ncard stays In Review"])
+    CB -- yes --> CC{"Contract C:\nPR body has\nCloses/Fixes/Resolves #N\nfor linked card?"}
+    CC -- no --> AutoFix["submit-pr.sh\nauto-injects trailer\n(idempotent)"]
+    AutoFix --> Pass
+    CC -- yes --> Pass(["Validation pass\ncard stays In Review"])
 ```
 
 ## The iron law
 
-**A PR opened from a `claim/<N>-...` branch MUST satisfy two contracts simultaneously:**
+**A PR opened from a `claim/<N>-...` branch MUST satisfy three contracts simultaneously:**
 
 ### Contract A — PR body shape
 
@@ -43,11 +46,27 @@ The card linked from the `claim/<N>-...` branch MUST have every acceptance-crite
 
 The Consumer toggles each checkbox during `consuming-card` Step 9.5 (PR-submit pre-flight card body sync, action_id 112). Producer-side validation rejects a PR whose linked card has any `[ ]` AC.
 
-### Why both contracts
+### Contract C — PR↔Issue auto-close keyword
 
-`Contract A` makes the PR description honest about **what was checked**; `Contract B` makes the card body honest about **what was delivered**. Without B, a reviewer reads the PR body but the card body still claims "[ ] all 12 ACs unimplemented" — instant cognitive dissonance, hidden scope leak, and a stale "to-do" list for the next Consumer to mistakenly pick up.
+The PR body MUST contain a GitHub auto-close keyword referencing the linked card, **at PR-OPEN time**:
 
-`scripts/submit-pr.sh` rejects PRs missing any required PR-body section, containing filler, or whose linked card body has unchecked ACs. The `managing-board` skill's review-queue routine re-checks both contracts at review time and routes violators back to the Consumer.
+- `Closes #<N>` — the canonical form `scripts/submit-pr.sh` auto-injects.
+- `Fixes #<N>` — accepted alternative.
+- `Resolves #<N>` — accepted alternative.
+
+Match is case-insensitive and the keyword must reference the same `<N>` as the `claim/<N>-...` branch.
+
+The keyword is what tells GitHub's PR-merge → Issue-close → ProjectV2 Auto-close webhook chain to fire on merge. Without it: Issue stays open after PR merge; ProjectV2 Auto-close workflow never triggers — Status field stays at `In Progress` post-merge; manual Consumer cleanup is required.
+
+**Critical timing**: GitHub reads the keyword **at PR-OPEN time**. Retroactively appending the keyword after PR open does NOT retrigger the webhook for an already-merged PR. This is why `submit-pr.sh` is the only sanctioned PR-open path: it idempotently injects the trailer at OPEN time.
+
+### Why three contracts, not two
+
+- `Contract A` makes the PR description honest about **what was checked** by the Consumer.
+- `Contract B` makes the card body honest about **what was delivered** by the Consumer.
+- `Contract C` makes the PR↔Issue **infrastructure linkage** honest. Without C, a fully-Contract-A-and-B-compliant PR can still leave the card stuck in `In Progress` post-merge (observed on PR #42 / `#34` — direct `gh pr create` bypassed `submit-pr.sh`, missed the trailer at OPEN time, broke the auto-close chain; trailer added retroactively did not fire the webhook).
+
+`scripts/submit-pr.sh` rejects PRs missing any Contract A section or containing Contract A filler, idempotently auto-injects the Contract C trailer if absent, and (per Contract B) requires the linked card body to have terminal-state ACs. The `managing-board` review-queue routine re-checks all three contracts at review time and routes violators back to the Consumer.
 
 ## Why this contract exists
 
@@ -122,7 +141,11 @@ Rules:
 7. The card linked from the `claim/<N>-...` branch has zero `- [ ]` lines under its `## Acceptance criteria` heading. Every AC must be `- [x]` or `- [!]`.
 8. (If any `- [!]` appears) the line must continue with prose (≥ 5 chars) explaining the deferral. A bare `- [!]` is filler.
 
-The script does NOT enforce ordering of PR body sections beyond the existence of headings. Reviewers care about ordering for readability; the validator cares about presence + (for the card) terminal-state ACs.
+**PR↔Issue auto-close keyword (Contract C):**
+
+9. The PR body, after the auto-trailer pass, contains at least one `Closes #<N>` / `Fixes #<N>` / `Resolves #<N>` referencing the `--card <N>` argument. Idempotent: if the body already contains the keyword for the given card number, no second trailer is appended; if absent, the canonical `Closes #<N>` trailer is appended once at PR-open time.
+
+The script does NOT enforce ordering of PR body sections beyond the existence of headings. Reviewers care about ordering for readability; the validator cares about presence + (for the card) terminal-state ACs + (for the linkage) the auto-close keyword.
 
 ## Filler detection
 
@@ -144,8 +167,8 @@ When the Producer's `managing-board` skill runs its review-queue routine, for ea
 
 1. Fetches the PR body via `gh pr view <PR-N> --json body`.
 2. Fetches the card body via `gh issue view <card-N> --json body`.
-3. Runs the full validation logic as `submit-pr.sh` — both Contract A (PR body shape) and Contract B (card body AC sync).
-4. If validation fails: comments on the PR pointing at the specific violation (cite which contract + which rule); the Producer then proposes routing the card from `In Review` back to `In Progress` (rework signal) and asks the Consumer to acknowledge before transitioning.
+3. Runs the full validation logic as `submit-pr.sh` — Contract A (PR body shape), Contract B (card body AC sync), AND Contract C (PR body contains auto-close keyword referencing the linked card).
+4. If validation fails: comments on the PR pointing at the specific violation (cite which contract + which rule); the Producer then proposes routing the card from `In Review` back to `In Progress` (rework signal) and asks the Consumer to acknowledge before transitioning. Contract C violations carry a special note: appending the trailer post-OPEN does NOT fix the auto-close chain — surface this to the architect and prepare for manual cleanup at merge time (Consumer Step 12 stage (a) covers this).
 5. If validation passes: leaves the card in `In Review` for normal review-and-merge.
 
 This skill is the **single source of truth** for both sides (Consumer write + Producer validate) — there is no second implementation of these rules anywhere in the plugin. Changes to the contract land in this one SKILL.md and take effect on both sides automatically.

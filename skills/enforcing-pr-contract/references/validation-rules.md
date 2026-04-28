@@ -42,12 +42,44 @@ The match is on the WHOLE section content, not substring. A section that says `[
 
 If the section is present, the same filler check runs against it. The section being absent is fine — it's optional.
 
+## Contract C — PR↔Issue auto-close keyword
+
+```python
+# Run AFTER Contract A passes, BEFORE the trailer auto-injection step.
+# Contract C is enforced via idempotent injection, not a hard reject.
+import re
+keyword_re = re.compile(
+    r"(?im)^\s*(?:Close[ds]?|Fix(?:e[ds])?|Resolve[ds]?)\s+#" +
+    re.escape(str(card_number)) + r"\b"
+)
+if keyword_re.search(body):
+    # Already present — skip auto-trailer injection (idempotent).
+    pass
+else:
+    # Not present — append the canonical `Closes #<N>` trailer.
+    body += f"\n\n---\nCloses #{card_number} — board-superpowers v0.4.0 claim trailer.\n"
+```
+
+Match rules:
+
+- **Case-insensitive** (`(?i)` flag): `Closes #N`, `closes #N`, `CLOSES #N` all match.
+- **Multi-line** (`(?m)` flag): the keyword may appear on any line of the body, with optional leading whitespace.
+- **Card-number-specific**: a `Closes #99` doesn't satisfy Contract C for `--card 35` — the keyword's number must equal the card argument. Cross-referencing other cards (e.g., body says `Closes #99 (incidental fix); Resolves #35 (this card)`) IS valid because at least one keyword matches the linked card.
+- **Idempotent**: if the body already contains the matching keyword (e.g., the Consumer hand-wrote `Resolved #35` in the Retro Notes section), `submit-pr.sh` does NOT append a duplicate trailer. Only when no matching keyword exists does the trailer get injected.
+
+GitHub's documented sanctioned auto-close keywords are `close`, `closes`, `closed`, `fix`, `fixes`, `fixed`, `resolve`, `resolves`, `resolved` — 9 forms total (3 verb roots × 3 inflections each: base, third-person-`s`, past-tense-`d`/`ed`). The regex above covers all 9 via `Close[ds]?|Fix(?:e[ds])?|Resolve[ds]?` plus case-insensitivity. Reference: <https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-pull-request-to-an-issue#linking-a-pull-request-to-an-issue-using-a-keyword>.
+
+## Critical timing — Contract C must fire at PR-OPEN time
+
+GitHub reads PR body keywords **at PR-open time** to register the PR↔Issue link. Retroactively appending the keyword after PR open does NOT retrigger the webhook for an already-merged PR.
+
+This is why `submit-pr.sh` is the **only sanctioned PR-open path** in the plugin's loop. Direct `gh pr create` (bypassing the script) misses the trailer auto-injection at OPEN time and silently breaks the auto-close chain — observed on PR #42 / card #34. Contract C makes this implicit invariant explicit and enforces it at script + review-queue layers.
+
 ## What submit-pr.sh does NOT check
 
 - Section ordering (reviewers care; the script doesn't)
 - Heading capitalization (case-sensitive match enforces)
-- Trailer presence (auto-appended by submit-pr.sh)
-- Linkage to a card (the `--card` arg handles that)
+- Linkage correctness beyond the keyword (the `--card` arg handles that)
 
 ## Why no schema-formal validation
 

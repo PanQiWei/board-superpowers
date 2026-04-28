@@ -1,21 +1,60 @@
 # skills/ — skill-authoring contract
 
-> **Before any work in this directory** (writing, editing,
-> renaming, re-layering, or even *designing / discussing /
-> reviewing* a skill — not just running an editor):
+> **Process gate — implementation phase** (creating a new skill
+> OR editing an existing skill — body, frontmatter, references,
+> `.skill-meta.yaml`, `evals/`, `scripts/`):
 >
-> 1. Invoke `example-skills:skill-creator` — the canonical entry
->    skill for create / modify / improve skill work. It carries
->    the cross-platform skill-authoring discipline.
-> 2. Read [`../SKILL_DEVELOPMENT.md`](../SKILL_DEVELOPMENT.md) if
->    its content is not already in context. ~1290 lines, but
->    you only need the section your work touches (skill graph
+> 1. **Read [`../SKILL_DEVELOPMENT.md`](../SKILL_DEVELOPMENT.md)
+>    FIRST** — even if you read it in an earlier session.
+>    Selective read of the section your work touches (skill graph
 >    framing, three-tier frontmatter, body skeletons,
->    anti-patterns, testing regimes).
-> 3. **If your change adds / removes / renames / re-layers a
->    skill, edit [`../SKILLS.md`](../SKILLS.md) FIRST** —
->    per its Source-of-truth contract a `skills/` change without
->    a paired `SKILLS.md` change is unmergeable.
+>    anti-patterns, testing regimes) is fine, but the read MUST
+>    happen in **this** session before the first edit. "I already
+>    know it" is forbidden — the doc may have changed and your
+>    context-window may have decayed since the last read.
+> 2. **Invoke `example-skills:skill-creator`** — the canonical
+>    entry skill for create / modify / improve work. It carries
+>    the cross-platform skill-authoring discipline (frontmatter
+>    optimization heuristics, Skeleton selection, Regime 1/2
+>    testing scaffolding) that the body of `SKILL_DEVELOPMENT.md`
+>    documents.
+> 3. **Update [`../SKILLS.md`](../SKILLS.md)** — if your change
+>    adds / removes / renames / re-layers a skill, the catalog
+>    entry MUST land in the same PR (paired-PR contract); when
+>    feasible, in the same commit as the SKILL change or in an
+>    immediately-preceding commit (paired-commit, the strict
+>    reading of "edit FIRST" — see § "SKILLS.md edit-first
+>    contract" below).
+>
+> **Process gate — review phase** (independent review of a PR
+> touching `skills/`, including self-review during PR-prep):
+>
+> 1. **Read [`../SKILL_DEVELOPMENT.md`](../SKILL_DEVELOPMENT.md)
+>    FIRST** — same rule as implementation. Reviewers relying on
+>    a pre-filtered checklist defeat the source-of-truth contract
+>    (per memory `feedback_reviewer_prompt_reads_source_of_truth`).
+>    Re-read the touched sections independently before forming
+>    opinions.
+> 2. **Cross-check against [`../SKILLS.md`](../SKILLS.md)** —
+>    verify the catalog entry matches the SKILL's actual
+>    `.skill-meta.yaml` (layer / type / mode / bounded-context)
+>    and `SKILL.md` (description / cross-skill refs / body length
+>    vs the layer's budget).
+> 3. **Validate test-regime presence** — per
+>    `SKILL_DEVELOPMENT.md` § "Testing skills", confirm the SKILL
+>    has the appropriate test artifact: `evals/evals.json` for
+>    output-shaped skills (Regime 2 — eval matrix); pressure-
+>    scenario log for discipline-shaped skills (Regime 1 —
+>    RED-GREEN-REFACTOR). A new skill landed without either is a
+>    blocker, not a minor finding.
+>
+> **Cross-platform applicability**: both phases apply equally to
+> Claude Code and Codex CLI sessions. The project's contract is
+> single-source-of-truth in this `AGENTS.md` — Claude Code reads
+> it via the sibling `CLAUDE.md` shim's `@`-include; Codex CLI
+> reads `AGENTS.md` natively per its auto-load convention. There
+> is no separate Claude-Code-only or Codex-only rules file under
+> `skills/`; this one document governs both.
 
 This contract is the per-directory operational checklist for
 the skill-authoring discipline. The full guide lives in

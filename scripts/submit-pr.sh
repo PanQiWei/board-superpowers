@@ -106,14 +106,48 @@ PY
 
 bsp_log "${VALIDATION_OUTPUT}"
 
-# --- Append claim trailer ------------------------------------------------
+# --- Contract C — PR↔Issue auto-close keyword (idempotent) -------------
+#
+# GitHub fires the PR-merge → Issue-close → ProjectV2 Auto-close webhook
+# chain ONLY when the PR body contains a `Closes #<N>` / `Fixes #<N>` /
+# `Resolves #<N>` keyword AT PR-OPEN TIME. Retroactively appending the
+# keyword after PR open does NOT retrigger the webhook (observed on PR
+# #42 / card #34 — direct `gh pr create` bypassed this script, missed
+# the trailer at OPEN time, broke the auto-close chain).
+#
+# This script idempotently injects the canonical `Closes #<N>` trailer
+# at PR-OPEN time:
+#   - if the body already contains any of the 9 GitHub-sanctioned
+#     auto-close keyword forms (close / closes / closed / fix / fixes /
+#     fixed / resolve / resolves / resolved — all case-insensitive)
+#     referencing the linked card number, no second trailer is appended;
+#   - otherwise, the canonical `Closes #<CARD>` trailer is appended once.
 TMP_BODY="$(mktemp)"
 trap 'rm -f "${TMP_BODY}"' EXIT
 cp "${BODY_FILE}" "${TMP_BODY}"
-{
-    printf '\n\n---\n'
-    printf 'Closes #%s — board-superpowers v0.2.0 claim trailer.\n' "${CARD}"
-} >> "${TMP_BODY}"
+
+if python3 - "${TMP_BODY}" "${CARD}" <<'PY'
+import re, sys
+body = open(sys.argv[1]).read()
+card = sys.argv[2]
+# Match all 9 GitHub-sanctioned forms — close|closes|closed|fix|fixes|
+# fixed|resolve|resolves|resolved. Built via 3 noun-roots × 3 inflections
+# (base / s / d|ed). See https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-pull-request-to-an-issue
+keyword_re = re.compile(
+    r"(?im)^\s*(?:Close[ds]?|Fix(?:e[ds])?|Resolve[ds]?)\s+#" +
+    re.escape(card) + r"\b"
+)
+sys.exit(0 if keyword_re.search(body) else 1)
+PY
+then
+    bsp_log "Contract C — close-keyword for #${CARD} already present, skipping trailer injection"
+else
+    bsp_log "Contract C — injecting canonical Closes #${CARD} trailer at PR-OPEN time"
+    {
+        printf '\n\n---\n'
+        printf 'Closes #%s — board-superpowers v0.4.0 claim trailer.\n' "${CARD}"
+    } >> "${TMP_BODY}"
+fi
 
 # --- Open the PR ---------------------------------------------------------
 bsp_log "opening PR (base=${BASE}, card=#${CARD})"

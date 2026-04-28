@@ -104,6 +104,23 @@ make per-directory contracts merely advisory:
    companion doc stale, fix the doc in the **same PR** — not a
    follow-up. Doc lag is the primary failure mode that makes
    this pattern decay over time.
+4. **No "selectively skip the entry skill."** When working
+   under `skills/`, the `SKILL_DEVELOPMENT.md` read + the
+   `example-skills:skill-creator` invocation specified in
+   [`skills/AGENTS.md`](./skills/AGENTS.md) "Process gate"
+   block are mandatory in BOTH implementation and review
+   phases — even when the work feels routine (e.g., a small
+   frontmatter tweak, a one-line description fix, a body
+   length adjustment). The AI cadence 100x doctrine permits
+   IN-SESSION skill chains (`brainstorming` → `writing-plans`
+   → implementation, all in one agent); it does NOT permit
+   skipping the entry skills that gate skill-authoring. The
+   entry skills carry source-of-truth re-read + Skeleton
+   selection + Regime 1/2 testing scaffolding that the chain
+   skills assume have already happened. Skipping them
+   silently turns an "AI-cadence-compressed flow" into a
+   "doctrine-skipped flow" — and the gap only surfaces under
+   external audit, not under self-review.
 
 ## Architecture at a glance (v1 design)
 

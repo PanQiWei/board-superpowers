@@ -87,47 +87,63 @@ content invariants the cards themselves must satisfy.
 #### 1.6.3 Card body schema
 
 - **Capability**: every emitted card body conforms to the
-  five-section template (plus one optional section and a marker
-  comment). Defined canonically in
-  `skills/decomposing-into-milestones/references/card-schema.md`;
-  the schema's machine-readable bottom-marker
+  thin-pointer + five-section template (plus one optional
+  section and a marker comment). Defined canonically in
+  `skills/board-canon/references/card-body-schema.md` (terminal
+  schema, atomic SPOT) and elaborated in
+  `skills/decomposing-into-milestones/references/card-schema.md`
+  (decomposition-side authoring rules + filler detection); the
+  schema's machine-readable bottom-marker
   (`<!-- board-superpowers:card -->`) is what lets `managing-board`
   and other tools distinguish board-superpowers cards from plain
   issues.
-- **Section structure** (the contract; see `card-schema.md` for
-  the full per-section guidance and the OAuth worked example):
-  - **Context** — 1–3 paragraphs. Background, primary files
-    involved, dependencies on other cards (`Depends on #N`),
-    one-line "what this card is NOT doing." The link to the
-    spec doc (per the **thin-pointer** convention below) lives
-    here.
-  - **Acceptance Criteria** — checkbox bullets; every bullet is
-    a post-condition statement of a true thing in the finished
-    world, automatable by check. Tasks ("implement X"),
-    feelings ("works well"), and implicit items ("add tests")
-    are forbidden.
-  - **Out of Scope** — bulleted list of things a Consumer
-    might be tempted to fix mid-implementation. Inoculates
-    against scope creep at draft time so Consumer's F-C6
-    (cross-card touch hard refuse) has clear input.
-  - **Size** — single label: `XS` / `S` / `M` / `L`. No other
-    values; see §1.6.4.
-  - **Execution Hints** (optional) — the one place Producer
-    advises Consumer. Recommended execution skill, known
-    gotcha, pre-empt-a-wrong-turn note. Acceptance criteria
-    and scope items are forbidden here (they belong in their
-    own sections).
-- **Thin-pointer convention** — for cards whose spec / plan /
-  design needs more depth than fits inline, the Context section
-  links to the spec doc by **repo-relative path** (not URL —
-  URLs go stale across branches; per `card-schema.md`). Spec
-  docs may live in-repo under `docs/superpowers/specs/`,
+- **Thin-pointer block** (top of body, machine-readable):
+  - `**Spec**:` — repo-relative path to the spec / plan / design
+    doc, with section anchor. Multiple paths allowed (one per
+    line). Repo-relative not URL (URLs go stale across branches).
+  - `**Owner**:` — single GitHub @-handle of the Producer who
+    owns the card.
+  - `**Estimate**:` — exactly one of `XS` / `S` / `M` / `L` per
+    §1.6.4. No XL, no story points, no fractional values.
+  Spec docs may live in-repo under `docs/superpowers/specs/`,
   `docs/architecture/`, or in third-party storage configured at
   bootstrap. Consumer's F-C2 (Spec / plan / acceptance-criteria
   fetch) follows the pointer; Consumer never tries to re-derive
   a missing spec. Producer's Backlog → Ready transition (per
   ADR-0006 row 5 precondition) is what guarantees the pointer
   resolves.
+- **Section structure** (the contract; see `card-body-schema.md`
+  in `board-canon` for full per-section guidance and the OAuth
+  worked example in `decomposing-into-milestones/references/`):
+  - **Goal** — one-sentence outcome statement. The user-visible
+    or developer-visible state-change that lands when the card's
+    PR merges. Not procedural ("implement X"), not a feeling
+    ("improve UX") — a concrete observable change.
+  - **Acceptance criteria** — checkbox bullets; every bullet is
+    a post-condition statement of a true thing in the finished
+    world, automatable by check OR by an explicit human
+    observation. Tasks ("implement X"), feelings ("works well"),
+    and implicit items ("add tests") are forbidden.
+  - **Out of scope** — bulleted list of things a Consumer
+    might be tempted to fix mid-implementation. Inoculates
+    against scope creep at draft time so Consumer's F-C6
+    (cross-card touch hard refuse) has clear input.
+  - **Dependencies** — three field types: `depends-on: #N`
+    (hard — card cannot enter Ready until #N is Done);
+    `depends-on (soft): #M` (preferred ordering, not required);
+    `depended-on-by: #K` (reverse, informational mirror of #K's
+    hard dep on this card).
+  - **Execution Hints** (optional) — the one place Producer
+    advises Consumer. Recommended execution skill, known
+    gotcha, pre-empt-a-wrong-turn note, type tag for conditional
+    gate routing (`## Execution Hints: ui` triggers Consumer's
+    `/qa` gate; `: security` triggers `/cso`). Acceptance
+    criteria and scope items are forbidden here (they belong in
+    their own sections).
+  - **Notes** — freeform rationale, driver, cross-card context,
+    retro-folded lessons. Concrete pointers (file paths, PR
+    numbers) over vague hand-waves. Genuine "(none —
+    straightforward)" is acceptable.
 - **Marker comment** — the trailing
   `<!-- board-superpowers:card -->` is protocol, not decoration.
   Tooling (managing-board's Review Queue routine, the daily
@@ -177,9 +193,18 @@ content invariants the cards themselves must satisfy.
   session, one PR, one PR-review by the architect? If yes, pick
   the matching label for retro-data calibration. If no, the
   card is wrong; splitting comes before sizing.
-- **Maps to (canonical)**: T-shirt sizing as practiced in
-  Lean / Kanban (Anderson 2010); refusal of points + velocity
-  per the no-estimates movement (Land et al. 2010+).
+- **Maps to (canonical)**:
+  - T-shirt sizing as practiced in Lean / Kanban (Anderson 2010
+    *Kanban*).
+  - **Reinertsen 2009** *Principles of Product Development Flow*
+    principle B3 ("halving batch size halves cycle time") +
+    Little's Law (`cycle_time = WIP / throughput`). Small batch
+    size is the input-side lever; the 4-bin schema makes batch
+    size architecturally explicit.
+  - Refusal of points + velocity per the no-estimates movement
+    (Land et al. 2010+; Fowler "StoryCounting" non-dogmatic
+    condensation —
+    *<https://martinfowler.com/bliki/StoryCounting.html>*).
 - **Original framing**: the **fixed four-bin schema with hard
   upper bin = "split"** is operationalized for AI orchestration
   — at AI-throughput rates the architect's verification

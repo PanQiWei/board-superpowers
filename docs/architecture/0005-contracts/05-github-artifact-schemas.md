@@ -17,15 +17,28 @@ Canonical body schema lives in
 0005 pins the **section list** (header strings, in this order) and
 the **parsing contract** that downstream tooling can rely on.
 
-### Required section headers (in this order)
+### Body structure (in this order)
+
+The card body opens with a machine-readable **thin-pointer block** at the very top, then five required sections, then an optional sixth section.
+
+**Thin-pointer block** (top of body, between `<!-- thin-pointer -->` and `<!-- /thin-pointer -->`):
+
+| Field | Required? | Notes |
+|-------|-----------|-------|
+| `**Spec**:` | yes | Repo-relative path(s) with section anchor; URLs forbidden |
+| `**Owner**:` | yes | Single GitHub `@<handle>` |
+| `**Estimate**:` | yes | One token: `XS` \| `S` \| `M` \| `L`. `XL` is invalid by design — split the card if you reach for it |
+
+**Required section headers** (after thin-pointer block, in this order):
 
 | Order | Header | Required? | Notes |
 |-------|--------|-----------|-------|
-| 1 | `## Context` | yes | 1–3 paragraphs; background, files, dependencies |
-| 2 | `## Acceptance Criteria` | yes | Markdown checklist (`- [ ] …`); each item a post-condition, not a task |
-| 3 | `## Out of Scope` | yes | Bulleted list; deliberate exclusions |
-| 4 | `## Size` | yes | One token: `XS` \| `S` \| `M` \| `L`. `XL` is invalid by design — split the card if you reach for it |
-| 5 | `## Execution Hints` | optional | Single Manager-to-Consumer hint section; terse |
+| 1 | `## Goal` | yes | One-sentence outcome statement; user/developer-visible state-change on PR merge |
+| 2 | `## Acceptance criteria` | yes | Markdown checklist (`- [ ] …`); each item a post-condition, not a task |
+| 3 | `## Out of scope` | yes | Bulleted list; deliberate exclusions |
+| 4 | `## Dependencies` | yes | `depends-on: #N` (hard) / `depends-on (soft): #M` / `depended-on-by: #K` lines, or `(none — terminal/first card)` |
+| 5 | `## Execution Hints` | optional | Single Manager-to-Consumer hint section; terse. Type tags (`: ui`, `: security`) trigger Consumer's F-C11 conditional gates |
+| 6 | `## Notes` | yes | Freeform rationale, driver, cross-card context; concrete pointers preferred; `(none — straightforward)` is acceptable |
 
 ### Trailing marker
 
@@ -58,11 +71,13 @@ synthesizer, etc.) parse Card bodies under these rules:
 - **Missing optional sections.** `## Execution Hints` absent =
   empty hints. Other missing sections = parse error / Card body
   contract violation.
-- **`Depends on #N` syntax.** Within `## Context`, dependencies
-  on other Cards are written as `Depends on #42, #43` (per
-  `card-schema.md`). The F-C0 self-selection step (and Producer's
-  Backlog → Ready gate) MUST refuse a Card whose deps aren't all
-  Done yet.
+- **Dependency syntax.** Dependencies on other Cards live in
+  the `## Dependencies` section (NOT inlined into prose). Three
+  field types: `- depends-on: #N` (hard — Card cannot enter Ready
+  until #N is Done); `- depends-on (soft): #M` (preferred ordering,
+  not required); `- depended-on-by: #K` (reverse, informational).
+  The F-C0 self-selection step (and Producer's Backlog → Ready
+  gate) MUST refuse a Card whose hard deps aren't all Done yet.
 - **`Closes #N` syntax** does NOT appear in Card bodies — that's
   a PR-body concept (see PR section below).
 

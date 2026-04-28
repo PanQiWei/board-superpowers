@@ -173,6 +173,8 @@ bash scripts/submit-pr.sh --title "<title>" --body-file <path> --card <N>
 
 The script validates the three-section contract before opening the PR. If validation fails: re-edit the body to address the specific failure (printed to stderr) and retry. The script auto-appends a trailer linking back to the card; do NOT hand-add the trailer.
 
+**Why the auto-trailer is load-bearing**: GitHub's PR-merge → Issue-close → ProjectV2 Auto-close webhook chain only fires when the PR body contains a `Closes #<N>` (or `Fixes #<N>` / `Resolves #<N>`) keyword **at PR-OPEN time**. Retroactively appending the keyword after PR open does NOT retrigger the webhook for an already-merged PR — the merge that already fired without the link cannot be replayed. Bypassing `submit-pr.sh` (e.g., direct `gh pr create`) misses the auto-trailer at OPEN time and silently breaks the link. Observed on PR #42 / card #34: trailer added retroactively to repair the body record, but the issue had to be manually closed because the webhook had already fired with no keyword. Contract C in `board-superpowers:enforcing-pr-contract` catches this at PR submit time via idempotent injection. **Always go through `submit-pr.sh`; never `gh pr create` directly.**
+
 ## Step 11 — rework loop (if reviewer requests changes)
 
 If the reviewer comments "request changes":
@@ -186,7 +188,37 @@ If the reviewer comments "request changes":
 Once the PR is merged the Consumer's responsibility is a four-part close-out (action_id 113, A-class):
 
 1. **Verify PR state** — `gh pr view <N> --json state --jq '.state'` returns `MERGED`. If `OPEN`, the cleanup is premature; abort and wait. If `CLOSED` (without merge), this is action_id 103 (failure path), not 113 — different audit row.
-2. **Verify card transitioned** — `gh project item-list ... --jq '.[] | select(.content.number==<N>) | .Status'` returns `Done`. The webhook usually flips Status within 30s; if it has not after 5 minutes, surface the lag to the architect rather than racing to flip Status manually.
+2. **Verify card transitioned** (2-stage flow — distinguishes PR↔Issue link bug from webhook lag):
+
+   First, check Status: `gh project item-list ... --jq '.[] | select(.content.number==<N>) | .Status'`. The webhook usually flips Status to `Done` within 30 seconds. If after 5 minutes Status is still NOT `Done`, branch on the cause:
+
+   **Stage (a) — verify the PR↔Issue link itself exists**:
+
+   ```bash
+   OWNER=$(gh repo view --json owner --jq .owner.login)
+   REPO=$(gh repo view --json name --jq .name)
+   gh api graphql -F owner="$OWNER" -F repo="$REPO" -F pr="<PR-N>" -f query='
+     query($owner:String!, $repo:String!, $pr:Int!) {
+       repository(owner:$owner, name:$repo) {
+         pullRequest(number:$pr) {
+           closingIssuesReferences(first: 10) { nodes { number } }
+         }
+       }
+     }' --jq '.data.repository.pullRequest.closingIssuesReferences.nodes'
+   ```
+
+   The owner/name are auto-derived from the current `gh repo view` context (no manual placeholder substitution); only `<PR-N>` needs replacement with the actual PR number.
+
+   If the result is `[]` (empty), the PR↔Issue link itself was never registered — the `Closes #<N>` trailer was missing at PR-OPEN time. **The webhook chain cannot be retroactively replayed**. Manual recovery path:
+
+   - Edit the PR body to add `Closes #<N>` for the audit-trail record (does NOT retrigger the webhook): `gh pr edit <PR-N> --body-file <amended>`.
+   - Manually close the Issue: `gh issue close <N> --comment "Closing manually — PR body missing Closes keyword at OPEN time; trailer added retroactively does not retrigger webhook. See #34 retro."`.
+   - Manually flip ProjectV2 Status to `Done` via `gh project item-edit` (the auto-close workflow won't fire).
+   - Audit row records `recovery_path: "manual close + manual status flip"` so the deviation is traceable.
+
+   **Stage (b) — link exists but Status didn't flip after lag window**:
+
+   If `closingIssuesReferences` returns the linked card number AND Status is still not `Done` after 5 minutes, this is webhook-delivery lag (network / ProjectV2 propagation). Do NOT flip Status manually — overlapping flips cause audit-log churn and risk a flip-flop when the lagged webhook eventually arrives. Surface the lag to the architect; wait or use `gh api repos/<owner>/<repo>/dispatches` to nudge the webhook (architect's call).
 3. **Local cleanup** —
    ```bash
    cd ~/Dev/repos/<repo>           # back to repo root (on main)
