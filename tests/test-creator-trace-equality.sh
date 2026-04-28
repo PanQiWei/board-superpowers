@@ -80,17 +80,18 @@ issue_url=""
 issue_url=$(gh issue create \
   --title "[ac4 throwaway] $(date -u +%FT%TZ)" \
   --body "${body}" \
-  --label "size:XS" 2>/dev/null) \
-  || fail "gh issue create failed"
+  --label "size:XS") \
+  || fail "gh issue create failed (see above stderr)"
 [ -n "${issue_url}" ] || fail "gh issue create returned empty output"
-card_num=$(printf '%s\n' "${issue_url}" | grep -oE '[0-9]+$') \
-  || fail "could not extract issue number from: ${issue_url}"
-[ -n "${card_num}" ] || fail "issue number is empty (url=${issue_url})"
-printf 'Created throwaway card #%s (%s)\n' "${card_num}" "${issue_url}"
 
 # ---------------------------------------------------------------------------
-# Cleanup trap — always delete (or close) the throwaway issue on EXIT
-# so test failures do not pollute the GitHub project board.
+# Cleanup trap — register IMMEDIATELY after issue_url is confirmed
+# non-empty so that if card_num parsing fails the throwaway issue is still
+# cleaned up. The cleanup function's [ -n "${card_num:-}" ] guard makes
+# this a safe no-op until card_num is set; gh issue delete also accepts a
+# URL directly so the trap can fall through to URL-based deletion when
+# card_num is empty (not currently implemented — number-only guard kept for
+# simplicity since gh issue delete does accept URLs; see commit message).
 # ---------------------------------------------------------------------------
 cleanup() {
   if [ -n "${card_num:-}" ]; then
@@ -106,6 +107,11 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
+
+card_num=$(printf '%s\n' "${issue_url}" | grep -oE '[0-9]+$') \
+  || fail "could not extract issue number from: ${issue_url}"
+[ -n "${card_num}" ] || fail "issue number is empty (url=${issue_url})"
+printf 'Created throwaway card #%s (%s)\n' "${card_num}" "${issue_url}"
 
 # ---------------------------------------------------------------------------
 # 4. Write the corresponding audit row (action_id=1).
@@ -124,8 +130,8 @@ bash "${REPO_ROOT}/scripts/audit-log-write.sh" \
 # 5. Read card body session_id from the live GitHub issue.
 # ---------------------------------------------------------------------------
 card_body=""
-card_body=$(gh issue view "${card_num}" --json body --jq '.body' 2>/dev/null) \
-  || fail "gh issue view failed"
+card_body=$(gh issue view "${card_num}" --json body --jq '.body') \
+  || fail "gh issue view failed for card #${card_num} (see above stderr)"
 body_sid=""
 body_sid=$(printf '%s\n' "${card_body}" \
   | grep -oE '\*\*Session-id:\*\* [^[:space:]]+' \
@@ -138,7 +144,7 @@ printf 'Card body session_id:  %s\n' "${body_sid}"
 # ---------------------------------------------------------------------------
 # 6. Read audit_log session_id from whichever path is active.
 # ---------------------------------------------------------------------------
-JSONL="${HOME}/.board-superpowers/repos/Users-panqiwei-Dev-repos-nemori-ai-board-superpowers/audit-local.jsonl"
+JSONL="$(bsp_audit_local_path "$(bsp_primary_repo_root "${REPO_ROOT}")")"
 audit_sid=""
 audit_path=""
 
@@ -163,8 +169,8 @@ if [ -f "${HOME}/.board-superpowers/credentials.yml" ] \
     "SELECT session_id FROM audit_log
      WHERE action_id=1
        AND json_extract(payload,'\$.card_number')=${card_num}
-     ORDER BY id DESC LIMIT 1;" 2>/dev/null) \
-    || fail "sqlite3 query failed"
+     ORDER BY id DESC LIMIT 1;") \
+    || fail "sqlite3 query failed for card #${card_num} db=${DB_PATH} (see above stderr)"
   [ -n "${audit_sid}" ] || fail "sqlite3 returned empty session_id for card #${card_num} action_id=1"
   audit_path="sqlite:${DB_PATH}"
 elif [ -f "${JSONL}" ]; then
