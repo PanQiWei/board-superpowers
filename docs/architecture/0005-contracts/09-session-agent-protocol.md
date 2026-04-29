@@ -110,7 +110,7 @@ mechanisms (J2 covers carrier choice).
 | Value | Meaning | Bandwidth |
 |-------|---------|-----------|
 | `session-hook` | Plugin runtime hook (CC `SessionStart`, `PreToolUse`, `PostToolUse`, `Stop`; equivalents in Codex CLI per [`../../PLUGIN_DEVELOPMENT.md`](../../PLUGIN_DEVELOPMENT.md)) injects context or invokes a SKILL. | **Finite** — every injected briefing item competes for the architect's per-session attention budget. |
-| `cron-job` | External scheduler (system cron, CC scheduled jobs, GitHub Actions cron) calls the plugin entry on a cadence independent of any session. | **Effectively unlimited** — cadences run concurrently, do not crowd the session interface. |
+| `cron-job` | External scheduler (system cron, CC scheduled jobs, GitHub Actions cron) calls the plugin entry on a cadence independent of any session. Governed by [ADR-0027](../adr/0027-cron-as-trigger-carrier.md) (complement to ADR-0007 — plugin-runtime constraints unchanged). | **Effectively unlimited** — cadences run concurrently, do not crowd the session interface. |
 | `in-process-reflex` | An atomic SKILL invoked synchronously from a molecular SKILL's body during execution, per [ADR-0008](../adr/0008-plugin-to-plugin-skill-invocation.md). | **Zero latency, zero bandwidth cost** for the architect — the architect never sees the reflex directly. |
 | `explicit-prompt` | Architect's own prompt is the trigger. (Sub-mode: in Mode-2 dispatch, the prompter may be a Producer agent rather than the architect — see § "Surface-specific extensions".) | **Bandwidth scales with the prompter's volition.** |
 
@@ -399,16 +399,16 @@ Changes to this protocol trigger:
 
 ## Open / TBD
 
-- **Cron-as-trigger-carrier ADR placement.** The
-  introduction of `cron-job` as a J2 value implies an ADR
-  decision: revise
-  [ADR-0007](../adr/0007-plugin-runtime-derived-constraints.md)
-  to add cron as an explicit external-orchestrator carrier,
-  OR open a new ADR (next number after current head) named
-  "cron-as-trigger-carrier". To be decided in the same PR
-  cycle as this protocol's promotion from draft to stable.
-  Until then, the carrier ladder cites this Open item when
-  reaching `cron-job`.
+- ~~**Cron-as-trigger-carrier ADR placement.**~~
+  **Resolved 2026-04-29 by**
+  [ADR-0027](../adr/0027-cron-as-trigger-carrier.md). Cron
+  is an explicit, first-class external trigger carrier;
+  ADR-0007's plugin-runtime constraints remain unchanged.
+  The two ADRs co-exist as complementary rules — see
+  ADR-0027 § Decision and § Alternatives considered for the
+  full rationale. The carrier ladder no longer needs an
+  Open item placeholder; the J2 `cron-job` row in § "J2
+  — Trigger carrier" cites the governance ADR directly.
 - **Sub-mode notation for explicit-prompt prompter.** When
   the prompter is the architect vs. a Producer agent
   (Mode-2 dispatch), should the protocol track this
