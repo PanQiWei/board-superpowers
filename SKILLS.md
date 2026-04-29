@@ -323,9 +323,12 @@ means for board-superpowers" #3 for the full rationale.
 #### `board-canon` (v1-minimum)
 
 - **Role**: Pure read-only contract — 6-state machine + Card
-  body schema (thin-pointer + 5 sections + bottom marker) +
-  branch naming (`claim/<N>-<slug>`) + WIP counting formula
-  (`In Progress + suspended + In Review`; `Blocked` excluded).
+  body schema (thin-pointer + 5 sections + bottom marker +
+  display-only metadata fields per ADR-0026) + branch naming
+  (v0.5.0+ canonical `claim/<kanban-id>-<key-slug>-<title-slug>`;
+  v0.4.x legacy `claim/<key-slug>-<title-slug>` accepted by
+  parser) + WIP counting formula (`In Progress + suspended +
+  In Review`; `Blocked` excluded).
 - **Body target**: 200-300 lines.
 - **References folder**:
   `references/{state-machine,card-body-schema,claim-protocol,wip-counting,branch-naming}.md`.
