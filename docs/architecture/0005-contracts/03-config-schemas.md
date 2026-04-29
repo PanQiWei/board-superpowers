@@ -298,7 +298,7 @@ modules:
     # primary backend selection (M10 config-item stage writes these
     # per ADR-0024 § Part B; honored as the primary kanban shorthand
     # when kanbans list has length 1):
-    backend: github-project-v2          # enum: github-project-v2 (linear/jira are v1.x roadmap)
+    projection: github-project-v2          # enum: github-project-v2 (linear/jira are v1.x roadmap)
     project_ref: <opaque-string>        # backend-shaped; GitHub uses OWNER/PROJECT_NUMBER (e.g., PanQiWei/3)
     compliance: L0|L1|L2|L3             # advertised compliance level per Kanban Protocol
     # multi-kanban list — v0.5.0 schema reservation; runtime supports
@@ -306,7 +306,7 @@ modules:
     kanbans:
       - id: primary
         state: active                   # Bound | Active | Suspended | Archived | Retired
-        backend: github-project-v2
+        projection: github-project-v2
         project_ref: <opaque-string>
         role: primary                   # exactly 1 primary required
         # optional: compliance, description, wip_limit_local
@@ -317,7 +317,7 @@ modules:
 | Field | Type | Required? | Default | Notes |
 |-------|------|-----------|---------|-------|
 | `modules.m10_kanban.schema_version` | int | yes | `1` | Per ADR-0021 modular schema_version contract. Bump on additive change; new ADR for any field rename or removal. |
-| `modules.m10_kanban.backend` | string enum | yes (M10 single-backend shorthand) | — | v0.5.0 ships `github-project-v2` only. `linear` / `jira` / future backends are v1.x roadmap; adding a value requires a same-PR `operating-kanban/references/<backend>.md` reference per the protocol "second-adapter authors" contract. |
+| `modules.m10_kanban.projection` | string enum | yes (M10 single-backend shorthand) | — | v0.5.0 ships `github-project-v2` only. `linear` / `jira` / future backends are v1.x roadmap; adding a value requires a same-PR `operating-kanban/references/<backend>.md` reference per the protocol "second-adapter authors" contract. |
 | `modules.m10_kanban.project_ref` | string (opaque, backend-shaped) | yes (M10 shorthand) | — | Parsed and round-trip-stable per the active backend's projection, NOT per the protocol. For `github-project-v2`: `OWNER/PROJECT_NUMBER` (same shape the legacy top-level `project:` field carried). Per [`00-kanban-protocol.md`](./00-kanban-protocol.md) `Card.key` / identity rules: `project_ref` is opaque to the agent — never parsed past what the backend reference declares. |
 | `modules.m10_kanban.compliance` | string enum `L0` \| `L1` \| `L2` \| `L3` | yes | `L1` (when omitted; subject to v0.5.0 finalization) | Advertised compliance level. Authoritative semantics live in [`00-kanban-protocol.md`](./00-kanban-protocol.md). The `operating-kanban` skill reads this field to decide which actions are guaranteed available on this backend / this repo. |
 | `modules.m10_kanban.kanbans` | list (objects) | no (v0.5.0); yes (v1.x multi-kanban) | derived from M10 shorthand | List-shaped projection of the kanban registry per ADR-0026. v1.0 runtime hard-fails on length > 1 (ADR-0026 v1.0 carve-out). When omitted, runtime synthesizes a length-1 list from the M10 shorthand fields. |
@@ -333,7 +333,7 @@ read `settings.yml` per ADR-0024) MUST treat that as equivalent to:
 modules:
   m10_kanban:
     schema_version: 1
-    backend: github-project-v2
+    projection: github-project-v2
     project_ref: <legacy-project-value>
     compliance: <v0.5.0 default>
 ```

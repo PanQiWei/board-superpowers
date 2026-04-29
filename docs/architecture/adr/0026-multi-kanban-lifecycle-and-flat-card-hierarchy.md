@@ -1,6 +1,6 @@
 # ADR 0026: Multi-kanban support + lifecycle states + flat-Card hierarchy stance
 
-**Status:** accepted
+**Status:** accepted; § "Multi-kanban semantics" schema field name amended in #68 — `modules.m10_kanban.<id>.backend` renamed to `modules.m10_kanban.<id>.projection` (per ADR-0027 § Decision 4 vocabulary anchor; semantic unchanged)
 **Date:** 2026-04-29
 **Deciders:** PanQiWei (maintainer)
 
@@ -118,14 +118,14 @@ modules:
     schema_version: 1
     # primary backend selection (existing M10 fields per ADR-0024 §
     # Part B; honored when kanbans list has length 1):
-    backend: github-project-v2
+    projection: github-project-v2
     project_ref: PanQiWei/3
     # multi-kanban list — v0.5.0 schema reservation; runtime
     # supports list length 1 only (see carve-out below):
     kanbans:
       - id: primary             # repo-internal alias; unique within this repo
         state: active           # Bound | Active | Suspended | Archived | Retired
-        backend: github-project-v2
+        projection: github-project-v2
         project_ref: PanQiWei/3 # OWNER/PROJECT_NUMBER per the v1 GH projection
         role: primary           # exactly 1 primary required across active kanbans
         description: "Feature dev"
@@ -133,7 +133,7 @@ modules:
         # optional: wip_limit_local: N (per-kanban WIP cap override)
       - id: legal                # multi-kanban example; v1.x only ships if user opts in
         state: active
-        backend: jira            # v1.x roadmap; refused at v1.0 runtime
+        projection: jira            # v1.x roadmap; refused at v1.0 runtime
         project_ref: legal-team/COMPLIANCE
         role: secondary
         description: "Compliance & legal review"
