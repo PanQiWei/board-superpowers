@@ -1221,6 +1221,118 @@ bsp_resolve_audit_db_url() {
     return 0
 }
 
+# --- active projection resolution ---------------------------------------
+#
+# bsp_resolve_active_projection <repo_root>
+#
+# Resolves the active Kanban Protocol projection for a repo.
+# Writes to stdout: "<projection_id> <project_ref>"  (space-separated).
+# Returns 0 on success, non-zero on missing/invalid config.
+#
+# Resolution order (per ADR-0027 § Decision 2 + ADR-0026 § Multi-kanban
+# schema; see also skills/operating-kanban/references/backend-selection.md):
+#
+#   1. Read <repo_root>/.board-superpowers/settings.yml § modules.m10_kanban
+#      - If kanbans list length=1, return its projection + project_ref.
+#      - If absent and shorthand fields (projection / project_ref) are
+#        present at the m10_kanban level, return those.
+#      - If kanbans list length>1, fail with capability error per the
+#        v1.0 length=1 carve-out.
+#   2. FALLBACK: read <repo_root>/.board-superpowers/config.yml § project
+#      (v0.4.x legacy layout). On hit, emit a one-shot deprecation notice
+#      to stderr and return projection_id="github-project-v2".
+#   3. If neither path resolves, return non-zero with stderr error.
+bsp_resolve_active_projection() {
+    local repo_root="${1:?usage: bsp_resolve_active_projection <repo_root>}"
+    local settings="${repo_root}/.board-superpowers/settings.yml"
+    local config="${repo_root}/.board-superpowers/config.yml"
+
+    if [ -f "${settings}" ]; then
+        # Awk-based parser for the modules.m10_kanban subtree. We avoid
+        # PyYAML because system python3 frequently lacks the module on
+        # fresh hosts; the per-repo venv (bsp_ensure_venv) guarantees
+        # PyYAML but requires bootstrap to have run, which is the very
+        # path this resolver supports during pre-bootstrap.
+        #
+        # Parser contract:
+        #   - Tracks indent of `modules:` (must be 0) and `m10_kanban:` (2 spaces).
+        #   - Captures top-level (4-space-indented) `projection:` / `project_ref:`
+        #     under m10_kanban as the shorthand fallback.
+        #   - Counts `- id:` entries under `kanbans:` (6-space-indented dash).
+        #   - For length=1, captures the first entry's projection/project_ref
+        #     (8-space-indented inside the dash item).
+        #   - Emits one of: "MULTI <n>" / "OK <proj> <ref>" / "EMPTY".
+        local parsed
+        parsed="$(awk '
+            BEGIN { in_m10=0; in_kanbans=0; n=0; t_proj=""; t_ref=""; e_proj=""; e_ref="" }
+            /^modules:[[:space:]]*$/   { in_modules=1; next }
+            in_modules==1 && /^[^[:space:]]/ { in_modules=0; in_m10=0; in_kanbans=0 }
+            in_modules==1 && /^[[:space:]]{2}m10_kanban:[[:space:]]*$/ {
+                in_m10=1; in_kanbans=0; next
+            }
+            in_m10==1 && /^[[:space:]]{2}[a-zA-Z_]/ && !/^[[:space:]]{2}m10_kanban:/ {
+                in_m10=0; in_kanbans=0
+            }
+            in_m10==1 && /^[[:space:]]{4}kanbans:[[:space:]]*$/ { in_kanbans=1; next }
+            in_m10==1 && in_kanbans==0 && /^[[:space:]]{4}projection:[[:space:]]*/ {
+                line=$0; sub(/^[[:space:]]{4}projection:[[:space:]]*/, "", line)
+                gsub(/^"|"$/, "", line); t_proj=line
+            }
+            in_m10==1 && in_kanbans==0 && /^[[:space:]]{4}project_ref:[[:space:]]*/ {
+                line=$0; sub(/^[[:space:]]{4}project_ref:[[:space:]]*/, "", line)
+                gsub(/^"|"$/, "", line); t_ref=line
+            }
+            in_kanbans==1 && /^[[:space:]]{6}-[[:space:]]*id:/ { n++; next }
+            in_kanbans==1 && n==1 && /^[[:space:]]{8}projection:[[:space:]]*/ {
+                line=$0; sub(/^[[:space:]]{8}projection:[[:space:]]*/, "", line)
+                gsub(/^"|"$/, "", line); e_proj=line
+            }
+            in_kanbans==1 && n==1 && /^[[:space:]]{8}project_ref:[[:space:]]*/ {
+                line=$0; sub(/^[[:space:]]{8}project_ref:[[:space:]]*/, "", line)
+                gsub(/^"|"$/, "", line); e_ref=line
+            }
+            in_kanbans==1 && /^[[:space:]]{0,4}[^[:space:]-]/ { in_kanbans=0 }
+            END {
+                if (n>1) { print "MULTI " n; exit }
+                proj = (e_proj!="") ? e_proj : t_proj
+                ref  = (e_ref!="")  ? e_ref  : t_ref
+                if (proj!="" && ref!="") { print "OK " proj " " ref; exit }
+                print "EMPTY"
+            }
+        ' "${settings}")" || parsed="EMPTY"
+
+        case "${parsed}" in
+            "MULTI "*)
+                printf 'multi-kanban not yet supported in v1.0; see ADR-0026 Roadmap\n' >&2
+                return 4
+                ;;
+            "OK "*)
+                printf '%s\n' "${parsed#OK }"
+                return 0
+                ;;
+            *)
+                : # fall through to legacy path
+                ;;
+        esac
+    fi
+
+    # FALLBACK: config.yml § project (v0.4.x legacy block).
+    if [ -f "${config}" ]; then
+        local legacy_proj
+        legacy_proj="$(grep -E '^[[:space:]]*project[[:space:]]*:' "${config}" 2>/dev/null \
+                        | head -n1 \
+                        | sed -E 's/^[[:space:]]*project[[:space:]]*:[[:space:]]*//; s/^"//; s/"$//')"
+        if [ -n "${legacy_proj}" ]; then
+            printf '[bsp DEPRECATION] config.yml legacy kanban block — please bootstrap repo to v0.5.0+ schema (modules.m10_kanban). See #67 / ADR-0027.\n' >&2
+            printf 'github-project-v2 %s\n' "${legacy_proj}"
+            return 0
+        fi
+    fi
+
+    printf '[bsp ERROR] no projection configured for %s\n' "${repo_root}" >&2
+    return 1
+}
+
 # --- autonomy class resolution ------------------------------------------
 #
 # Resolve the effective A/R/N class for an action_id by layering:
