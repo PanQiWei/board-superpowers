@@ -61,7 +61,7 @@ Backlog ─▶ Ready ─▶ In Progress ─▶ In Review ─▶ Done
 
 **WIP cap** (per architect): `count(In Progress) + count(suspended-label) + count(In Review) ≤ wip_limit`. **`Blocked` is NOT counted** — so a stuck card doesn't lock the cap.
 
-Branch naming (v0.5.0 canonical): `claim/<kanban-id>-<key-slug>-<title-slug>` (e.g., `claim/default-42-refactor-cache`). `<kanban-id>` identifies the kanban; `<key-slug>` is the canonical `Card.key` with hyphens rewritten to underscores (so a Linear-shaped key `ENG-42` becomes branch segment `eng_42`); `<title-slug>` is the kebab-case shortened title.
+Branch naming (canonical form): `claim/<kanban-id>-<key-slug>-<title-slug>` (e.g., `claim/default-42-refactor-cache`). `<kanban-id>` identifies the kanban; `<key-slug>` is the canonical `Card.key` with hyphens rewritten to underscores (so a Linear-shaped key `ENG-42` becomes branch segment `eng_42`); `<title-slug>` is the kebab-case shortened title.
 
 ## The 11 skills, by layer
 
@@ -73,8 +73,8 @@ Three layers, strictly downward dependency (Entry → Molecular → Atomic). Ato
 **Molecular layer (5)** — business workflows, state-machine-shaped:
 - `managing-board` *(shipped)* — Producer surface. Daily briefing, Review Queue, Intake.
 - `consuming-card` *(shipped)* — Consumer lifecycle. Claim → implement → PR → cleanup.
-- `decomposing-into-milestones` *(shipped v0.4.0)* — Turns a design artifact into INVEST-compliant vertically-sliced Cards on the board.
-- `bootstrapping-repo` *(shipped v0.2.0)* — First-time host + per-repo setup; injects routing block into AGENTS.md / CLAUDE.md.
+- `decomposing-into-milestones` *(shipped)* — Turns a design artifact into INVEST-compliant vertically-sliced Cards on the board.
+- `bootstrapping-repo` *(shipped)* — First-time host + per-repo setup; injects routing block into AGENTS.md / CLAUDE.md.
 - `migrating-repo-version` *(deferred)* — Plugin-version upgrade + schema migration. Not yet shipping; if a route would land here, respond with a "not implemented in current release" note.
 
 **Atomic layer (5)** — single-purpose contracts, reused by molecular skills:
@@ -82,9 +82,9 @@ Three layers, strictly downward dependency (Entry → Molecular → Atomic). Ato
 - `enforcing-pr-contract` — PR three-section enforcement (Automated Verification / Human Verification TODO / Retro Notes) + Card acceptance-criteria sync at submit.
 - `classifying-actions` — autonomy-classification SPOT. Per `board-superpowers:classifying-actions` (the atomic SKILL that owns the autonomy matrix + override merging + 5-step triage rule), invoke that skill with the action_id and act on its A (auto) / R (architect approval required) / N (forbidden) decision.
 - `auditing-actions` — Audit log schema + propose/resolve sequencing + BYO-RDBMS write conventions.
-- `operating-kanban` *(shipped v0.5.0)* — 8-action protocol dispatch over the active projection (backend selection from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`, per-projection action invocation, failure-mode dispatch).
+- `operating-kanban` *(shipped)* — 8-action protocol dispatch over the active projection (backend selection from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`, per-projection action invocation, failure-mode dispatch).
 
-Status as of v0.5.0: **10 of 11 shipped**, only `migrating-repo-version` pending.
+Catalog status: **10 of 11 shipped**, only `migrating-repo-version` pending.
 
 ## The 5 bounded contexts
 

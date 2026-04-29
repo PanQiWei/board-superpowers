@@ -69,9 +69,9 @@ If the card number cannot be resolved unambiguously, ask the user. Wrong card nu
 
 ## Step 2 — read the card
 
-This is the `read_card` protocol action — invoke `board-superpowers:operating-kanban` with action `read_card`. It resolves the active projection per `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` (with v0.4.x legacy fallback to `<repo>/.board-superpowers/config.yml § board`) and dispatches the per-Form invocation.
+This is the `read_card` protocol action — invoke `board-superpowers:operating-kanban` with action `read_card`. It resolves the active projection from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` (or `<repo>/.board-superpowers/config.yml § board` if absent; operating-kanban routes both transparently) and dispatches the per-Form invocation.
 
-For the `github-project-v2` projection at v0.5.0 the Form A bash invocation is:
+For the `github-project-v2` projection the Form A bash invocation is:
 
 ```bash
 gh issue view <N> --json number,title,body,state,labels,comments
@@ -85,7 +85,7 @@ Inspect:
 
 ## Step 3 — claim
 
-Step 3 is the `claim_card` protocol action. For v0.5.0's only live projection (`github-project-v2`), `claim_card`'s invocation entry IS `bash scripts/claim-card.sh` — the script wraps the protocol action's 4-step transaction primitive (git-layer atomic; exit-code semantics + worktree+branch+Status-flip atomicity are script-level concerns). Future projections (Linear / Jira) declare their own invocation entries in their reference files; the protocol-action call shape from this SKILL stays the same.
+Step 3 is the `claim_card` protocol action. For the `github-project-v2` projection, `claim_card`'s invocation entry IS `bash scripts/claim-card.sh` — the script wraps the protocol action's 4-step transaction primitive (git-layer atomic; exit-code semantics + worktree+branch+Status-flip atomicity are script-level concerns). Each projection's reference file declares its own invocation entry; the protocol-action call shape from this SKILL stays the same regardless of projection.
 
 ```bash
 bash scripts/claim-card.sh \
@@ -93,7 +93,7 @@ bash scripts/claim-card.sh \
   --repo <repo> --card <N> --title "<title>"
 ```
 
-The owner + project number resolve from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` (the v0.5.0 SoT; falls back to `<repo>/.board-superpowers/config.yml § board` for legacy v0.4.x repos). The script performs the four-step transaction described in `board-superpowers:board-canon` § "Claim protocol"; the embedded Status flip from `Ready` to `In Progress` is itself a `transition_card` protocol action realized inside the claim transaction. Any failure leaves a partial state — read the script's stderr and surface to the architect rather than silently retry.
+The owner + project number resolve from the active kanban registration (`<repo>/.board-superpowers/settings.yml § modules.m10_kanban`, or `<repo>/.board-superpowers/config.yml § board` if absent — operating-kanban routes both). The script performs the four-step transaction described in `board-superpowers:board-canon` § "Claim protocol"; the embedded Status flip from `Ready` to `In Progress` is itself a `transition_card` protocol action realized inside the claim transaction. Any failure leaves a partial state — read the script's stderr and surface to the architect rather than silently retry.
 
 ## Step 4 — enter the worktree
 
@@ -179,7 +179,7 @@ Draft the PR body using the templates in `board-superpowers:enforcing-pr-contrac
 bash scripts/submit-pr.sh --title "<title>" --body-file <path> --card <N>
 ```
 
-The script validates the three-section contract before opening the PR. If validation fails: re-edit the body to address the specific failure (printed to stderr) and retry. The script auto-appends a trailer linking back to the card; do NOT hand-add the trailer. Step 10's PR-OPEN side-effect is the `link_pr_to_card` protocol action. For v0.5.0's `github-project-v2` projection, the invocation entry IS `bash scripts/submit-pr.sh` (whose canonical-trailer logic registers the PR↔Issue link via GitHub's `Closes #<N>` keyword chain). Future projections' invocation entries live in their reference files.
+The script validates the three-section contract before opening the PR. If validation fails: re-edit the body to address the specific failure (printed to stderr) and retry. The script auto-appends a trailer linking back to the card; do NOT hand-add the trailer. Step 10's PR-OPEN side-effect is the `link_pr_to_card` protocol action. For the `github-project-v2` projection, the invocation entry IS `bash scripts/submit-pr.sh` (whose canonical-trailer logic registers the PR↔Issue link via GitHub's `Closes #<N>` keyword chain). Each projection's reference file declares its own invocation entry.
 
 **Why the auto-trailer is load-bearing**: GitHub's PR-merge → Issue-close → ProjectV2 Auto-close webhook chain fires only when the PR body contains a `Closes #<N>` (or `Fixes #<N>` / `Resolves #<N>`) keyword. The PR↔Issue link is registered in `closingIssuesReferences` at PR-OPEN AND re-derived on every body update — so a body update that strips the canonical trailer silently de-registers the link, and the next merge fires without the auto-close webhook. Once that merge has fired, retroactively re-appending the trailer does NOT replay the chain. Two production failures so far: PR #42 / card #34 (direct `gh pr create` opened without the trailer) and PR #47 / card #45 (commits `4c0110a` + `4ac446f` ran `gh pr edit --body-file` to expand retro notes, silently overwriting the trailer; `closingIssuesReferences` returned `[]` after merge). Contract C in `board-superpowers:enforcing-pr-contract` catches both failure modes at submit-time via idempotent injection.
 

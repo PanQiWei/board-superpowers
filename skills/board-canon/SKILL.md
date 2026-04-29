@@ -148,14 +148,14 @@ The default cap is 5 per Consumer (per spec). Each architect overrides per-repo 
 
 ## Branch naming
 
-Canonical format (v0.5.0+): `claim/<kanban-id>-<key-slug>-<title-slug>`
+Canonical format: `claim/<kanban-id>-<key-slug>-<title-slug>`
 
 Where:
 - `<kanban-id>` is the local id of the active kanban this card belongs to (read from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`). For repos with one active kanban, the id is typically `primary`.
 - `<key-slug>` is `slugify(Card.key)` — `Card.key` is the backend's display-stable opaque card identifier (GitHub Project v2: the issue number `42`; Linear: `eng-42`; Jira: `proj-42`). The slugifier (`bsp_slugify` in `scripts/lib/common.sh`) lowercases and reduces to alphanumeric + hyphens.
 - `<title-slug>` is the card title slugified by the same rules: lowercase, alphanumeric + hyphens, max 40 characters.
 
-Examples (v0.5.0+ canonical form):
+Examples:
 
 | Active kanban | Card key | Card title | Branch |
 |---------------|----------|------------|--------|

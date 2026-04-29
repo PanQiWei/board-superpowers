@@ -23,7 +23,7 @@ You arrive here with an action name plus a payload. Run these four steps in orde
 
 2. **Pick the action's procedure.** Look up the action name in the per-action quick reference below. The row tells you what to pass, what you get back, the action's compliance level, idempotency, and failure tier. For the full per-action breakdown — what `Form A` / `Form B` / `Form C` invocation look like and the audit hand-off sequencing — read `references/action-dispatch.md`.
 
-3. **Invoke per the loaded reference.** Open the projection reference (e.g., `references/github-project-v2.md` for the v0.5.0 GitHub Project v2 backend) and run that file's per-action procedure. Form A invocation conventions (exit-code mapping, helper preference, worktree-relative paths) are in `references/form-a-bash.md`; Form B and Form C have analogous files.
+3. **Invoke per the loaded reference.** Open the projection reference (e.g., `references/github-project-v2.md` for the GitHub Project v2 backend) and run that file's per-action procedure. Form A invocation conventions (exit-code mapping, helper preference, worktree-relative paths) are in `references/form-a-bash.md`; Form B and Form C have analogous files.
 
 4. **On failure, route per `references/failure-mode-dispatch.md`.** Match the underlying signal (Form A exit code, Form B MCP error, Form C HTTP status) to the typed failure mode, take the tier action (silent retry / log-only / audit-row / surface-immediately), and surface to the caller. Do NOT retry unconditionally — the failure-mode table tells you which modes are retryable and at what budget.
 

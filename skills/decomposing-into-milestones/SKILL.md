@@ -165,10 +165,10 @@ The batch creation is a mutating action governed by the atomic SKILLs:
 3. If A: for each card body, prepend `bsp_render_creator_trace_block` output (see
    `scripts/lib/common.sh`) before invoking `board-superpowers:operating-kanban` with the
    `create_card` protocol action — that atomic dispatch SPOT resolves the active projection
-   per `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` (with v0.4.x legacy
-   fallback to `<repo>/.board-superpowers/config.yml § board`) and routes the per-Form
-   invocation (Form A bash → `gh issue create` for the `github-project-v2` projection at
-   v0.5.0). Each create_card lands the card in `Backlog` (per protocol § create_card
+   from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` (or
+   `<repo>/.board-superpowers/config.yml § board` if absent; operating-kanban routes both)
+   and routes the per-Form invocation (Form A bash → `gh issue create` for the
+   `github-project-v2` projection). Each create_card lands the card in `Backlog` (per protocol § create_card
    post-condition `status = Backlog` — see 00-kanban-protocol.md § "Action contracts");
    decomposing then dispatches an immediate `transition_card` to `Ready` for each new card.
    Both actions are batched into the same governance dispatch (action_id 1) — classify-once,
