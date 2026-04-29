@@ -2,46 +2,21 @@
 
 Edge-case decision table that the parent `SKILL.md` § "Branch naming" points at.
 
-## Canonical form (v0.5.0+)
+## Generating a claim branch name — procedure
 
-```
-claim/<kanban-id>-<key-slug>-<title-slug>
-```
+Run these steps to produce a canonical claim branch name from a card:
 
-Three segments, joined by hyphens after the `claim/` prefix:
+1. **Read the active kanban id** from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`. For repos with one active kanban, this is typically `primary`.
+2. **Encode the card key** into the branch-path form: lowercase `Card.key`, then replace `-` with `_` (so a Linear-shaped `ENG-42` becomes `eng_42`; a GitHub-Project-shaped `42` stays `42`). The canonical key as displayed on the board keeps its hyphen form; only the branch-path encoding rewrites it.
+3. **Slugify the title**: lowercase, replace runs of non-alphanumeric with `-`, trim leading/trailing hyphens, then truncate at the last hyphen boundary inside the 64-char ceiling (40 chars is the deterministic truncation target documented in older drafts).
+4. **Compose** as `claim/<kanban-id>-<key-slug>-<title-slug>`. The slugifier (`bsp_slugify` in `scripts/lib/common.sh`) is the implementation; it enforces the per-segment caps in step 5.
+5. **Validate length budgets** (caller MUST enforce):
+   - `<kanban-id>`: ≤ 32 chars (lowercase, alphanumeric, `_` only — NO hyphens).
+   - `<key-slug>`: ≤ 64 chars (after underscore-encoding).
+   - `<title-slug>`: ≤ 64 chars at the last hyphen boundary.
+   - Total branch path under `claim/`: ≤ 200 chars.
 
-- `<kanban-id>` — local id of the active kanban this card belongs to (read from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`). For repos with one active kanban, the id is typically `primary`.
-- `<key-slug>` — branch-path encoding of the canonical `Card.key`: lowercase the key, then rewrite `-` to `_` (so a Linear-shaped `ENG-42` becomes `eng_42`; a GitHub-Project-shaped `42` stays `42`). The canonical `Card.key` displayed on the board keeps its hyphen form; only the branch-path encoding rewrites. See "Slugify rules" below.
-- `<title-slug>` — `slugify(Card.title)`, truncated to ≤64 characters at the last hyphen boundary (40 chars is the deterministic truncation target documented in older drafts; 64 is the hard ceiling).
-
-## Length budgets
-
-Per-segment caps keep branch refnames inside git's 255-char ref limit AND under typical filesystem path budgets (most filesystems target ≤ 255 chars per path component, and worktrees nest the branch under `<base>/<repo>/<branch>`):
-
-- `<kanban-id>`: ≤ 32 chars (lowercase, alphanumeric, `_` only — NO hyphens; see "Slugify rules" below).
-- `<key-slug>`: ≤ 64 chars (after underscore-encoding of canonical `Card.key` hyphens).
-- `<title-slug>`: ≤ 64 chars at the last hyphen boundary (the 40-char target documented in older drafts is the deterministic truncation point; the 64-char ceiling is the hard upper bound for unusual cases).
-- Total branch path under `claim/`: ≤ 200 chars (well under git's 255-char refname max + most filesystems' path component limits).
-
-Slugifier callers MUST enforce these budgets at slug-generation time. Multi-kanban registration (v0.5.x+) will validate the kanban-id segment in `bootstrapping-repo` at the point of adding a new kanban entry. The v0.5.0 carve-out limits each repo to a single kanban entry, so the kanban-id length and disambiguation invariants are trivially satisfied for v0.5.0 repos. The slugifier (`bsp_slugify`) enforces key-slug and title-slug caps in all cases.
-
-## Slugify rules
-
-The branch-path encoding `claim/<kanban-id>-<key-slug>-<title-slug>` requires unambiguous segment boundaries. Since `-` is also the segment delimiter, hyphens inside the slug-able strings would collide with the delimiter. Slugify rules:
-
-- **kanban-id**: lowercase alphanumeric + `_` only (NO hyphens). Hyphens in the configured kanban-id are not permitted; this is enforced at registration time per the disambiguation invariants below.
-- **key-slug**: lowercase the canonical `Card.key`, then replace `-` with `_`. The canonical key as displayed on the board (e.g., `ENG-42`, `PROJ-123`) keeps its hyphen form; only the branch-path encoding rewrites it. Example: `Card.key = ENG-42` → branch segment `eng_42`.
-- **title-slug**: lowercase, replace runs of non-alphanumeric with `-`, trim to length budget at the last hyphen boundary.
-
-Reverse parse from a branch name to `(kanban-id, Card.key, title-fragment)`: split on `-`; the first prefix matching a registered kanban-id consumes that span; the next span up to the title-slug boundary is the underscore-encoded key-slug — apply `_` → `-` to recover the canonical key.
-
-The slugifier (`bsp_slugify` in `scripts/lib/common.sh`) is the implementation; banned characters across all three segments (replaced with hyphens, runs collapsed): spaces, `/`, `:`, `?`, `[`, `]`, `^`, `~`, `\`, `*`, control characters. Leading and trailing hyphens are trimmed.
-
-## Disambiguation invariants
-
-**Disambiguation invariant**: A registered kanban-id MUST NOT be a prefix of any other registered kanban-id. This is required for the branch parser to unambiguously split `claim/<kanban-id>-<key-slug>-<title-slug>` — without this rule, a branch like `claim/foo-42-bar` cannot be decomposed cleanly when both `foo` and `foo_42` are registered as kanban-ids. Multi-kanban registration (v0.5.x+) will validate this invariant in `bootstrapping-repo` at the point of adding a new kanban entry to `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`. The v0.5.0 carve-out limits each repo to a single kanban entry, so the invariant is trivially satisfied.
-
-The parser otherwise depends on the kanban-id allowlist from `settings.yml` to disambiguate: because `-` is permitted inside `<title-slug>` (and `_` is the encoded form of hyphens inside `<key-slug>`), the parser scans the kanban-id segment using the allowlist (longest-match) before delegating the remainder to the key-slug + title-slug split.
+The single-kanban carve-out simplifies step 1 (kanban-id is whatever the repo registered as its sole entry) and step 5's invariants (no cross-kanban prefix collision possible).
 
 ## Slug edge cases (title-slug)
 
@@ -55,10 +30,6 @@ The examples below all use kanban-id `primary` and `Card.key = 42` for concreten
 | > 100 chars | First 40 chars then truncate at last hyphen | (varies; deterministic) |
 | Leading / trailing hyphens after slug | Trimmed | (clean) |
 | Title contains `claim/` | `claim/` stripped | `claim/primary-42-...` (no nested) |
-
-## Why title-slug truncation at 40 chars (typical) / 64 chars (ceiling)
-
-GitHub branch names work up to 250 chars but get awkward in `git branch` listings beyond ~50. The 40-char deterministic-truncation target on title-slug, plus the `claim/` prefix, kanban-id, key-slug, and joining hyphens, leaves room for additions if needed. The 64-char ceiling (per Length budgets above) is the hard upper bound for unusual cases where the 40-char truncation would land mid-word.
 
 ## Examples by backend
 
@@ -89,32 +60,56 @@ If a card's title materially changes mid-implementation (which is itself a smell
 
 1. Push the new branch name
 2. Delete the old branch on origin
-3. Audit-log both actions explicitly (R-class — must ask architect)
+3. Audit-log both actions explicitly (Reserved-class — must ask architect)
 
 Better outcome: split the card into two and finish the original under its original name.
 
-## v0.4.x legacy form — historical callout (parser-accepted, never emitted under v0.5.0+)
+## Background — parser contract
 
-> **Read this block as historical context only.** Branches authored before v0.5.0 use the older two-segment form. The claim-branch parser MUST accept both forms during the transition window; the slugifier MUST emit only the canonical three-segment form for any new claim authored under v0.5.0+.
+This block is reference material consulted when implementing or maintaining the slugifier and reverse-parser. Day-to-day branch generation does NOT need to read it.
 
-The legacy form was:
+### Slugify rules
+
+The branch-path encoding `claim/<kanban-id>-<key-slug>-<title-slug>` requires unambiguous segment boundaries. Since `-` is also the segment delimiter, hyphens inside the slug-able strings would collide with the delimiter. Slugify rules:
+
+- **kanban-id**: lowercase alphanumeric + `_` only (NO hyphens). Hyphens in the configured kanban-id are not permitted; this is enforced at registration time per the disambiguation invariants below.
+- **key-slug**: lowercase the canonical `Card.key`, then replace `-` with `_`. The canonical key as displayed on the board (e.g., `ENG-42`, `PROJ-123`) keeps its hyphen form; only the branch-path encoding rewrites it. Example: `Card.key = ENG-42` → branch segment `eng_42`.
+- **title-slug**: lowercase, replace runs of non-alphanumeric with `-`, trim to length budget at the last hyphen boundary.
+
+Reverse parse from a branch name to `(kanban-id, Card.key, title-fragment)`: split on `-`; the first prefix matching a registered kanban-id consumes that span; the next span up to the title-slug boundary is the underscore-encoded key-slug — apply `_` → `-` to recover the canonical key.
+
+The slugifier (`bsp_slugify` in `scripts/lib/common.sh`) is the implementation; banned characters across all three segments (replaced with hyphens, runs collapsed): spaces, `/`, `:`, `?`, `[`, `]`, `^`, `~`, `\`, `*`, control characters. Leading and trailing hyphens are trimmed.
+
+### Disambiguation invariants
+
+A registered kanban-id MUST NOT be a prefix of any other registered kanban-id. Without this rule, a branch like `claim/foo-42-bar` cannot be decomposed cleanly when both `foo` and `foo_42` are registered as kanban-ids. Multi-kanban registration validates this invariant in `bootstrapping-repo` at the point of adding a new kanban entry to `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`. Single-kanban repos satisfy the invariant trivially.
+
+The parser otherwise depends on the kanban-id allowlist from `settings.yml` to disambiguate: because `-` is permitted inside `<title-slug>` (and `_` is the encoded form of hyphens inside `<key-slug>`), the parser scans the kanban-id segment using the allowlist (longest-match) before delegating the remainder to the key-slug + title-slug split.
+
+### Length budgets — rationale
+
+Per-segment caps keep branch refnames inside git's 255-char ref limit AND under typical filesystem path budgets (most filesystems target ≤ 255 chars per path component, and worktrees nest the branch under `<base>/<repo>/<branch>`). The 40-char title-slug truncation target keeps `git branch` listings legible; the 64-char ceiling is the hard upper bound for unusual cases where the 40-char truncation would land mid-word.
+
+### Legacy two-segment form — parser-accepted, never emitted
+
+Some repos carry claim branches authored under earlier plugin versions in a two-segment form:
 
 ```
-v0.4.x legacy:  claim/<N>-<slug>
-                where:
-                - <N> is the GitHub issue number (no `#` prefix)
-                - <slug> is the card title slugified to lowercase
-                  alphanumeric + hyphens, max 40 characters
-                e.g., claim/42-fix-bug
+legacy:  claim/<N>-<slug>
+         where:
+         - <N> is the GitHub issue number (no `#` prefix)
+         - <slug> is the card title slugified to lowercase
+           alphanumeric + hyphens, max 40 characters
+         e.g., claim/42-fix-bug
 ```
 
 Implications of the legacy form:
 
-- The kanban-id segment is absent — legacy branches do not encode which kanban they belong to. Repos that authored these branches were single-kanban by construction (multi-kanban runtime is a v0.5.0+ feature). Migration registers each legacy branch against its owning kanban via `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.legacy_claims`; the parser uses that registry to resolve a legacy branch back to its `(kanban-id, Card.key)` composite identity.
-- The `<N>` token IS the GitHub issue number — implicitly GitHub-Project-shaped. Under v0.5.0+ this is generalized: the same `42` is now `<key-slug>` of `Card.key = 42`, which slugifies to `42` (so the visible characters are unchanged for GitHub-Project repos; the meaning is the abstraction).
+- The kanban-id segment is absent — legacy branches do not encode which kanban they belong to. Repos that authored these branches were single-kanban by construction. The plugin registers each legacy branch against its owning kanban via `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.legacy_claims`; the parser uses that registry to resolve a legacy branch back to its `(kanban-id, Card.key)` composite identity.
+- The `<N>` token IS the GitHub issue number — implicitly GitHub-Project-shaped. Under the canonical three-segment form, the same `42` is now the `<key-slug>` of `Card.key = 42`, which slugifies to `42` (so the visible characters are unchanged for GitHub-Project repos; the meaning is the abstraction).
 
 Operational rules:
 
 - Legacy branches that already exist on origin remain valid and are NOT physically renamed.
-- New claims authored under v0.5.0+ MUST use the canonical three-segment form, even on a repo where all prior claims used the legacy form.
+- New claims MUST use the canonical three-segment form, even on a repo where all prior claims used the legacy form.
 - The parser distinguishes the two forms by segment count after `claim/` (two segments → legacy; three segments → canonical) plus a kanban-id allowlist read from `settings.yml`.

@@ -2,6 +2,21 @@
 
 Corner cases that the parent `SKILL.md` § "WIP counting" points at.
 
+## Computing WIP for a Consumer — step by step
+
+To decide whether a Consumer may claim a new card, run these steps:
+
+1. **Read the Consumer's identity** — typically the `gh auth status` login of the session running the claim.
+2. **Count active cards** belonging to that Consumer using the formula:
+   - Cards with status `In Progress` whose claim branch was pushed by the Consumer.
+   - Cards with status `In Progress` AND label `suspended`, claimed by the Consumer.
+   - Cards with status `In Review` whose PR was authored by the Consumer and is still open.
+   - **Exclude** any card with status `Blocked` — being blocked is not active work.
+3. **Read the cap** from `<repo>/.board-superpowers/settings.yml § modules.m5_repo_configuration.wip_limit` (default: 5). The architect overrides this per-repo by editing `config.local.yml`, which is gitignored so each architect's preference does not bind teammates.
+4. **Reject the claim** if `WIP_count + 1 > cap`. Surface the count and cap to the architect; do NOT silently bypass.
+
+A card belongs to a Consumer if they pushed the card's claim branch (per the parent SKILL § Branch naming).
+
 ## The formula in detail
 
 ```
@@ -11,17 +26,15 @@ WIP_count(consumer) =
   + |{cards | status == "In Review" AND PR.author == self AND PR.state == "open"}|
 ```
 
-A card belongs to a Consumer if they pushed the card's claim branch (per the parent SKILL § Branch naming).
+## If the repo has multiple kanbans
 
-## Multi-kanban WIP semantics
-
-When multiple kanbans are registered (the registry shape is `modules.m10_kanban.kanbans: [{ id, projection, project_ref, role, wip_limit_local? }, ...]` in `<repo>/.board-superpowers/settings.yml`), the WIP formula `In Progress + suspended + In Review` is governed by two caps that BOTH must hold for any transition that would increment WIP:
+When a repo registers multiple kanbans (via `modules.m10_kanban.kanbans: [{ id, projection, project_ref, role, wip_limit_local? }, ...]` in `<repo>/.board-superpowers/settings.yml`), the WIP formula is governed by two caps that BOTH must hold for any transition that would increment WIP:
 
 - **Primary cap — per-actor cross-kanban total.** Default WIP cap is per-actor and **summed across all kanbans the actor has work in** — architect attention is a single budget that does not partition across kanbans. A Consumer holding 3 cards in `primary` and 2 cards in `legal` has WIP=5, not WIP=3 + WIP=2 separately. The cap is the global `modules.m5_repo_configuration.wip_limit` in `<repo>/.board-superpowers/settings.yml`.
 - **Additional cap (optional) — per-kanban local.** Each kanban entry may set `modules.m10_kanban.kanbans[].wip_limit_local: N` as an additional per-kanban cap. The kanban-local count must not exceed this AND the global cap. The local cap is enforced only when set; absence means only the primary cap applies for that kanban.
 - **Both hold conjunctively.** A new claim transitions only when (cross-kanban total + 1 ≤ global `wip_limit`) AND (kanban-local count + 1 ≤ that kanban's `wip_limit_local`, if set).
 
-The v1.0 carve-out of length=1 makes the per-kanban cap trivially equal to the global cap (the kanban's local count IS the cross-kanban total), so single-kanban repos see no behavioral difference from v0.4.x.
+Single-kanban repos see no behavioral difference — the kanban-local count IS the cross-kanban total, so the per-kanban cap becomes trivially equal to the global cap.
 
 ## Edge cases
 
