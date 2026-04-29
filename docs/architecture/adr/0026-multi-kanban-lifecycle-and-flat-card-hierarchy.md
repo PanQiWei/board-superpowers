@@ -1,4 +1,4 @@
-# ADR 0013: Multi-kanban support + lifecycle states + flat-Card hierarchy stance
+# ADR 0026: Multi-kanban support + lifecycle states + flat-Card hierarchy stance
 
 **Status:** accepted
 **Date:** 2026-04-29
