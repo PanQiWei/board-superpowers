@@ -2,19 +2,6 @@
 
 Concrete examples per card type. Parent `SKILL.md` shows the canonical templates; this file shows how they bend for different shapes of work.
 
-## Per-kanban WIP-limit callout
-
-If this card's claim crossed the per-kanban `wip_limit` (e.g., the `wip_limit: 2` cap on the `default` kanban from `<repo>/.board-superpowers/settings.yml § modules.m5_wip.kanbans.<kanban-id>.wip_limit`), note that under `## Automated Verification` for Manager review-queue visibility:
-
-```markdown
-## Automated Verification
-
-- [x] WIP cap crossed: `default` kanban (`wip_limit: 2`) at 2/2 with this claim — flagged for review-queue visibility.
-- [...other verification rows...]
-```
-
-If the claim did NOT cross a `wip_limit` boundary, omit the line.
-
 ## Pure docs change
 
 ```markdown
@@ -48,6 +35,14 @@ If the claim did NOT cross a `wip_limit` boundary, omit the line.
 
 - The skill's `description` had to be made significantly more "pushy" than initial draft to avoid undertriggering — the empirical pattern in `SKILL_DEVELOPMENT.md` § "description = WHEN, not WHAT" was load-bearing.
 ```
+
+When this card's claim crossed a per-kanban WIP-limit boundary, add an extra bullet to the `## Automated Verification` block above (regardless of card type) for Manager review-queue visibility:
+
+```markdown
+- [x] WIP cap crossed: `default` kanban (effective `wip_limit: 2`) at 2/2 with this claim — flagged for review-queue visibility.
+```
+
+The effective per-kanban limit is `modules.m10_kanban.kanbans[<kanban-id>].wip_limit_local` if set, else the global `modules.m5_repo_configuration.wip_limit` (per-kanban override `m10_kanban.kanbans[].wip_limit_local` if set, else global `m5_repo_configuration.wip_limit`); both fields live in `<repo>/.board-superpowers/settings.yml`. If the claim did NOT cross a `wip_limit` boundary, omit the line.
 
 ## Bug fix in a script
 

@@ -282,12 +282,11 @@ Where:
 - `<kanban-id>` = the registered local id of the active kanban
   (read from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`;
   for repos with one active kanban, the id is typically `primary`).
-- `<key-slug>` = `slugify(Card.key)`
-  - Lowercase, alphanumeric + hyphens.
+- `<key-slug>` = branch-path encoding of canonical `Card.key`: lowercase, then rewrite `-` to `_` (the segment delimiter is `-`, so hyphens inside `Card.key` would collide and are encoded as `_`; the canonical key on the board keeps its hyphen form).
   - GitHub: `42` → `42`.
-  - Linear: `ENG-42` → `eng-42`.
-  - Jira: `PROJ-42` → `proj-42`.
-- `<title-slug>` = `slugify(Card.title)` truncated to ≤40 chars.
+  - Linear: `ENG-42` → `eng_42`.
+  - Jira: `PROJ-42` → `proj_42`.
+- `<title-slug>` = `slugify(Card.title)` truncated to ≤64 chars at the last hyphen boundary (the 40-char target is the deterministic truncation point; 64 is the hard ceiling).
 
 The full slugifier rules, kanban-id allowlist disambiguation,
 and per-segment length budgets live in
@@ -884,6 +883,19 @@ Field semantics:
   `C` (REST/GraphQL); per § "Implementation surface (backend
   projections)" below. The bootstrap stage executor reads this to
   dispatch correctly.
+
+Note: the `applicable_when` field name appears in two roles in
+the spec. Here in the projection-side capability registry it
+carries the `backend:` discriminator (this capability is exposed
+by these projections). In the setup-stages registry (per
+[`../adr/0027-m3-dispatch-via-kanban-protocol-projection.md`](../adr/0027-m3-dispatch-via-kanban-protocol-projection.md)
+§ 4), the same field name carries
+`kanban_projection_capability:` (this stage runs only when the
+active projection exposes this capability). The two roles
+compose: stage-side
+`applicable_when: { kanban_projection_capability: <id> }` is
+satisfied iff the active projection's registry includes a
+capability whose `id` matches `<id>`.
 
 A future Linear projection's `claim_card` capability would look
 like (illustrative; lands when Linear projection ships):

@@ -157,7 +157,7 @@ it does four things:
    a local jsonl trace and the entry's `mode` field records the
    degradation cause (see spec 06 § "jsonl fallback mode-field").
 
-### Skills system — the v1 catalog (10 skills, 3 layers)
+### Skills system — the v1 catalog (11 skills, 3 layers)
 
 The `skills/` directory **is** the agent's action system. It is
 designed as a graph of nodes (skills) and edges (cross-skill
@@ -179,13 +179,15 @@ Molecular layer (5) — business workflows, state-machine-shaped
   bootstrapping-repo          F-B1 + F-B2 (first-time setup)
   migrating-repo-version      F-B3 + F-B4 (upgrade migration)
 
-Atomic layer (4) — single-purpose primitives, reflexive (no upward calls)
+Atomic layer (5) — single-purpose primitives, reflexive (no upward calls)
 ─────────────────────────────────────────────────────────────────
   board-canon                 state machine + Card schema + branch
                               naming + WIP rules (read-only contract)
   enforcing-pr-contract       PR three-section injection + validation
   classifying-actions         D-AUTONOMY-1 matrix + triage + overrides
   auditing-actions            audit log schema + two-entry rule + BYO DB
+  operating-kanban            8-action protocol dispatch over the active
+                              projection (backend selection + Form A/B/C)
 ```
 
 Dependency direction is **strictly downward**: Entry → Molecular
@@ -214,8 +216,8 @@ REASON: First time using board-superpowers on this (host, repo)
 
 ```
 INVOKE: migrating-repo-version
-REASON: Plugin version v0.3.0 detected; state.yml records
-        last_seen_version_in_repo=v0.2.0.
+REASON: Plugin version v0.5.0 detected; state.yml records
+        last_seen_version_in_repo=v0.4.x.
 ```
 
 The marker fast-paths the entry skill's routing decision. The
@@ -517,7 +519,7 @@ cross-cutting checks that span multiple subdirectories.
 <!-- board-superpowers:routing -->
 ## board-superpowers session routing
 
-This project uses the `board-superpowers` plugin (v0.3.0).
+This project uses the `board-superpowers` plugin (v0.5.0).
 Any Claude Code session in this project plays one of two roles:
 
 - **Board Consumer** — if the first message contains `[board-card:#N]`,

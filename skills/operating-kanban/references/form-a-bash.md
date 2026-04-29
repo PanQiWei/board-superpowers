@@ -46,8 +46,8 @@ This skill maps the exit code to a typed return shape; the caller's own retry/es
 
 `scripts/lib/common.sh` exposes a `bsp_*` helper family that the projection reference file SHOULD prefer over raw CLI invocations:
 
-- `bsp_gh_field_id <project-id> <field-name>` — resolves a Status / Type / Size field's GraphQL node ID. Cached per session; avoids repeat GraphQL roundtrips.
-- `bsp_gh_field_option_id <project-id> <field-name> <option-label>` — resolves a single-select field option's ID. Cached.
+- `bsp_gh_field_id <owner> <project-num> <field-name>` — resolves a Status / Type / Size field's GraphQL node ID. Cached per session; avoids repeat GraphQL roundtrips.
+- `bsp_gh_field_option_id <owner> <project-num> <field-name> <option>` — resolves a single-select field option's ID. Cached.
 
 For data the helpers do not yet cover, fall back to the underlying `gh` invocation parsed with `python3 -c 'import json,sys; ...'`:
 
