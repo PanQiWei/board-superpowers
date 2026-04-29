@@ -265,7 +265,8 @@ means for board-superpowers" #3 for the full rationale.
   reframes explicitly labeled "original framing" per memory
   `feedback_research_canonical_practice_first`.
 - **Composes (atomic)**: `board-canon` (terminal Card body schema
-  authority), `classifying-actions`, `auditing-actions`.
+  authority), `operating-kanban` (`create_card` + `transition_card`
+  protocol action dispatch), `classifying-actions`, `auditing-actions`.
 - **Composes (cross-plugin)**: see § "Cross-plugin edges" below.
 - **Tier 2 frontmatter**: `when_to_use` (extended trigger
   vocabulary covering "decompose / 拆 / split / break this into
