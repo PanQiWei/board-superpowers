@@ -88,8 +88,9 @@ Omit if no such notes apply.
 | [0019](./0019-zero-config-sqlite-default-audit-backend.md) | Zero-config SQLite as default per-repo audit backend (extends ADR-0009) | proposed |
 | [0020](./0020-stage-applicability-and-not-applicable-state.md) | Stage applicability — `applicable_when` predicate + `not-applicable` 5th lifecycle state | proposed |
 | [0021](./0021-settings-modular-layering.md) | Settings modular layering — two-section split + per-module `schema_version` | proposed |
-| [0022](./0022-boardadapter-capability-dispatch.md) | BoardAdapter capability dispatch + M10 BoardAdapter-selection module | proposed |
+| [0022](./0022-boardadapter-capability-dispatch.md) | BoardAdapter capability dispatch + M10 BoardAdapter-selection module | proposed; § M3 superseded by ADR-0027; § M10 stage canonical name renamed by ADR-0027 |
 | [0023](./0023-architect-ux-and-config-item-protocol.md) | Architect UX — sequential per-stage flow + 5-element config item protocol | proposed |
-| [0024](./0024-settings-rename-and-config-item-stages.md) | settings.yml rename + new config-item stages (`m5.repo.set-wip-limit`, `m10.repo.choose-kanban-backend`) | proposed |
+| [0024](./0024-settings-rename-and-config-item-stages.md) | settings.yml rename + new config-item stages (`m5.repo.set-wip-limit`, `m10.repo.choose-kanban-backend`) | proposed; § Part B M10 stage canonical name renamed by ADR-0027 (`m10.repo.choose-kanban-backend` → `m10.repo.choose-kanban-projection`) |
 | [0025](./0025-kanban-protocol-as-top-contract.md) | Kanban Protocol as top-level contract; ADR-0005 rescoped to v1 GitHubProjectAdapter projection | accepted |
 | [0026](./0026-multi-kanban-lifecycle-and-flat-card-hierarchy.md) | Multi-kanban support + lifecycle states + flat-Card hierarchy stance | accepted |
+| [0027](./0027-m3-dispatch-via-kanban-protocol-projection.md) | M3 capability dispatch via Kanban Protocol projection (supersedes ADR-0022 § M3; renames ADR-0024 § Part B's M10 stage canonical name) | accepted |

@@ -199,6 +199,13 @@ a daemon by another name and violate ADR-0007 C-PLUGIN-2.
   GitHubProjectAdapter projection"; introduces backend
   projection forms (Form A bash CLI / Form B plugin-shipped MCP
   server / Form C REST/GraphQL).
+- **ADR-0027** — M3 capability dispatch via Kanban Protocol
+  projection (supersedes ADR-0022 § M3). M3 stages route
+  setup-capability checks through `operating-kanban`'s
+  per-projection reference files rather than ADR-0005-style
+  BoardAdapter SDK methods; M10 stage canonical name renamed
+  to `m10.repo.choose-kanban-projection`. Lands paired with
+  the operating-kanban SKILL (v0.5.0).
 - **ADR-0002** — Atomic claim via remote branch push → forces
   `claim-card.sh` into the script slot (atomicity needs exit codes).
 - **ADR-0003** — One worktree per Consumer → bundled into
