@@ -155,7 +155,7 @@ means for board-superpowers" #3 for the full rationale.
 #### `using-board-superpowers` (v1-minimum)
 
 - **Role**: Manual page + first-touch router. Loaded every
-  session; provides full plugin orientation inline (10-skill
+  session; provides full plugin orientation inline (11-skill
   catalog, 6-state Card lifecycle, 5 bounded contexts,
   on-disk state, routing tree) AND routes ambiguous sessions
   or hook-injected `INVOKE:` markers to the right molecular
@@ -164,7 +164,7 @@ means for board-superpowers" #3 for the full rationale.
 - **Body target**: Entry-layer 200-line baseline intentionally
   exceeded (currently ~225 lines) to support the manual-page
   double duty — agents in community consumer projects must
-  one-shot-ingest the routing context (10-skill catalog,
+  one-shot-ingest the routing context (11-skill catalog,
   6-state lifecycle, 5 bounded contexts, on-disk state,
   routing tree), so progressive disclosure cannot replace
   inline content here. Keep additions justified by the same
@@ -395,10 +395,9 @@ means for board-superpowers" #3 for the full rationale.
   registry that M3 stage predicates (per ADR-0027) consume.
 - **Body target**: 200-300 lines (atomic budget).
 - **References folder**:
-  `references/{action-dispatch,backend-selection,form-a-bash,form-b-mcp,form-c-rest,failure-mode-dispatch}.md`
-  + per-projection reference file (`github-project-v2.md` lands
-  alongside; future `linear.md` / `jira.md` ship with their
-  projections).
+  `references/{action-dispatch,backend-selection,form-a-bash,form-b-mcp,form-c-rest,failure-mode-dispatch,github-project-v2}.md`
+  + future per-projection reference files (`linear.md` /
+  `jira.md` ship with their projections).
 - **Called by**: every molecular skill that touches the board
   (`managing-board`, `consuming-card`, `decomposing-into-milestones`,
   and once the v0.5.0 `bootstrapping-repo` rebase per #67 lands —

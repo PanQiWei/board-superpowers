@@ -25,8 +25,9 @@ These steps run for every successful card delivery (A-class).
 3. **Local cleanup** —
    ```bash
    git worktree remove \
-     "$HOME/.config/superpowers/worktrees/<repo>/claim/<N>-<slug>"
-   git branch -d claim/<N>-<slug>   # safe-delete; remote already gone
+     "$HOME/.config/superpowers/worktrees/<repo>/claim/<kanban-id>-<key-slug>-<title-slug>"
+   git branch -d claim/<kanban-id>-<key-slug>-<title-slug>   # safe-delete; remote already gone
+   # e.g., claim/default-42-refactor-cache
    ```
    If `git branch -d` refuses (unmerged commits detected),
    surface to the architect — do not force-delete.

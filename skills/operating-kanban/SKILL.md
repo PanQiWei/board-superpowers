@@ -107,5 +107,6 @@ Cross-plugin invocations (e.g., `superpowers:test-driven-development`, `gstack:/
 | `references/form-b-mcp.md` | Form B (plugin-shipped MCP server) conventions — `userConfig.sensitive` credential storage, MCP tool-call shape, response parsing. No live instance at v0.5.0; documented for the v1.x roadmap. |
 | `references/form-c-rest.md` | Form C (REST / GraphQL) conventions — auth header derivation, request shape, response parsing. No live instance at v0.5.0; documented so future authors are not forced into Form B. |
 | `references/failure-mode-dispatch.md` | The full failure-mode taxonomy + architect-visibility tier per failure + the surfacing convention each tier uses. |
+| `references/github-project-v2.md` | Live v0.5.0 projection — invocation entries for the 8 protocol actions over GitHub Project v2 (Form A bash CLI). |
 
 When a new backend projection ships, its per-projection reference file lands in this same `references/` directory under the projection's identifier (e.g., `references/github-project-v2.md`, `references/linear.md`, `references/jira.md`) — the projection's reference file declares the projection's chosen Form, the per-action invocation patterns, the custom-state folding mapping, the markdown / native body conversion, and the supported setup capabilities.

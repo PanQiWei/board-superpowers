@@ -57,7 +57,7 @@ The function returns the kanban entry plus the path to its projection reference 
 
 Per ADR-0026 § Multi-kanban semantics the unique card identity across a multi-kanban repo is the pair `(kanban_id, Card.key)` rather than `Card.key` alone. v0.5.0's length=1 carve-out means a bare `Card.key` is resolvable without ambiguity, so the protocol disambiguator below is OPTIONAL on length=1 repos:
 
-- **Length 1**: `[board-card:#42]` resolves to `(kanbans[0].id, 42)`. Bare `Card.key` references in PR bodies, commit messages, and chat are accepted.
+- **Length 1**: `[board-card:#42]` resolves to `(kanbans[0].id, "42")`. Bare `Card.key` references in PR bodies, commit messages, and chat are accepted. Note: `Card.key` is an opaque string per the protocol (00-kanban-protocol.md § Identity, github-project-v2.md: "GitHub Issue number rendered as a string"), NOT an integer — the resolver hands back the slug-decoded string regardless of backend. For non-GitHub projections (Linear, Jira), the key reference shape is `[board-card:#ENG-42]` and resolves to `(kanbans[0].id, "ENG-42")` — the resolver returns the opaque string unchanged.
 - **Length >1 (v1.x roadmap)**: `[board-card:<kanban-id>:#42]` REQUIRED. Bare `[board-card:#42]` rejected at the parsing layer; the operating-kanban dispatch surfaces "ambiguous card key — qualify with kanban-id" and refuses to act.
 
 The discriminator MUST be a stable, repo-internal alias (`primary`, `legal`, etc.) — not the projection identifier, not the project_ref. The kanban entry's `id` field is the canonical alias; renaming it requires the architect to rewrite all in-flight branches and PR-body references, which is why ADR-0026 marks the alias `repo-internal alias; unique within this repo` rather than user-facing.

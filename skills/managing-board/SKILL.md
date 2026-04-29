@@ -43,7 +43,7 @@ flowchart TD
 
 Goal: produce a one-screen briefing of the board's current state that helps the Producer decide what to do next.
 
-1. **Read the board**. This is the `read_board` protocol action — invoke `board-superpowers:operating-kanban` with action `read_board`; it resolves the active projection per `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` (with v0.4.x legacy fallback to `<repo>/.board-superpowers/config.yml § board`) and returns the board state grouped by status. The owner + project number live in `.board-superpowers/config.yml` and are resolved by the active projection's reference. Parse the JSON output.
+1. **Read the board**. This is the `read_board` protocol action — invoke `board-superpowers:operating-kanban` with action `read_board`; it resolves the active projection per `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` (with v0.4.x legacy fallback to `<repo>/.board-superpowers/config.yml § board`) and returns the board state grouped by status. The owner + project number resolve from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` (the v0.5.0 SoT; falls back to `<repo>/.board-superpowers/config.yml § board` for legacy v0.4.x repos) and are consumed by the active projection's reference. Parse the JSON output.
 
 2. **Group by Status field**. Produce a markdown summary in this format:
 

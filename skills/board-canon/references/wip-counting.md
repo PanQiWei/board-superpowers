@@ -15,9 +15,13 @@ A card belongs to a Consumer if they pushed the card's claim branch (per the par
 
 ## Multi-kanban WIP semantics
 
-When multiple kanbans are registered (per ADR-0026), the WIP formula `In Progress + suspended + In Review` is evaluated **per kanban**, not summed across kanbans. Each kanban's effective WIP limit = `modules.m10_kanban.kanbans[<kanban-id>].wip_limit_local` if set, else `modules.m5_repo_configuration.wip_limit` (the repo-wide default) — both fields live in `<repo>/.board-superpowers/settings.yml`. Cross-kanban totals are observability metrics, not gating constraints.
+When multiple kanbans are registered (per ADR-0026 § "WIP semantics" + 00-kanban-protocol.md § "WIP semantics — per-actor cross-kanban total"), the WIP formula `In Progress + suspended + In Review` is governed by two caps that BOTH must hold for any transition that would increment WIP:
 
-The v1.0 carve-out of length=1 means single-kanban repos see no behavioral difference from v0.4.x.
+- **Primary cap — per-actor cross-kanban total.** Default WIP cap is per-actor and **summed across all kanbans the actor has work in** — architect attention is a single budget that does not partition across kanbans. A Consumer holding 3 cards in `primary` and 2 cards in `legal` has WIP=5, not WIP=3 + WIP=2 separately. The cap is the global `modules.m5_repo_configuration.wip_limit` in `<repo>/.board-superpowers/settings.yml`.
+- **Additional cap (optional) — per-kanban local.** Each kanban entry may set `modules.m10_kanban.kanbans[].wip_limit_local: N` as an additional per-kanban cap. The kanban-local count must not exceed this AND the global cap. The local cap is enforced only when set; absence means only the primary cap applies for that kanban.
+- **Both hold conjunctively.** A new claim transitions only when (cross-kanban total + 1 ≤ global `wip_limit`) AND (kanban-local count + 1 ≤ that kanban's `wip_limit_local`, if set).
+
+The v1.0 carve-out of length=1 makes the per-kanban cap trivially equal to the global cap (the kanban's local count IS the cross-kanban total), so single-kanban repos see no behavioral difference from v0.4.x.
 
 ## Edge cases
 

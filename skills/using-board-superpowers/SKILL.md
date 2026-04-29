@@ -1,6 +1,6 @@
 ---
 name: using-board-superpowers
-description: Use as the FIRST skill in any board-superpowers session AND as the plugin's manual page. Read this skill (body + references/) for a complete, self-contained orientation — what the plugin is, the 10-skill catalog, the 6-state Card lifecycle, on-disk state, and dispatch routing. Routes ambiguous sessions into Producer mode (managing-board, for "what should I work on" / "review the PRs" / "intake this idea") or Consumer mode (consuming-card, for claiming card N). Skip when the message clearly matches a downstream skill directly (e.g., "[board-card:#12]" → consuming-card).
+description: Use as the FIRST skill in any board-superpowers session AND as the plugin's manual page. Read this skill (body + references/) for a complete, self-contained orientation — what the plugin is, the 11-skill catalog, the 6-state Card lifecycle, on-disk state, and dispatch routing. Routes ambiguous sessions into Producer mode (managing-board, for "what should I work on" / "review the PRs" / "intake this idea") or Consumer mode (consuming-card, for claiming card N). Skip when the message clearly matches a downstream skill directly (e.g., "[board-card:#12]" → consuming-card).
 when_to_use: Use when intent is ambiguous, when no other board-superpowers skill matched, when the user asks "what is this plugin / how does this work / what skills exist / explain the architecture", OR when the SessionStart hook injected an INVOKE marker pointing at a downstream skill.
 ---
 
@@ -63,7 +63,7 @@ Backlog ─▶ Ready ─▶ In Progress ─▶ In Review ─▶ Done
 
 Branch naming (v0.5.0 canonical): `claim/<kanban-id>-<key-slug>-<title-slug>` (e.g., `claim/default-42-refactor-cache`). `<kanban-id>` identifies the kanban; `<key-slug>` is the canonical `Card.key` with hyphens rewritten to underscores (so a Linear-shaped key `ENG-42` becomes branch segment `eng_42`); `<title-slug>` is the kebab-case shortened title.
 
-## The 10 skills, by layer
+## The 11 skills, by layer
 
 Three layers, strictly downward dependency (Entry → Molecular → Atomic). Atomic skills are reflexes — they MUST NOT call any same-plugin skill.
 

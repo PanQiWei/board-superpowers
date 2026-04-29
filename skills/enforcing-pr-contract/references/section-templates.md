@@ -36,13 +36,13 @@ Concrete examples per card type. Parent `SKILL.md` shows the canonical templates
 - The skill's `description` had to be made significantly more "pushy" than initial draft to avoid undertriggering — the empirical pattern in `SKILL_DEVELOPMENT.md` § "description = WHEN, not WHAT" was load-bearing.
 ```
 
-When this card's claim crossed a per-kanban WIP-limit boundary, add an extra bullet to the `## Automated Verification` block above (regardless of card type) for Manager review-queue visibility:
+When this card's claim crossed a WIP-limit boundary, add an extra bullet to the `## Automated Verification` block above (regardless of card type) for Manager review-queue visibility:
 
 ```markdown
-- [x] WIP cap crossed: `default` kanban (effective `wip_limit: 2`) at 2/2 with this claim — flagged for review-queue visibility.
+- [x] WIP cap crossed: cross-kanban total at 3/3 with this claim (global `wip_limit: 3`) — flagged for review-queue visibility.
 ```
 
-The effective per-kanban limit is `modules.m10_kanban.kanbans[<kanban-id>].wip_limit_local` if set, else the global `modules.m5_repo_configuration.wip_limit` (per-kanban override `m10_kanban.kanbans[].wip_limit_local` if set, else global `m5_repo_configuration.wip_limit`); both fields live in `<repo>/.board-superpowers/settings.yml`. If the claim did NOT cross a `wip_limit` boundary, omit the line.
+Per `board-canon` § "Multi-kanban WIP semantics" the primary cap is the per-actor **cross-kanban total** against the global `modules.m5_repo_configuration.wip_limit` in `<repo>/.board-superpowers/settings.yml`. The optional per-kanban `modules.m10_kanban.kanbans[].wip_limit_local` is an additional cap that, when set, must also hold for the originating kanban — emit a second bullet naming the kanban and its local cap when that local cap is the binding constraint. If the claim did NOT cross either cap, omit the line.
 
 ## Bug fix in a script
 

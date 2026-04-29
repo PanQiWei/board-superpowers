@@ -45,14 +45,16 @@ The parser otherwise depends on the kanban-id allowlist from `settings.yml` to d
 
 ## Slug edge cases (title-slug)
 
-| Title | Title-slug | Branch (kanban-id `primary`, key `N`) |
-|-------|------------|----------------------------------------|
-| Empty title | `card-N` | `claim/primary-N-card-N` |
-| All special chars: `!@#$%` | `card-N` | `claim/primary-N-card-N` |
-| Mixed Chinese + English: `修复 WIP counter bug` | `wip-counter-bug` (Chinese stripped by `tr`) | `claim/primary-N-wip-counter-bug` |
+The examples below all use kanban-id `primary` and `Card.key = 42` for concreteness; the same rules apply for any `(kanban-id, key)` pair.
+
+| Title | Title-slug | Branch (kanban-id `primary`, key `42`) |
+|-------|------------|-----------------------------------------|
+| Empty title | `card-42` | `claim/primary-42-card-42` |
+| All special chars: `!@#$%` | `card-42` | `claim/primary-42-card-42` |
+| Mixed Chinese + English: `修复 WIP counter bug` | `wip-counter-bug` (Chinese stripped by `tr`) | `claim/primary-42-wip-counter-bug` |
 | > 100 chars | First 40 chars then truncate at last hyphen | (varies; deterministic) |
 | Leading / trailing hyphens after slug | Trimmed | (clean) |
-| Title contains `claim/` | `claim/` stripped | `claim/primary-N-...` (no nested) |
+| Title contains `claim/` | `claim/` stripped | `claim/primary-42-...` (no nested) |
 
 ## Why title-slug truncation at 40 chars (typical) / 64 chars (ceiling)
 

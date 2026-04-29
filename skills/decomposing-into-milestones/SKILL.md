@@ -168,11 +168,11 @@ The batch creation is a mutating action governed by the atomic SKILLs:
    per `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` (with v0.4.x legacy
    fallback to `<repo>/.board-superpowers/config.yml § board`) and routes the per-Form
    invocation (Form A bash → `gh issue create` for the `github-project-v2` projection at
-   v0.5.0). Each create_card lands the card in `Backlog`, then immediately flips Status to
-   `Ready` as part of the same batch mutating action (the Backlog→Ready transition is
-   `create_card`'s immediate post-condition, not a separate `transition_card`). Governance
-   section (below) classifies the entire batch as one action_id 1 dispatch. Prepend pattern
-   (Form A example, current projection):
+   v0.5.0). Each create_card lands the card in `Backlog` (per protocol § create_card
+   post-condition `status = Backlog` — see 00-kanban-protocol.md § "Action contracts");
+   decomposing then dispatches an immediate `transition_card` to `Ready` for each new card.
+   Both actions are batched into the same governance dispatch (action_id 1) — classify-once,
+   audit-once for the entire batch. Prepend pattern (Form A example, current projection):
    ```bash
    creator_trace="$(bsp_render_creator_trace_block)"
    body="${creator_trace}

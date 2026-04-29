@@ -18,7 +18,7 @@
     {
       "id": 3,
       "prompt": "Claim card #100 so I can start working on it.",
-      "expected_output": "Agent invokes the claim_card protocol action through operating-kanban. The active projection's reference file specifies the four-step transaction (Status flip Ready → In Progress + worktree create + branch create + branch push) with first-push-wins semantics. Output includes the claim branch name (claim/100-<slug> per board-canon branch-naming) and the worktree path. Composite key (kanban_id, Card.key) is used for cross-kanban identity.",
+      "expected_output": "Agent invokes the claim_card protocol action through operating-kanban. The active projection's reference file specifies the four-step transaction (Status flip Ready → In Progress + worktree create + branch create + branch push) with first-push-wins semantics. Output includes the claim branch name in v0.5.0 canonical three-segment form `claim/<kanban-id>-<key-slug>-<title-slug>` (e.g., `claim/primary-100-<slug>` under the v1.0 length=1 carve-out, where `primary` is the default kanban id) per board-canon branch-naming, and the worktree path. Composite key (kanban_id, Card.key) is used for cross-kanban identity.",
       "files": []
     }
   ]

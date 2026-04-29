@@ -93,12 +93,13 @@ bash scripts/claim-card.sh \
   --repo <repo> --card <N> --title "<title>"
 ```
 
-The owner + project number live in the repo's `.board-superpowers/config.yml`. The script performs the four-step transaction described in `board-superpowers:board-canon` § "Claim protocol"; the embedded Status flip from `Ready` to `In Progress` is itself a `transition_card` protocol action realized inside the claim transaction. Any failure leaves a partial state — read the script's stderr and surface to the architect rather than silently retry.
+The owner + project number resolve from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` (the v0.5.0 SoT; falls back to `<repo>/.board-superpowers/config.yml § board` for legacy v0.4.x repos). The script performs the four-step transaction described in `board-superpowers:board-canon` § "Claim protocol"; the embedded Status flip from `Ready` to `In Progress` is itself a `transition_card` protocol action realized inside the claim transaction. Any failure leaves a partial state — read the script's stderr and surface to the architect rather than silently retry.
 
 ## Step 4 — enter the worktree
 
 ```bash
-cd "$HOME/.config/superpowers/worktrees/<repo>/claim/<N>-<slug>"
+cd "$HOME/.config/superpowers/worktrees/<repo>/claim/<kanban-id>-<key-slug>-<title-slug>"
+# e.g., claim/default-42-refactor-cache
 ```
 
 The worktree is your isolated work surface. Do NOT `cd` back to the repo root for any work — the repo root may be shared with other sessions and stays on `main` per the project's working-tree discipline. Override the worktree base path via `BOARD_SP_WORKTREE_DIR` if needed.
@@ -237,8 +238,9 @@ Once the PR is merged the Consumer's responsibility is a four-part close-out (ac
 3. **Local cleanup** —
    ```bash
    cd ~/Dev/repos/<repo>           # back to repo root (on main)
-   git worktree remove "$HOME/.config/superpowers/worktrees/<repo>/claim/<N>-<slug>"
-   git branch -d claim/<N>-<slug>  # local cleanup; remote was already deleted by the merge
+   git worktree remove "$HOME/.config/superpowers/worktrees/<repo>/claim/<kanban-id>-<key-slug>-<title-slug>"
+   git branch -d claim/<kanban-id>-<key-slug>-<title-slug>  # local cleanup; remote was already deleted by the merge
+   # e.g., claim/default-42-refactor-cache
    ```
 4. **Audit row** — invoke `board-superpowers:auditing-actions` with action_id 113; payload includes `{card_number, pr_number, merged_at, worktree_removed: true, branch_deleted: true}`.
 
