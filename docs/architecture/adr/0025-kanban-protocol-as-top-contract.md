@@ -172,8 +172,11 @@ naming.
   abstracted form. Existing GitHub claim branches (e.g.,
   `claim/42-fix-bug`) remain valid; the patch generalizes the
   rule, does not retroactively rename anything.
-- **`<repo>/.board-superpowers/config.yml` schema gains a
-  `kanban:` block** at v0.5.0. Schema change documented in
+- **`<repo>/.board-superpowers/settings.yml` schema gains a
+  `modules.m10_kanban` block** at v0.5.0 (per main's ADR-0021
+  modular layering + ADR-0024 settings rename + M10
+  BoardAdapter-selection config-item stage). Schema change
+  documented in
   [`0005-contracts/03-config-schemas.md`](../0005-contracts/03-config-schemas.md).
   Existing v0.4.x repos require migration on next bootstrap
   re-run; the `migrating-repo-version` skill (deferred to

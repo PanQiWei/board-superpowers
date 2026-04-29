@@ -49,7 +49,7 @@ A kanban entity (NOT a card) traverses 5 states:
 
 ```
               ┌───────────┐
-              │   Bound   │  config.yml entry exists; schema validated
+              │   Bound   │  settings.yml entry exists; schema validated
               └─────┬─────┘
                     │ activate (R)
                     ▼
@@ -75,9 +75,9 @@ A kanban entity (NOT a card) traverses 5 states:
 
 **`Provisioned` is NOT a lifecycle state.** Whether the backend
 board exists is an external fact the plugin does not observe.
-The lifecycle starts at `Bound` (config.yml has an entry +
-schema validated) — `bind` is the operation that moves "no
-entry" to `Bound`.
+The lifecycle starts at `Bound` (`settings.yml` has an entry
+under `modules.m10_kanban` + schema validated) — `bind` is the
+operation that moves "no entry" to `Bound`.
 
 **All transitions are R-class** (per ADR-0006 D-AUTONOMY-1):
 `bind` / `activate` / `suspend` / `resume` / `archive` /
@@ -103,40 +103,60 @@ R-class.
 `retire` is reversible by re-bind from scratch. Audit history
 preserved across retire.
 
-### 2. Multi-kanban support — `kanbans:` plural list with v1.0 carve-out
+### 2. Multi-kanban support — `modules.m10_kanban.kanbans:` list with v1.0 carve-out
 
 #### Schema
 
-`<repo>/.board-superpowers/config.yml` `kanban:` (singular) is
-deprecated; replaced by `kanbans:` (plural list):
+The kanban registry lives under main's M10 module (per ADR-0021
+settings modular layering + ADR-0024 `m10.repo.choose-kanban-
+backend` config-item stage). `<repo>/.board-superpowers/settings.yml`
+gains a list-shaped projection at `modules.m10_kanban.kanbans`:
 
 ```yaml
-kanbans:
-  - id: primary               # repo-internal alias; unique within this repo
-    state: active             # Bound | Active | Suspended | Archived | Retired
+modules:
+  m10_kanban:
+    schema_version: 1
+    # primary backend selection (existing M10 fields per ADR-0024 §
+    # Part B; honored when kanbans list has length 1):
     backend: github-project-v2
-    project_ref: PanQiWei/3   # OWNER/PROJECT_NUMBER per the v1 GH projection
-    role: primary             # exactly 1 primary required across active kanbans
-    description: "Feature dev"
-    # optional: compliance: L0..L3 (default L3 if backend supports it)
-    # optional: wip_limit_local: N (per-kanban WIP cap override)
-  - id: legal                  # multi-kanban example; v1.x only ships if user opts in
-    state: active
-    backend: jira              # v1.x roadmap; refused at v1.0 runtime
-    project_ref: legal-team/COMPLIANCE
-    role: secondary
-    description: "Compliance & legal review"
+    project_ref: PanQiWei/3
+    # multi-kanban list — v0.5.0 schema reservation; runtime
+    # supports list length 1 only (see carve-out below):
+    kanbans:
+      - id: primary             # repo-internal alias; unique within this repo
+        state: active           # Bound | Active | Suspended | Archived | Retired
+        backend: github-project-v2
+        project_ref: PanQiWei/3 # OWNER/PROJECT_NUMBER per the v1 GH projection
+        role: primary           # exactly 1 primary required across active kanbans
+        description: "Feature dev"
+        # optional: compliance: L0..L3 (default L3 if backend supports it)
+        # optional: wip_limit_local: N (per-kanban WIP cap override)
+      - id: legal                # multi-kanban example; v1.x only ships if user opts in
+        state: active
+        backend: jira            # v1.x roadmap; refused at v1.0 runtime
+        project_ref: legal-team/COMPLIANCE
+        role: secondary
+        description: "Compliance & legal review"
 ```
+
+The single-backend M10 fields (`modules.m10_kanban.backend` /
+`project_ref`) are mirrored to `kanbans[primary]` for v1.0
+backward compatibility; v1.x runtime treats the list as
+authoritative and the singular fields as the primary's projection
+shorthand. ADR-0024 § Part B's M5 `set-wip-limit` stage continues
+to write `modules.m5_repo_configuration.wip_limit` as the per-actor
+GLOBAL cap; `kanbans[].wip_limit_local` is a per-kanban override
+within that global cap (see § WIP semantics below).
 
 #### v1.0 runtime carve-out
 
-v1.0 runtime supports `kanbans:` list of length **exactly 1**.
-List length > 1 is a hard-failed configuration:
+v1.0 runtime supports `modules.m10_kanban.kanbans` list of length
+**exactly 1**. List length > 1 is a hard-failed configuration:
 `bootstrapping-repo` and `operating-kanban` refuse to operate
 with a "multi-kanban not yet supported in v1.0; see ADR-0026
-Roadmap" capability error. Architects MAY author the longer
-form for v1.x preparation, but the plugin will not honor it
-until v1.x runtime support lands.
+Roadmap" capability error. Architects MAY author the longer form
+for v1.x preparation, but the plugin will not honor it until v1.x
+runtime support lands.
 
 #### Identity rules
 
@@ -168,9 +188,11 @@ v0.4.x legacy:      claim/<key-slug>-<title-slug>
 ```
 
 Migration: `migrating-repo-version` registers v0.4.x branches
-to the migrated repo's primary kanban via on-disk state
-(`~/.board-superpowers/repos/<normalized>/state.yml § legacy_claims`).
-Physical branch rename is **not** performed — the legacy
+to the migrated repo's primary kanban via the M10 module's
+projection at `~/.board-superpowers/repos/<normalized>/settings.yml`
+under `modules.m10_kanban.legacy_claims` (path consistent with
+ADR-0017 cross-clone state sharing + ADR-0024 settings.yml
+rename). Physical branch rename is **not** performed — the legacy
 parser in `operating-kanban` accepts both forms during the
 transition window.
 
@@ -317,14 +339,17 @@ Milestone aggregation in `managing-board` routines.
 
 ## Alternatives considered
 
-**Multi-kanban: ship `kanban:` (singular) at v0.5.0; defer
-plural to v1.x.** Considered. Rejected because (a) internal
-identity is always composite `(kanban_id, Card.key)` per
-codex critique #1, so the schema must reflect that
-forward-compat from day one; (b) migration from singular →
-plural is a v1.x churn point we can avoid by shipping plural
-schema with v1.0 runtime carve-out (length=1 hard-failed
-beyond) instead.
+**Multi-kanban: ship the M10 single-backend shorthand only at
+v0.5.0; defer the plural `kanbans:` list to v1.x.** Considered.
+Rejected because (a) internal identity is always composite
+`(kanban_id, Card.key)` per codex critique #1, so the schema
+must reflect that forward-compat from day one; (b) migration
+from "M10 fields only" → "kanbans list" is a v1.x churn point
+we can avoid by shipping list schema (under main's
+`modules.m10_kanban.kanbans`) with v1.0 runtime carve-out
+(length=1 hard-failed beyond) instead. The M10 single-backend
+shorthand stays valid as the primary kanban's projection at
+all versions.
 
 **Lifecycle: 6 states including `Provisioned`.** Considered.
 Rejected because backend existence is not a board-superpowers
@@ -379,10 +404,26 @@ the protocol's purpose as a single agent mental model.
   adversarial review on 2026-04-28..29; their findings shape
   the post-revision design encoded here. The critiques are
   not preserved as artifacts; this ADR is the synthesis.
+- **ADR-0022 needs a follow-up supersession.** Cross-impact
+  analysis (2026-04-29) found that ADR-0022 (BoardAdapter
+  capability dispatch + M10 BoardAdapter-selection module)
+  was authored before ADR-0025 elevated the Kanban Protocol
+  to top-level contract. ADR-0022's current language anchors
+  M3 capability dispatch to "ADR-0005 BoardAdapter SDK
+  shape," which is exactly the framing ADR-0025 supersedes.
+  A separate ADR (working name ADR-0027) is queued to revise
+  ADR-0022's capability-dispatch hook so M3 dispatches
+  capabilities through a Kanban Protocol projection, not
+  through ADR-0005's SDK surface. v0.5.0 implementation
+  SHOULD treat M10's persisted backend selection as
+  protocol-projection metadata, not as ADR-0005-shaped
+  adapter handles.
 - ADR-0014 (audit dispatch envelope + transport selection
   for v1.x scripts vs MCP question) is queued but not yet
   authored; it depends on real v1.x experience with at least
-  one second-form projection.
+  one second-form projection. NOTE: in main, ADR-0014 is
+  already taken (Stage registry contract); the v1.x audit
+  dispatch ADR will get a new free number when authored.
 - Card #36 (GitHubProjectAdapter wrapper port) is reframed
   by ADR-0025 + this ADR: it remains useful as a Form A
   projection refactoring task, but is no longer a

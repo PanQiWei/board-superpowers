@@ -84,8 +84,9 @@ REST), different backends, different projections.
   not specify how an agent discovers which projection applies on
   the current repo — that is the responsibility of the
   `operating-kanban` skill (which reads
-  `<repo>/.board-superpowers/config.yml` § `kanban:`) and the
-  `bootstrapping-repo` skill (which writes that config).
+  `<repo>/.board-superpowers/settings.yml` § `modules.m10_kanban`)
+  and the `bootstrapping-repo` skill (which provisions that block
+  via main's M10 config-item stage per ADR-0024).
 - ❌ **A complete enumeration of backend capabilities.** Custom
   fields, backend-specific affordances (Linear cycles, Jira
   custom workflows, GitHub draft items) are explicitly NOT
@@ -320,7 +321,11 @@ expansion.
 
 Detailed lifecycle states, schema, and migration semantics live
 in [ADR-0026](../adr/0026-multi-kanban-lifecycle-and-flat-card-hierarchy.md).
-This section is the protocol-level contract.
+This section is the protocol-level contract. The configuration
+substrate is `<repo>/.board-superpowers/settings.yml` under
+`modules.m10_kanban` (per main's ADR-0021 settings modular
+layering + ADR-0024 settings rename + M10 BoardAdapter-selection
+config-item stage).
 
 ### Identity is always the composite key `(kanban_id, Card.key)`
 
@@ -473,8 +478,9 @@ fold native states into the six canonical at projection time:
   field can target, what conversion losses are acceptable. The
   *values* filling that schema are per-repo: a Jira project
   on this repo with a custom 8-state workflow declares its
-  fold-table in `<repo>/.board-superpowers/config.yml`
-  overrides at bootstrap. Per-card folding is forbidden —
+  fold-table in `<repo>/.board-superpowers/settings.yml`
+  overrides under `modules.m10_kanban` at bootstrap. Per-card
+  folding is forbidden —
   folding is a global property of the backend's taxonomy as
   configured on this repo, never resolved per-card.
 
@@ -812,16 +818,20 @@ projection layer.
 
 ## Compliance levels
 
-Backends declare their compliance level in
-`<repo>/.board-superpowers/config.yml § kanban`:
+Backends declare their compliance level under `modules.m10_kanban`
+in `<repo>/.board-superpowers/settings.yml` (per main's M10
+config-item stage in ADR-0024; protocol semantics here, schema
+ownership at the M10 stage):
 
 ```yaml
-kanban:
-  backend: github-project-v2          # enum
-  project_ref: PanQiWei/3              # OWNER/PROJECT_NUMBER per
-                                       # ADR-0005 GitHubProjectAdapter
-                                       # projection (NOT OWNER/REPO)
-  compliance: L3                      # advertised level
+modules:
+  m10_kanban:
+    schema_version: 1
+    backend: github-project-v2          # enum
+    project_ref: PanQiWei/3              # OWNER/PROJECT_NUMBER per
+                                         # ADR-0005 GitHubProjectAdapter
+                                         # projection (NOT OWNER/REPO)
+    compliance: L3                       # advertised level
 ```
 
 | Level | Required actions | What it enables |
@@ -935,10 +945,11 @@ projection while the supporting infrastructure lands):
    cross-backend matrix of what each projection supports.
 3. **Bootstrap support** — the
    [`bootstrapping-repo`](../../../skills/bootstrapping-repo/SKILL.md)
-   skill knows how to write a `<repo>/.board-superpowers/config.yml`
-   `kanban:` block selecting this backend and provisioning
-   credentials (`provision_credentials()` sub-contract per
-   backend).
+   skill, in conjunction with main's M10 config-item stage
+   (ADR-0024 `m10.repo.choose-kanban-backend`), provisions
+   `modules.m10_kanban` in `<repo>/.board-superpowers/settings.yml`
+   selecting this backend and arranging credential provisioning
+   (`provision_credentials()` sub-contract per backend).
 
 **v1.0 carve-out.** The `operating-kanban` skill (which owns the
 `references/<backend>.md` directory) and `adapter-capabilities.md`
@@ -947,8 +958,9 @@ v0.5.0, `adapter-capabilities.md` when the second projection
 arrives. While both are pending, the v1.0 GitHub projection
 satisfies (1) and (2) implicitly through the existing
 `gh`-bound scripts plus ADR-0005's contract surface; bootstrap
-support (3) ships as part of the v0.5.0 changes that introduce
-the `kanban:` config block.
+support (3) ships as part of the v0.5.0 changes that wire main's
+M10 config-item stage to write `modules.m10_kanban` into
+`settings.yml`.
 
 ---
 
