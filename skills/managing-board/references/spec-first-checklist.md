@@ -143,9 +143,10 @@ reproduce actual decisions:
   (single umbrella card, no design A/B).
   **Reproduces actual decision.**
 - **#43** (bootstrap audit drift fix). Row 1 fires (Bootstrap
-  + Audit contexts). F-B2 spec edit was bundled in the same
-  PR (paired-PR variant). `docs/plans/<feature>/` was
-  mandatory (AC4 design-A/B). **Reproduces actual decision.**
+  + Audit contexts). The per-repo bootstrap routine's spec
+  edit was bundled in the same PR (paired-PR variant).
+  `docs/plans/<feature>/` was mandatory (AC4 design-A/B).
+  **Reproduces actual decision.**
 - **#45** (this card). Row 6 partially fires — the new
   references files ARE manager-side spec, but they live under
   `skills/managing-board/references/`, not in the maintainer's

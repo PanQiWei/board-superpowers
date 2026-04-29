@@ -235,8 +235,8 @@ their actual shape decisions:
   even when the body's purpose is to anchor a milestone.**
 - **#43** (audit drift fix, M, single card with AC4
   design-A/B). Step 2: single card (one bounded-context fix).
-  Step 3: row 1 fires; F-B2 spec edit bundled same-PR. Step 4:
-  direct creation; AC4 uses
+  Step 3: row 1 fires; per-repo bootstrap routine's spec edit
+  bundled same-PR. Step 4: direct creation; AC4 uses
   [`skill-routing.md`](./skill-routing.md) Table 3 template.
   **Reproduces.**
 - **#44** (card schema platform field, S, single card with

@@ -79,7 +79,7 @@ Users can sign in to the dashboard using their Google account from the sign-in p
 - (none — first card in chain)
 
 ## Notes
-Driver: P0 intake — sign-in friction blocks trial conversion. SPIDR Paths split: Google ships first as the highest-volume provider.
+Driver: top-priority intake — sign-in friction blocks trial conversion. SPIDR Paths split: Google ships first as the highest-volume provider.
 
 <!-- board-superpowers:audit-trail -->
 **Audit trail**: query ~/.board-superpowers/repos/<normalized>/audit-local.jsonl by `card_number = N`.

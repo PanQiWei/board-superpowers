@@ -63,7 +63,7 @@ Split by browser / hardware / progressive UI fidelity. Each interface variant is
 Split by restricting supported data formats / value ranges. Each data variant is a separate card.
 
 **Examples**:
-- "Accept MP4 only" → defer "accept WebM, AVI, MKV, MOV..." to follow-up cards.
+- "Accept one video container format only (e.g., MPEG-4)" → defer "accept WebM, AVI, MKV, MOV..." to follow-up cards.
 - "Accept 5-digit US ZIP only" → defer "accept Canadian / UK / international postcodes".
 - "Accept ASCII characters only" → defer "accept Unicode" / "accept emoji".
 

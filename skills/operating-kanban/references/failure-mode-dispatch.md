@@ -32,9 +32,9 @@ Tier A is the only tier where the dispatch layer itself retries. All other tiers
 
 The table covers the cross-Form failure surface; per-projection reference files MAY add projection-specific failure codes (e.g., GitHub's `secondary rate limit` is a distinct exit code in `form-a-bash.md` even though it folds into `rate-limited` here). Projection-specific codes inherit the base table's tier unless the reference file overrides explicitly.
 
-## Compatibility with `classifying-actions` D-AUTONOMY-1
+## Compatibility with `classifying-actions`
 
-A failure in the dispatch layer NEVER changes the upstream classification result. If the caller's classifying-actions consultation returned `R` (architect approval required), the failure path still runs through R's two-entry rule:
+A failure in the dispatch layer NEVER changes the upstream autonomy classification result. If the caller's classifying-actions consultation returned `R` (architect approval required), the failure path still runs through R's two-entry rule:
 
 - The propose row is already written (before this skill was invoked).
 - The dispatch attempt fails.

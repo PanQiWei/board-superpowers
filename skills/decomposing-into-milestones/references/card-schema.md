@@ -109,7 +109,7 @@ If empty, omit the section entirely. Producer-side validation: AC and scope item
 
 Freeform rationale, driver, cross-card context. Examples:
 
-- "Driver: user feedback in P0 intake — sign-in friction is blocking trial conversion."
+- "Driver: user feedback in top-priority intake — sign-in friction is blocking trial conversion."
 - "Cross-card context: this card unblocks #45 (mobile sign-in) and #46 (account linking)."
 - "Retro-folded: an earlier attempt assumed Google's OAuth scope `openid email profile` was sufficient; turned out we also need `https://www.googleapis.com/auth/userinfo.email` for the email field on the callback. Documented for future cards."
 

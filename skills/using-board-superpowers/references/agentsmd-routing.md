@@ -160,9 +160,10 @@ When updating the routing block content above, remember:
   `<!-- /board-superpowers:routing -->` between the fence sentinels —
   the helper's sanity check rejects nested target markers.
 - The hash recorded in user repos' `state.yml:routing_blocks[]`
-  changes whenever the bytes between the fences change. F-B4 tamper
-  detection treats a hash mismatch as plausible user edit; document
-  the change in the v0.x release notes.
+  changes whenever the bytes between the fences change. The
+  per-repo version-transition migration routine's tamper detection
+  treats a hash mismatch as plausible user edit; document the
+  change in the v0.x release notes.
 - The block intentionally opens with a `## board-superpowers session
   routing` H2 heading so consumer repos' AGENTS.md / CLAUDE.md get a
   visible section title where the block lands. Removing the heading
