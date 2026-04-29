@@ -239,38 +239,75 @@ manual editing; old installs become broken on upgrade because
 the in-place file no longer parses; the YAGNI initial v1 shape
 becomes a permanent ceiling instead of a starting point.
 
-**I-13. Team-shared declarations in git, host-local state out.**
+**I-13 (revised per ADR-0017). Team-shared declarations in git,
+host-local state out; cross-clone state sharing via GitHub-based
+identity.**
 The placement strategy across `<repo>/.board-superpowers/` and
-`~/.board-superpowers/repos/<normalized>/` enforces four rules:
-- `<repo>/.board-superpowers/config.yml` — committed (user
-  decisions about WIP limit, project ref, etc. — team-shared by
-  definition).
+`~/.board-superpowers/repos/<repo-identity>/` enforces four rules:
+
+- `<repo>/.board-superpowers/settings.yml` (repo-git) — committed
+  (team decisions about kanban backend, project ref,
+  post-merge-cleanup config — team-shared by definition).
+- `<repo>/.board-superpowers/settings.local.yml` (repo-clone) —
+  gitignored locally via `*.local.*` pattern (per-user decisions
+  about WIP limit, autonomy overrides — never team-coordinated).
 - `<repo>/.board-superpowers/claims/` — gitignored locally
   (per-session forensic state); individual marker files get
   force-committed only to claim branches by `claim-card.sh`,
   never to `main`.
-- `~/.board-superpowers/repos/<normalized>/state.yml` — host-local,
-  never tracked. Each architect on each host independently runs
-  F-B2 and maintains its own bootstrap state. The normalized
-  sub-directory name is the repo's absolute path with leading `/`
-  stripped and remaining `/` replaced by `-` (per
-  [`0005-contracts/07-path-conventions.md`](../0005-contracts/07-path-conventions.md)).
-- `~/.board-superpowers/manifest.yml` — host-level plugin install
+- `~/.board-superpowers/repos/<repo-identity>/settings.yml` —
+  host-local, never tracked. **Repo identity is derived from
+  the GitHub `origin` URL** as `<owner>-<repo>` (per ADR-0017;
+  e.g., `PanQiWei-board-superpowers`). Fallback for local-only
+  repos: `_path-<normalized>` prefix (absolute path with leading
+  `/` stripped and remaining `/` replaced by `-`). All clones
+  and worktrees of the same `(host, GitHub repo)` share this
+  single identity-keyed directory — one bootstrap progress
+  record, one credentials file, one audit DB per
+  `(host, GitHub repo)` pair regardless of clone count.
+  Per-clone physical isolation is preserved only for repo-clone
+  locality files (`settings.local.yml`, `.venv/`).
+- `~/.board-superpowers/settings.yml` — host-level plugin install
   state (per-machine, never tracked). Same enclosing directory as
   the per-repo state, owned by HostBootstrap.
 
-Cited by: F-B2 (writes both `<repo>/.board-superpowers/config.yml`
-and `~/.board-superpowers/repos/<normalized>/state.yml`); F-B4
-(reads / re-writes `state.yml` per host); ADR-0002 (claim marker
-force-commit-to-claim-branch contract).
-**Aggregate:** RepoConfig (config.yml in git), ConsumerLogical
-(ClaimMarker in git only on its own branch), RepoBootstrap
-(RepoState host-local), HostBootstrap (HostManifest host-local).
+**Cross-clone sharing behavior (ADR-0017):**
+Two architects on the same host who clone the same `(host, repo)`
+share `settings.yml` (repo-shared), `credentials.yml`, and
+`audit.db`. Per-architect divergence is preserved through
+repo-clone locality stages (`settings.local.yml`, `.venv/`),
+which remain physically per-clone.
+
+Worktrees of the same primary repo (per ADR-0003) automatically
+share the repo-shared state — `git rev-parse --git-common-dir`
+resolves any worktree to the primary clone where `origin` lives,
+so the `<repo-identity>` is stable across all worktrees. This
+fixes the v0.4.0 breakage where each worktree path produced a
+different normalized name and therefore a different (empty)
+`state.yml`.
+
+**Repo rename on GitHub:** run `bsp-relocate-repo.sh <old-identity>
+<new-identity>` once after the rename to `mv` the state directory.
+No in-place migration; the rename is rare and the tooling is
+intentionally minimal (ADR-0017 Negative consequences).
+
+Cited by: setup stages (write both
+`<repo>/.board-superpowers/settings.yml` and
+`~/.board-superpowers/repos/<repo-identity>/settings.yml`);
+ADR-0002 (claim marker force-commit-to-claim-branch contract);
+ADR-0017 (identity scheme + cross-clone sharing rationale).
+**Aggregate:** RepoConfig (settings.yml repo-git in git),
+ConsumerLogical (ClaimMarker in git only on its own branch),
+RepoBootstrap (settings.yml repo-shared host-local; identity
+shared across all clones of same `(host, GitHub repo)`),
+HostBootstrap (settings.yml host-shared, host-local).
 What breaks if violated:
-  putting `state.yml` back inside the repo and tracking it
-  re-introduces the silent cross-collaborator overwrite race
-  (architect A pushes state.yml → architect B's next session
-  silently rewrites it on the next state-update → A pushes again
-  → no audit, ping-pong); putting team-shared declarations like
-  `config.yml` outside the repo loses cross-architect symmetry.
+  Putting `settings.yml` (repo-shared) back inside the repo
+  and tracking it re-introduces the silent cross-collaborator
+  overwrite race; reverting to path-based identity (as in v0.4.0)
+  breaks worktree-per-Consumer (each worktree gets its own empty
+  bootstrap state, requiring re-bootstrap per worktree —
+  the structural weakness ADR-0017 exists to eliminate).
+  Putting team-shared declarations like `settings.yml` (repo-git)
+  outside the repo loses cross-architect symmetry.
 
