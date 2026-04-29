@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # scripts/verify-skill-anti-patterns.sh — CI gate for SKILL_DEVELOPMENT.md
-# anti-patterns A9 (internal codes) + A10 (phase narrative).
+# anti-patterns A9 (internal codes / cross-boundary refs) + A10 (phase
+# narrative).
 #
 # Resolves the plugin root via SCRIPT_DIR rather than bsp_primary_repo_root.
 # bsp_primary_repo_root follows .git/common-dir, which from a worktree
@@ -8,6 +9,11 @@
 # wants to scan the *current* working tree's SKILL files. Using SCRIPT_DIR
 # scans whichever copy of the plugin the script is invoked from (main,
 # worktree, or downstream test harness).
+#
+# Test override: BSP_TEST_PLUGIN_ROOT, when set to an absolute directory,
+# replaces SCRIPT_DIR-derived PLUGIN_ROOT for the scope of this run. Used
+# by tests/test-verify-skill-anti-patterns.sh to scan a fixture tree
+# instead of the live skills/ tree. Production callers MUST NOT set it.
 #
 # Exit 0: clean.
 # Exit 1: violations found (printed to stderr).
@@ -19,19 +25,86 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR
 source "${SCRIPT_DIR}/lib/common.sh"
 
-PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+if [ -n "${BSP_TEST_PLUGIN_ROOT:-}" ] && [ -d "${BSP_TEST_PLUGIN_ROOT}" ]; then
+    PLUGIN_ROOT="${BSP_TEST_PLUGIN_ROOT}"
+else
+    PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+fi
 SKILLS_DIR="${PLUGIN_ROOT}/skills"
 [ -d "${SKILLS_DIR}" ] || bsp_die "skills/ directory not found at ${SKILLS_DIR}"
 
 ERRORS=0
 
-# A9: internal codes in SKILL.md (not references/).
-A9_PATTERN='\bF-[A-Z]?[0-9]+|ADR-[0-9]{4}|§[0-9]\.|P[0-9]+[a-z]?\b|I-[0-9]+|D-[A-Z]+-[0-9]+|C-[A-Z]+-[0-9]+'
-while read -r match; do
+# A9: internal codes + cross-boundary refs.
+#
+# Scope: skills/**/SKILL.md AND skills/**/references/**.md.
+# Audit on PR #70 found ~85+ dead-link refs lived in references/**.md
+# files that the previous SKILL.md-only scan never touched. References
+# files ship alongside SKILL.md as plugin payload, so a downstream agent
+# loading them suffers the same "indecipherable internal code" failure
+# as A9 originally documented for SKILL.md.
+#
+# Patterns:
+#   - Existing internal-code family (F-XX, ADR-XXXX, §X., PXa, I-X,
+#     D-XXX-X, C-XXX-X) — unchanged from prior gate.
+#   - docs/architecture/ literal substring — covers absolute-from-repo-
+#     root paths and embedded markdown links.
+#   - ../../docs/ — relative-path traversal that escapes the plugin
+#     install boundary.
+#   - Root maintainer-doc filenames (BOARD_DEVELOPMENT.md /
+#     MULTI_AGENT_DEVELOPMENT.md / SKILL_DEVELOPMENT.md /
+#     PLUGIN_DEVELOPMENT.md / SETUP_STAGES_DEVELOPMENT.md) — these live
+#     at the repo root and do NOT ship with `plugin install`.
+#   - adr/0[0-9]{3} relative-path fragment — ADR file paths in the
+#     spec tree.
+#
+# Exclusions:
+#   - skills/AGENTS.md — maintainer-side contract for plugin authors,
+#     not a SKILL reference. Legitimately points up into ../docs/ etc.
+#   - Lines containing the literal "not shipped with plugin install"
+#     marker — the B5 escape hatch for high-value canonical-spec
+#     pointers in references/ that explicitly disclaim themselves as
+#     maintainer-only context (see SKILL_DEVELOPMENT.md § A9 footnote
+#     pattern). The marker MUST appear on the same physical line as
+#     the cross-boundary reference for the line to be excluded.
+A9_PATTERN='\bF-[A-Z]?[0-9]+|ADR-[0-9]{4}|§[0-9]\.|P[0-9]+[a-z]?\b|I-[0-9]+|D-[A-Z]+-[0-9]+|C-[A-Z]+-[0-9]+|docs/architecture/|\.\./\.\./docs/|BOARD_DEVELOPMENT\.md|MULTI_AGENT_DEVELOPMENT\.md|SKILL_DEVELOPMENT\.md|PLUGIN_DEVELOPMENT\.md|SETUP_STAGES_DEVELOPMENT\.md|adr/0[0-9]{3}'
+
+A9_INPUT="$(mktemp)"
+A9_TMP_TRAP="rm -f \"${A9_INPUT}\""
+
+# 1) SKILL.md scan — every skills/**/SKILL.md.
+grep -rnE "${A9_PATTERN}" "${SKILLS_DIR}" --include='SKILL.md' 2>/dev/null \
+    >> "${A9_INPUT}" || true
+
+# 2) references/**.md scan — every skills/**/references/**.md, EXCLUDING
+# skills/AGENTS.md (which is at skills/ root, not under references/).
+# We use find + xargs so we only touch references/ subtrees.
+while IFS= read -r ref_file; do
+    grep -nE "${A9_PATTERN}" "${ref_file}" 2>/dev/null \
+        | sed "s|^|${ref_file}:|" >> "${A9_INPUT}" || true
+done < <(find "${SKILLS_DIR}" -type f -name '*.md' -path '*/references/*')
+
+while IFS= read -r match; do
     [ -z "${match}" ] && continue
-    bsp_warn "A9 violation: ${match}"
+    # B5 escape hatch — same-line "not shipped with plugin install"
+    # marker indicates a deliberate, scoped maintainer-pointer.
+    if printf '%s' "${match}" | grep -q 'not shipped with plugin install'; then
+        continue
+    fi
+    # Extract path:line and the matched substring for the human-
+    # readable diagnostic. Match-substring extraction uses the same
+    # ERE the scan ran with.
+    file_line="$(printf '%s' "${match}" | cut -d: -f1-2)"
+    matched="$(printf '%s' "${match}" | grep -oE "${A9_PATTERN}" | head -1)"
+    # Strip the absolute PLUGIN_ROOT prefix so output is repo-relative.
+    rel_file_line="${file_line#"${PLUGIN_ROOT}/"}"
+    bsp_warn "A9 violation: ${rel_file_line}: ${matched}"
+    bsp_warn "  → translate the reference to self-contained prose; see SKILL_DEVELOPMENT.md § A9 for examples."
     ERRORS=$((ERRORS + 1))
-done < <(grep -rnE "${A9_PATTERN}" "${SKILLS_DIR}" --include='SKILL.md' 2>/dev/null || true)
+done < "${A9_INPUT}"
+
+eval "${A9_TMP_TRAP}"
+unset A9_TMP_TRAP
 
 # A10: phase narrative across SKILL files AND root-level developer-
 # facing docs (AGENTS.md, plugin manifests longDescription, etc.) where
