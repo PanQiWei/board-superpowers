@@ -51,7 +51,7 @@ the fence.
 <!-- routing-block:start -->
 ## board-superpowers session routing
 
-This project uses the `board-superpowers` plugin (v0.2.0).
+This project uses the `board-superpowers` plugin (v0.5.0).
 Any Claude Code session in this project plays one of two roles:
 
 - **Board Consumer** — if the first message contains `[board-card:#N]`,

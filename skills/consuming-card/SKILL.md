@@ -300,3 +300,13 @@ If this skill is running as a subagent that the Producer's `board-superpowers:ma
 - For required sub-skills that themselves spawn subagents (verify each one's body for `Agent` tool / `subagent_type` references), surface a procedural fallback to the architect — see `references/handoff-to-superpowers.md`.
 
 This Producer-spawned-Consumer mode is currently Claude Code only. On Codex CLI, only architect-spawned Consumer (your direct session) is supported.
+
+## References
+
+| File | When to read | Purpose |
+|------|--------------|---------|
+| `references/handoff-to-superpowers.md` | At Step 4 (implement) and Step 5 (verify) when running as a Producer-spawned subagent (depth-1 budget exhausted). | Procedural-fallback table — for each sibling skill that itself spawns subagents, the read-and-inline procedure that replaces a subagent dispatch. |
+| `references/permission-boundary.md` | At session start when establishing the invocation contract — architect-spawned vs Producer-spawned. | Authoritative comparison of the two Consumer-invocation modes — which surfacing channels apply, which sub-skills are allowed, what the architect-visibility tier is. |
+| `references/post-merge-cleanup.md` | After PR is merged (interactive cleanup) or once at claim time when deciding whether to install the auto-cron handoff. | Contract for the close-out sequence — interactive vs auto-cron paths, the cron install / uninstall lifecycle, the terminal-state triggers (merged / closed / timeout). |
+| `references/pr-template.md` | At Step 6 (open the PR) when drafting the PR body before invoking `submit-pr.sh`. | Practical paste-ready PR body templates — default template, Automated Verification skeleton, Human Verification TODO patterns, Retro Notes shape. |
+| `references/surface-protocol.md` | Whenever surfacing information back to the architect — design-A/B leaning, blocked-card escalation, mid-flight scope question, post-implementation summary. | The three surface channels (card thread comment / PR description / direct-message-to-architect surfacing) plus when each channel is the right one. |

@@ -2,6 +2,24 @@
 
 The architectural picture behind the entry skill body's "10 skills, by layer" and "5 bounded contexts" tables. Read this when you need to understand *why* board-superpowers carves the work the way it does — not just what each skill is named.
 
+## When to read this file
+
+Route by question to a specific section instead of reading end-to-end:
+
+| Question | Section to read |
+|----------|-----------------|
+| What kind of layer is this plugin? Why scheduling-only and not coding-discipline? | [§ "What kind of layer is board-superpowers"](#what-kind-of-layer-is-board-superpowers) |
+| What skill goes where? Which layer does the new skill belong in? | [§ "Three layers, strictly downward"](#three-layers-strictly-downward) |
+| What's the layer's stability profile? How does the body-length budget map to the layer? | [§ "Three layers, strictly downward"](#three-layers-strictly-downward) (final table) |
+| Why are there exactly four atomic skills? What SPOTs do they consolidate? | [§ "Why exactly four atomic skills (the SPOT census)"](#why-exactly-four-atomic-skills-the-spot-census) |
+| How does an atomic-contract change propagate through the molecular consumers? | [§ "How a contract update propagates"](#how-a-contract-update-propagates) |
+| What are the five bounded contexts and which skill operates on which? | [§ "The 5 bounded contexts"](#the-5-bounded-contexts) |
+| When a Consumer is spawned by the Producer rather than the architect, what changes? | [§ "Mode-1 vs Mode-2 Consumer spawn"](#mode-1-vs-mode-2-consumer-spawn) |
+| How do `superpowers:*` and `gstack:/*` compose with this plugin? | [§ "Composition with sibling plugins"](#composition-with-sibling-plugins) |
+| Why is there no plugin-side state server? | [§ "No plugin-side state server"](#no-plugin-side-state-server) |
+| Why is the architecture shaped this way for an AI-driven board? | [§ "Why this shape for an AI-driven board"](#why-this-shape-for-an-ai-driven-board) |
+| Quick check during an active session — is the work in the right context / layer / plugin? | [§ "How to use this picture in an active session"](#how-to-use-this-picture-in-an-active-session) |
+
 ## What kind of layer is board-superpowers
 
 board-superpowers is a **scheduling layer**. Its job is to know what work is in flight, who's holding it, and what state each piece is in. It does NOT itself implement the engineering disciplines that produce the work — those live in two sibling plugins (`superpowers` for the coding-discipline loop, `gstack` for the bookends of direction-setting and delivery-side verification). Composition with those siblings is a permanent design decision, not an interim shortcut. Reimplementing TDD, debugging, code review, QA, or security audit inside board-superpowers would defeat the whole point of having a focused scheduling layer.

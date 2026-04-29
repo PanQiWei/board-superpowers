@@ -1,22 +1,39 @@
 # Scope-shape judgment — manager-side intake reference
 
-> **Scope**: this file owns *which scope/level* a fresh
-> requirement should land at — single card, multi-card sharing
-> a milestone, milestone-grouped within a release-gate, or
-> cross-release roadmap. It also owns the trigger for "do we
-> hand this off to `decomposing-into-milestones`?".
->
-> **Out of scope** — this file does NOT own the *how* of
-> decomposition. INVEST application, SPIDR vertical-slicing
-> mechanics, size calibration, and the converged Card body
-> schema are owned by
-> [`board-superpowers:decomposing-into-milestones`](../../decomposing-into-milestones/SKILL.md).
-> For the **how** of decomposition, see that skill's
-> references — explicit pointers per decision below.
+## Use this file when
 
-This reference is consumed by the `intake.md` decision tree
-(see § "Decision tree extension" in `intake.md`) and by the
-`managing-board` SKILL body's intake routine.
+You arrive here at intake **Step 2** of [`intake.md`](./intake.md)
+to decide *which scope/level* a fresh requirement should land at —
+single card, multi-card sharing a milestone, milestone-grouped
+within a release-gate, or cross-release roadmap. Apply the three
+tables below in order:
+
+- **Table 1** decides shape (the four-row hierarchy).
+- **Table 2** picks the cross-card relationship mechanism (Milestone
+  field / hard `depends-on:` / soft `depends-on:` / Label).
+- **Table 3** decides whether to hand the artifact to
+  `decomposing-into-milestones` (#35) and what entry conditions to
+  attach.
+
+### When to read the sibling files
+
+After this file's tables fire, the next reads are:
+
+- **[`spec-first-checklist.md`](./spec-first-checklist.md)** — read
+  next at intake **Step 3** once shape is "single card" or
+  "multi-card", to verify spec preconditions clear before card
+  creation.
+- **[`skill-routing.md`](./skill-routing.md)** — read at intake
+  **Step 4** once preconditions are clear, to pick the pre-card
+  sibling skill (`gstack:/*`, `superpowers:*`, or
+  `decomposing-into-milestones`) and frame manager-locked vs
+  consumer-deferred design.
+- **[`board-superpowers:decomposing-into-milestones`](../../decomposing-into-milestones/SKILL.md)**
+  — invoke when Table 1 routes to "multi-card" or
+  "milestone-grouped". That skill owns the *how* of decomposition
+  (INVEST, SPIDR vertical-slicing, sizing, the converged Card body
+  schema). This file does NOT own that surface — explicit pointers
+  per decision below.
 
 ## Primary-source vocabulary
 

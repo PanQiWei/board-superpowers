@@ -1,22 +1,26 @@
 # Spec-first checklist — manager-side intake reference
 
-> **Scope**: this file lists the must-have spec artifacts that
-> have to land **before** a card can be created (or, in the
-> spec-only case, **as** the card). It also documents when
-> `docs/plans/<feature>/` is mandatory vs optional scaffolding.
->
-> **Out of scope** — once a precondition is met and the card
-> is created, the work itself is governed by the Consumer
-> session's discipline; this file does not prescribe
-> implementation order.
+## Use this file when
 
-This reference is consumed by:
+You arrive here at intake **Step 3** of [`intake.md`](./intake.md)
+to verify spec preconditions before a card is created — after
+[`scope-shape-judgment.md`](./scope-shape-judgment.md) decided shape
+and before [`skill-routing.md`](./skill-routing.md) picks a sibling
+skill. Apply the six-row table below: run each row's *trigger
+check* against the requirement; if any trigger fires, the named
+spec artifact MUST land first (separate PR or same-PR companion)
+before the card is created. Spec-only PRs (row 6) are the inverse:
+the card body IS the spec edit.
 
-- The `intake.md` decision tree, after [`scope-shape-judgment.md`](./scope-shape-judgment.md)
-  routes a requirement to "single card" or "multi-card" shape.
-- The `decomposing-into-milestones` (#35) skill's Step 1 —
-  before #35 ingests an artifact, the architect should have
-  already cleared this checklist for the umbrella requirement.
+After this file clears (or its preconditions land), proceed to
+[`skill-routing.md`](./skill-routing.md) at intake Step 4. If a
+precondition is open, pause card creation, surface the spec edit
+to the architect, and resume Step 3 once the spec PR merges.
+
+The `decomposing-into-milestones` (#35) skill's Step 1 also
+consults this checklist — before #35 ingests an artifact, the
+architect should have already cleared the six rows for the
+umbrella requirement.
 
 ## Why "spec first"
 
