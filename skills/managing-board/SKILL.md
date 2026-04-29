@@ -18,7 +18,7 @@ This is the Producer-session main skill for board-superpowers. It runs four rout
 
 If the user invokes via `/board-superpowers:managing-board <routine>`, the routine name arrives as the first argument. Otherwise pick the routine from the user's prompt vocabulary using the table above. If the prompt is genuinely ambiguous (e.g., "let's look at the board"), **ask the Producer** which routine they want — do NOT pick a default. The cost of asking is low; routing wrong burns more attention.
 
-**Required sub-skills**: `board-superpowers:board-canon` (read schema before any transition decision), `board-superpowers:enforcing-pr-contract` (review-queue contract validation).
+**Required sub-skills**: `board-superpowers:board-canon` (read schema before any transition decision), `board-superpowers:operating-kanban` (`read_board` for the daily / triage scans, `transition_card` for review-queue Status flips, `create_card` for intake card creation — protocol-action dispatch over the active projection), `board-superpowers:enforcing-pr-contract` (review-queue contract validation).
 
 ## Flow at a glance
 
@@ -43,7 +43,7 @@ flowchart TD
 
 Goal: produce a one-screen briefing of the board's current state that helps the Producer decide what to do next.
 
-1. **Read the board**. Run `bash scripts/read-board.sh --owner <owner> --project <number>`. The owner + project number live in the repo's `.board-superpowers/config.yml`. Parse the JSON output.
+1. **Read the board**. This is the `read_board` protocol action — invoke `board-superpowers:operating-kanban` with action `read_board`; it resolves the active projection per `<repo>/.board-superpowers/config.yml § kanban` / `modules.m10_kanban` (with v0.4.x legacy fallback) and returns the board state grouped by status. The owner + project number live in `.board-superpowers/config.yml` and are resolved by the active projection's reference. Parse the JSON output.
 
 2. **Group by Status field**. Produce a markdown summary in this format:
 
@@ -88,7 +88,7 @@ Goal: validate every open PR linked to a card against the three-section PR contr
 
 3. **For each violation**:
    - Comment on the PR pointing at the failing section + the fix template from the `board-superpowers:enforcing-pr-contract` skill's references.
-   - The card Status transition back to `In Progress` is a mutating action with action_id 6 (Status flip on an in-flight claim). Apply the 5-step sequence from "How mutating actions are handled" below.
+   - The card Status transition back to `In Progress` is a mutating action with action_id 6 (Status flip on an in-flight claim). The Status flip itself is the `transition_card` protocol action — invoke `board-superpowers:operating-kanban` with action `transition_card` and target status `In Progress`; apply the 5-step sequence from "How mutating actions are handled" below.
 
 4. **For each compliant PR**: no action — leave the card in `In Review` for human merge approval.
 

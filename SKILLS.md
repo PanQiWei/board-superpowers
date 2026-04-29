@@ -209,6 +209,11 @@ means for board-superpowers" #3 for the full rationale.
   (paired same-PR per the change-impact-matrix row in
   `docs/architecture/AGENTS.md`).
 - **Composes (atomic)**: `board-canon`,
+  `board-superpowers:operating-kanban` (`read_board` for daily
+  briefing + triage Blocked scan, `transition_card` for
+  review-queue Status flips back to `In Progress` and triage
+  cancel-claim, `create_card` for intake card creation —
+  protocol-action dispatch over the active projection),
   `enforcing-pr-contract` (Review Queue contract-violation
   check), `classifying-actions` + `auditing-actions` (every
   mutating action).
