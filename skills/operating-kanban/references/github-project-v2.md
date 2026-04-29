@@ -20,9 +20,9 @@ projection-specific behaviour.
   M10 stage persists into
   `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.<kanban-id>.projection`.
 - **`project_ref` shape**: `<owner>/<project-number>` — for example
-  `PanQiWei/4`. Round-trip stable; the v1 GitHubProjectAdapter
-  projection (per ADR-0005 + ADR-0025) uses the same shape so
-  upgrade paths stay mechanical.
+  `PanQiWei/4`. Round-trip stable; the same shape is used uniformly
+  across this projection's invocations so upgrade paths stay
+  mechanical.
 - **`Card.key`**: the GitHub Issue number rendered as a string —
   `"68"`, not the underlying GraphQL node ID. Per the Kanban
   Protocol § Identity contract, `Card.key` is the display-stable
@@ -112,7 +112,9 @@ response the dispatcher hands back to the caller), **idempotency**
 
 - **Invocation**: the canonical implementation is
   `scripts/claim-card.sh`, which performs the four-step claim
-  transaction per ADR-0002 + ADR-0026's branch-naming form:
+  transaction (the branch-naming convention `claim/<kanban-id>-<key>-<title-slug>`
+  is the atomic single-point-of-truth claim primitive — `git push`
+  of that branch is what wins or loses a race between Consumers):
   `transition_card` to `In Progress` → create worktree at
   `$BOARD_SP_WORKTREE_DIR/<repo>/<branch>` → create branch
   `claim/<kanban-id>-<key>-<title-slug>` → `git push origin
@@ -171,9 +173,9 @@ response the dispatcher hands back to the caller), **idempotency**
 
 ## Setup capabilities
 
-Per ADR-0027 § Decision 1, this projection declares the following
-**setup capabilities**, which the M3 stage predicate evaluator
-consumes via
+Per the projection setup-capability declaration contract, this
+projection declares the following **setup capabilities**, which the
+M3 stage predicate evaluator consumes via
 `applicable_when: kanban_projection_capability: <name>`. v0.5.0
 declares two; future projections may declare more or fewer.
 
@@ -192,14 +194,14 @@ declares two; future projections may declare more or fewer.
   exits 0 with no mutation. Re-running is safe and cheap.
 - **Error modes**: the script exits `1` on any underlying `gh`
   error (auth, network, repo not found). The M3 stage observes
-  the exit code and propagates as a stage failure per ADR-0020;
-  `not-applicable` is emitted only when the predicate evaluator
-  determines the capability is not declared, which never happens
-  for v0.5.0 `github-project-v2` (the capability is always
-  declared).
-- **Maps to**: M3 stage `m3.repo.ensure-labels` (per ADR-0022;
-  the canonical M3 stage name is pending #67's paired-PR rebase
-  per ADR-0027 § 4).
+  the exit code and propagates as a stage failure under the
+  bootstrap-stage applicability model; `not-applicable` is
+  emitted only when the predicate evaluator determines the
+  capability is not declared, which never happens for v0.5.0
+  `github-project-v2` (the capability is always declared).
+- **Maps to**: M3 stage `m3.repo.ensure-labels` (the canonical M3
+  stage name is finalized in the paired-PR rebase that lands
+  alongside this skill).
 
 ### `validate-status-field`
 
@@ -211,15 +213,17 @@ declares two; future projections may declare more or fewer.
   options, then diffs the returned set against the canonical six.
 - **Idempotency**: pure read. Validation never mutates the field.
 - **Error modes**: when the diff finds a missing canonical
-  option, the stage surfaces the diff to the architect per
-  ADR-0023's config-item elicitation protocol — the architect
-  then either adds the missing option in the GitHub Project UI
-  or accepts a custom-state-folding decision per the Kanban
-  Protocol § "Custom-state folding". Validation that succeeds
-  emits no architect-visible output.
-- **Maps to**: M3 stage `m3.repo.validate-status-field` (per
-  ADR-0022; canonical M3 stage name pending #67's rebase per
-  ADR-0027 § 4).
+  option, the stage surfaces the diff to the architect via the
+  bootstrap-stage config-item elicitation protocol — the
+  architect then either adds the missing option in the GitHub
+  Project UI or accepts a custom-state-folding decision (the
+  Kanban Protocol allows folding a backend-specific status to one
+  of the six canonical statuses, which surfaces a stderr warning
+  but never fails dispatch). Validation that succeeds emits no
+  architect-visible output.
+- **Maps to**: M3 stage `m3.repo.validate-status-field` (the
+  canonical M3 stage name is finalized in the paired-PR rebase
+  that lands alongside this skill).
 
 ## Failure-mode overrides
 
@@ -256,11 +260,7 @@ projection-specific overrides:
   this file's overrides extend.
 - `backend-selection.md` — how the active projection is resolved
   at runtime from `settings.yml § modules.m10_kanban`.
-- ADR-0027 § Decision 1 — the projection setup-capability
-  declaration contract this file's § "Setup capabilities"
-  satisfies.
-- ADR-0022 § M3 — original M3 stage definitions (canonical names
-  pending #67's rebase per ADR-0027 § 4).
-- `docs/architecture/0005-contracts/00-kanban-protocol.md` §
-  "Setup capabilities" — protocol-level contract for the per-
-  projection capability registry.
+
+---
+
+**Maintainer reference (board-superpowers repo only; not shipped with plugin install)**: the projection setup-capability declaration contract, the M3 stage definitions, and the protocol-level contract for the per-projection capability registry originate in the maintainer-side ADR record (ADR-0022, ADR-0027) and the protocol contract page `docs/architecture/0005-contracts/00-kanban-protocol.md`. This file's prose IS self-contained — the maintainer pointer is for plugin maintainers wanting to update the projection with full design context.

@@ -84,9 +84,9 @@ Bootstrap is mostly R-class (see "Why bootstrap is mostly R-class" above). Archi
 ### Action ID catalog (bootstrap actions)
 
 The 9 mutating bootstrap actions are integer-tracked in the
-200-range action_id namespace (see
-[`docs/architecture/0005-contracts/06-audit-log-schema.md`](../../docs/architecture/0005-contracts/06-audit-log-schema.md)
-"Bootstrap rows — 200–208"). Numbering follows execution order.
+200-range action_id namespace (Producer rows occupy 1-14,
+Consumer rows occupy 100-113, Bootstrap rows occupy 200-208).
+Numbering follows execution order.
 
 ```
 200 → bootstrap-host                  (host manifest write; mode 0644, ts + version)
@@ -117,10 +117,13 @@ not yet exist (step 2g creates it) and earlier sub-steps (2e
 credentials, 2f venv) are prerequisites of step 2g. The flush worker
 (`audit-flush-pending.sh`) reconciles outbox rows into the DB at
 bootstrap end (fast-path), via the audit-log-write.sh opportunistic
-guard, or via the SessionStart hook observer dep-alert. See
-[`docs/architecture/0005-contracts/06-audit-log-schema.md`](../../docs/architecture/0005-contracts/06-audit-log-schema.md)
-§ "Migration model" + § "Bootstrap rows — 200–208" for the full
-contract.
+guard, or via the SessionStart hook observer dep-alert. The full
+migration-model contract is: rows are emitted with `status: pending`
++ a generated `event_uuid` + `retry_count: 0` + `pending_since`
+timestamp into the per-repo jsonl outbox; the flush worker scans the
+outbox file, attempts to INSERT each row into `audit_log`, and on
+success removes the row from the outbox. Failed inserts increment
+`retry_count` and stay in the outbox for the next flush attempt.
 
 Producer rows (1-14) and Consumer rows (100-113) do NOT use
 `--mode bootstrap-pending` — they emit directly via the standard

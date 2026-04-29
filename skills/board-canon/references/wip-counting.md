@@ -15,7 +15,7 @@ A card belongs to a Consumer if they pushed the card's claim branch (per the par
 
 ## Multi-kanban WIP semantics
 
-When multiple kanbans are registered (per ADR-0026 § "WIP semantics" + 00-kanban-protocol.md § "WIP semantics — per-actor cross-kanban total"), the WIP formula `In Progress + suspended + In Review` is governed by two caps that BOTH must hold for any transition that would increment WIP:
+When multiple kanbans are registered (the registry shape is `modules.m10_kanban.kanbans: [{ id, projection, project_ref, role, wip_limit_local? }, ...]` in `<repo>/.board-superpowers/settings.yml`), the WIP formula `In Progress + suspended + In Review` is governed by two caps that BOTH must hold for any transition that would increment WIP:
 
 - **Primary cap — per-actor cross-kanban total.** Default WIP cap is per-actor and **summed across all kanbans the actor has work in** — architect attention is a single budget that does not partition across kanbans. A Consumer holding 3 cards in `primary` and 2 cards in `legal` has WIP=5, not WIP=3 + WIP=2 separately. The cap is the global `modules.m5_repo_configuration.wip_limit` in `<repo>/.board-superpowers/settings.yml`.
 - **Additional cap (optional) — per-kanban local.** Each kanban entry may set `modules.m10_kanban.kanbans[].wip_limit_local: N` as an additional per-kanban cap. The kanban-local count must not exceed this AND the global cap. The local cap is enforced only when set; absence means only the primary cap applies for that kanban.

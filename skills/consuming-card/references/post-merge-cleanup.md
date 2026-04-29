@@ -69,6 +69,7 @@ removal on either platform.
   close-out.
 - `scripts/install-post-merge-cron.sh` — installs and
   uninstalls the OS-level scheduler entry.
-- `docs/architecture/0005-contracts/03-config-schemas.md`
-  § `post_merge_cleanup` — the config block the architect edits
-  to enable auto-cron.
+- `<repo>/.board-superpowers/config.yml` § `post_merge_cleanup`
+  — the config block the architect edits to enable auto-cron.
+  The block has the shape `{ enabled: bool, interval_minutes:
+  int, timeout_hours: int }`.

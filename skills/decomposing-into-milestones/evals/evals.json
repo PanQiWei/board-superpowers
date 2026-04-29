@@ -1,7 +1,7 @@
 {
   "skill_name": "decomposing-into-milestones",
   "schema_version": "skill-creator-v1",
-  "notes": "Test prompts only; assertions + benchmark runs land in a follow-up PR. Skill type is pattern (output-shaped per .skill-meta.yaml: turns design artifact → batch of INVEST-compliant Ready cards). Regime 2 — Eval matrix per SKILL_DEVELOPMENT.md § 'Testing skills'. Each prompt simulates a realistic decomposition input that exercises one or more of: SPIDR axis selection, vertical-slicing 4 anti-pattern refusal, INVEST 6-letter refusal, size calibration ceiling rule, cross-card dep graph construction.",
+  "notes": "Test prompts only; assertions + benchmark runs land in a follow-up PR. Skill type is pattern (output-shaped per .skill-meta.yaml: turns design artifact → batch of INVEST-compliant Ready cards). Each prompt simulates a realistic decomposition input that exercises one or more of: SPIDR axis selection, vertical-slicing 4 anti-pattern refusal, INVEST 6-letter refusal, size calibration ceiling rule, cross-card dep graph construction.",
   "evals": [
     {
       "id": 1,
@@ -30,7 +30,7 @@
     {
       "id": 5,
       "prompt": "I have 3 candidate cards: (1) 'Add user profile page with avatar', (2) 'Add OAuth sign-in', (3) 'Sign-in flow shows avatar in header'. Cards 1 and 2 don't reference each other in their bodies, but Card 3 needs both 1 and 2 done first. Is this batch ready for Step 8 batch create?",
-      "expected_output": "Not ready — INVEST-I (Independent) refusal: hidden cross-card coupling. Card 3 has hard dependencies on Cards 1 and 2 but does not declare them in its `## Dependencies` section. Refuse the batch and require Card 3's body to add: '- depends-on: #<Card-1>' and '- depends-on: #<Card-2>'. Optionally add reverse mirrors on Cards 1 and 2: '- depended-on-by: #<Card-3>' (informational). Without explicit declaration, the Producer's Backlog → Ready transition gate (per ADR-0006 row 5 precondition + board-canon § 'State machine') cannot determine Card 3 is unready when Cards 1 or 2 are still in Backlog. Re-synthesize Step 7 batch with the dep graph corrected.",
+      "expected_output": "Not ready — INVEST-I (Independent) refusal: hidden cross-card coupling. Card 3 has hard dependencies on Cards 1 and 2 but does not declare them in its `## Dependencies` section. Refuse the batch and require Card 3's body to add: '- depends-on: #<Card-1>' and '- depends-on: #<Card-2>'. Optionally add reverse mirrors on Cards 1 and 2: '- depended-on-by: #<Card-3>' (informational). Without explicit declaration, the Producer's Backlog → Ready transition gate (board-canon's state machine treats explicit `depends-on:` lines as the precondition) cannot determine Card 3 is unready when Cards 1 or 2 are still in Backlog. Re-synthesize Step 7 batch with the dep graph corrected.",
       "files": []
     }
   ]

@@ -9,9 +9,9 @@ the helper's marker-scan does not match against them; see
 form, and `scripts/lib/common.sh:bsp_inject_routing_block` for the
 matcher).
 
-**Injection contract** (per
-`docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md`
-§ 1.5.2 step 4 + `scripts/lib/common.sh:bsp_inject_routing_block`):
+**Injection contract** (the routing-block injection step of the
+per-repo bootstrap, implemented in
+`scripts/lib/common.sh:bsp_inject_routing_block`):
 
 1. The injection helper reads THIS file and locates the fence
    sentinels — `<!-- routing-block:start -->` and
@@ -172,7 +172,5 @@ When updating the routing block content above, remember:
   them silently — `routing_blocks[]` for that target is omitted. This
   is what lets the "AGENTS.md is the SoT, CLAUDE.md is `@AGENTS.md`"
   pattern coexist with dual-file injection. See
-  `scripts/lib/common.sh:bsp_inject_routing_block` (Stub-redirect
-  early-out section) and
-  `docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md`
-  § 1.5.2 step 4 "Stub-redirect target".
+  `scripts/lib/common.sh:bsp_inject_routing_block` (the Stub-redirect
+  early-out section) for the precise matcher rules.

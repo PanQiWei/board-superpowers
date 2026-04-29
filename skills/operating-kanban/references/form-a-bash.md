@@ -29,7 +29,7 @@ The v0.5.0 GitHub Project v2 projection chose Form A because `gh` is stable, scr
 
 ### Exit codes
 
-Per ADR-0007 plugin runtime constraints, every helper script invoked through Form A obeys strict exit-code conventions:
+Every helper script invoked through Form A obeys strict exit-code conventions (the plugin treats stdout as data and exit code as the typed-failure-class signal — callers never parse stdout to learn whether the call succeeded):
 
 | Code | Meaning |
 |------|---------|
@@ -76,7 +76,7 @@ When in doubt, the reference file's `Idempotency` row in `action-dispatch.md` is
 
 ## Worktree-relative paths
 
-Per ADR-0003 (worktree discipline) every Form A invocation runs from inside a worktree, not from the repo root. Helper scripts therefore:
+Every Form A invocation runs from inside a worktree, not from the repo root (board-superpowers's worktree discipline parks the repo root permanently on `main` and runs all feature work in `git worktree add`-created worktrees so multiple parallel sessions cannot share a HEAD). Helper scripts therefore:
 
 - Resolve paths relative to `git rev-parse --show-toplevel` (the worktree root), NOT relative to `bsp_plugin_root` (the plugin install dir, host-shared).
 - Read `<repo>/.board-superpowers/settings.yml` at the worktree root, NOT at the host-shared install dir.
@@ -89,6 +89,5 @@ The convention is uniform across maintainer worktrees and Consumer worktrees; th
 - `action-dispatch.md` — per-action dispatch shape, parameterized by Form. The Form A column is what this file's conventions concretize.
 - `backend-selection.md` — how the active projection is resolved before any Form A invocation runs.
 - `failure-mode-dispatch.md` — how Form A exit codes 1/2/3/4 map to caller-visible surfacing tiers.
-- ADR-0007 — plugin runtime constraints (strict exit codes; stdout-as-data convention).
 - `scripts/lib/common.sh` — the `bsp_*` helper implementations.
 - The v0.5.0 reference projection: `references/github-project-v2.md` (lands in this PR's projection-reference batch; documents the per-action `gh` invocations per Form A conventions above).

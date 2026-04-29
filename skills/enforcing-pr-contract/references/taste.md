@@ -22,7 +22,7 @@ The line: an automated-verification entry should be something a future maintaine
 |---------------|--------------|
 | `[ ] Open /board-superpowers:consuming-card  — confirm autocomplete shows [card-number]` | `[ ] Test the new feature` |
 | `[ ] Trigger the `daily` routine via "what should I work on" in a fresh session — confirm the briefing format from references/daily.md` | `[ ] Make sure it works` |
-| `[ ] Read SKILL_DEVELOPMENT.md § A9 with fresh eyes — confirm the diagnostic regex catches what you'd expect a Producer to catch by hand` | `[ ] Looks correct` |
+| `[ ] Re-read the relevant skill-authoring section with fresh eyes — confirm the diagnostic regex catches what you'd expect a Producer to catch by hand` | `[ ] Looks correct` |
 | Each entry is a concrete user action with a concrete observable outcome | Each entry is "verify the thing is good" without saying what good looks like |
 
 The line: a human-verification entry should give the reviewer a 30-second-or-less concrete task. If the reader has to interpret what "test the feature" means, you've shifted the design burden onto them.

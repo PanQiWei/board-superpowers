@@ -15,7 +15,7 @@ This skill is atomic. It MUST NOT call any other same-plugin skill. It is a leaf
 
 ## The eight protocol actions
 
-Every board-touching molecular skill issues at most these eight named actions. The semantic contracts (intent / pre-condition / post-condition / failure modes / idempotency) are pinned in [`docs/architecture/0005-contracts/00-kanban-protocol.md`](../../docs/architecture/0005-contracts/00-kanban-protocol.md) § "Action contracts"; this skill dispatches them per the active projection.
+Every board-touching molecular skill issues at most these eight named actions. Each action carries a contract — intent, pre-condition, post-condition, failure modes, idempotency property — that holds uniformly across every projection; this skill dispatches the action per the active projection while preserving the contract.
 
 | Action | Intent (one line) | Compliance level |
 |--------|-------------------|------------------|
@@ -27,6 +27,18 @@ Every board-touching molecular skill issues at most these eight named actions. T
 | `release_claim` | Release Consumer ownership; delete the claim branch. | L2 |
 | `link_pr_to_card` | Establish bidirectional discoverability between a Card and a PR. | L2 |
 | `comment_on_card` (OPTIONAL) | Append a textual exchange entry on a card. | L1 |
+
+The compliance level column tells callers which actions to expect from a projection: L0 projections are read-only (only `read_board` + `read_card`); L1 projections add card creation, status transitions, and comments; L2 projections add the full claim / release / PR-link suite needed for the Consumer flow. A projection that advertises a lower level than the action requires is refused at dispatch time.
+
+Each action's invariants (the contract surface every Form A / B / C implementation must honor):
+
+- `read_board` / `read_card`: pure reads, no mutations, idempotent. Pre-condition: caller has read access on the backend. Post-condition: returns the canonical-status snapshot — never the raw backend status; status folding happens in the projection's reference file.
+- `create_card`: lands a card in `Backlog`. Pre-condition: card body schema is valid (per `board-canon`). Post-condition: card exists on the backend with a stable identifier; subsequent `read_card` of that identifier returns the body. NOT idempotent — repeated calls create duplicate cards.
+- `transition_card`: moves a card between canonical statuses. Pre-condition: source-status → target-status is a legal edge in `board-canon`'s state machine; the caller has already consulted `classifying-actions` (autonomy) and `auditing-actions` (audit row). Post-condition: subsequent `read_card` returns the new status. Idempotent on the (card, target-status) pair: a transition to a status the card already has is a no-op success.
+- `claim_card`: acquires exclusive Consumer ownership. Pre-condition: card is in `Backlog` or `Ready`; no existing claim branch for the card; caller's WIP under the cap. Post-condition: claim branch `claim/<N>-<slug>` exists on the remote; card status is `In Progress`. NOT idempotent — a second claim by the same actor on the same card surfaces a typed conflict.
+- `release_claim`: releases Consumer ownership. Pre-condition: caller is the current claimant. Post-condition: claim branch is gone; card returns to its pre-claim status (typically `Ready`). Idempotent: calling on an already-released card is a no-op success.
+- `link_pr_to_card`: establishes bidirectional discoverability. Pre-condition: PR exists; card exists; caller has rights on both. Post-condition: card body contains a PR link AND PR body contains a card link (per `enforcing-pr-contract`). Idempotent: repeated calls produce the same final state.
+- `comment_on_card` (OPTIONAL): appends a comment. Pre-condition: card exists. Post-condition: the comment is visible on the card. NOT idempotent — repeated calls create duplicate comments. Projections that don't support free-text comments may decline this action with a typed `not-supported` response.
 
 Per-action invocation patterns (how each action maps to a concrete bash / MCP / REST call on each backend) live in `references/action-dispatch.md` and the per-projection reference files in this same `references/` directory.
 
@@ -56,7 +68,7 @@ Per-form dispatch conventions (stdout / stderr / exit-code expectations for Form
 
 ## Setup capabilities — the bootstrap-side dispatch
 
-Every projection also declares a list of **setup capabilities** — one-time board-preparation operations the projection can perform during the architect's bootstrap flow (creating the canonical label set, validating the backend's status taxonomy, and similar). The semantic contract for setup capabilities lives in [`docs/architecture/0005-contracts/00-kanban-protocol.md`](../../docs/architecture/0005-contracts/00-kanban-protocol.md) § "Setup capabilities"; this skill owns the registry side.
+Every projection also declares a list of **setup capabilities** — one-time board-preparation operations the projection can perform during the architect's bootstrap flow (creating the canonical label set, validating the backend's status taxonomy, and similar). A setup capability has a stable name, an idempotent invocation contract (re-running it on an already-prepared backend is a no-op success), and a typed failure surface that the bootstrap stage executor handles uniformly across projections. This skill owns the registry side: which projection declares which capabilities, and how the bootstrap stage predicate evaluator looks up a capability before dispatching it.
 
 How the registry is consumed:
 

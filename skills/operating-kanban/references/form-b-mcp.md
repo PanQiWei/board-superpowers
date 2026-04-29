@@ -18,7 +18,7 @@ Linear is the canonical Form B candidate at v1.x: Linear's MCP server is well-ma
 
 ## Plugin-manifest registration
 
-The plugin manifest (`.claude-plugin/plugin.json` for CC; `.codex-plugin/plugin.json` for Codex CLI) registers the MCP server statically per platform conventions. The convention is documented in [`PLUGIN_DEVELOPMENT.md`](../../../PLUGIN_DEVELOPMENT.md) § "MCP server registration"; this section captures the Form-B-specific contract:
+The plugin manifest (`.claude-plugin/plugin.json` for CC; `.codex-plugin/plugin.json` for Codex CLI) registers the MCP server statically per platform conventions (CC reads `mcpServers` blocks; Codex CLI reads `mcp_servers` blocks; both honor `userConfig.sensitive` for credential keys). This section captures the Form-B-specific contract:
 
 - The MCP server registration is **conditional on the projection being active** — registering an unused MCP server consumes architect tool budget. The plugin manifest references the server unconditionally; the projection reference file owns the gating ("only invoke these tools when the active projection is `linear`").
 - `userConfig.sensitive` fields name the per-projection credential keys. CC stores them in the macOS keychain; Codex stores them via `codex mcp login` per the Codex CLI MCP credential flow.
@@ -42,12 +42,12 @@ Per CC's MCP runtime conventions and Codex CLI's MCP login flow:
 - The projection reference file documents the credential field names and their lifecycle (one-shot setup at bootstrap, refresh-on-failure for OAuth, etc.).
 - `<repo>/.board-superpowers/settings.yml` MAY reference the credential field NAMES but MUST NEVER inline the secret values — that would leak through git, audit log dumps, and `cat settings.yml` shell sessions.
 
-Bootstrap-side wiring lands through `bootstrapping-repo`'s setup-capability dispatch (per ADR-0027 § Decision 3): a Form-B projection declares a `provision-mcp-credentials` capability, and the bootstrap stage executor dispatches through this skill into the projection's reference-file procedure for the credential prompt.
+Bootstrap-side wiring lands through `bootstrapping-repo`'s setup-capability dispatch: a Form-B projection declares a `provision-mcp-credentials` capability, and the bootstrap stage executor dispatches through this skill into the projection's reference-file procedure for the credential prompt. The same dispatch convention applies to every per-projection setup capability — the bootstrap stage executor never invokes a backend directly; it always goes through this skill's per-projection reference file.
 
 ## Lifecycle — install → registration → discovery → invocation
 
 1. **Plugin install** — the plugin's manifest is read by the platform's plugin loader; `.mcp.json` server entries are registered with the MCP runtime.
-2. **First-time bootstrap** — when the architect picks a Form-B projection at the M10 stage, the bootstrap flow runs the `provision-mcp-credentials` setup capability per ADR-0027 § 3 to populate `userConfig.sensitive` keys.
+2. **First-time bootstrap** — when the architect picks a Form-B projection at the M10 stage, the bootstrap flow runs the `provision-mcp-credentials` setup capability (dispatched through this skill's projection reference file) to populate `userConfig.sensitive` keys.
 3. **Tool discovery** — the platform's MCP runtime advertises the registered tools to the model on session start. The dispatch layer's `mcp__<server>__<tool>` references resolve at call time.
 4. **Invocation** — every Form-B protocol-action dispatch issues exactly one MCP tool call; the response is parsed per the projection reference file.
 
@@ -87,6 +87,8 @@ Form B failures arrive as MCP tool-call errors with structured error codes, NOT 
 - `form-a-bash.md` — the comparable contract for the v0.5.0-live Form A projection.
 - `form-c-rest.md` — the third invocation form, for when neither CLI nor MCP fits.
 - `failure-mode-dispatch.md` — failure surfacing across all three forms.
-- [`PLUGIN_DEVELOPMENT.md`](../../../PLUGIN_DEVELOPMENT.md) § "MCP server registration" — platform-level MCP wiring.
-- ADR-0027 § Decision 3 — bootstrap-side dispatch through projection reference files; the same conventions apply to Form B's `provision-mcp-credentials` capability.
 - The v1.x reference projection (planned): `references/linear.md` — Linear's MCP server projection, the first Form B instance.
+
+---
+
+**Maintainer reference (board-superpowers repo only; not shipped with plugin install)**: platform-level MCP wiring conventions and the bootstrap-side dispatch design originate in maintainer-side docs (`PLUGIN_DEVELOPMENT.md` § "MCP server registration", ADR-0027). This file's prose is self-contained — the maintainer pointer is for plugin maintainers wanting full design context, not for downstream agents.

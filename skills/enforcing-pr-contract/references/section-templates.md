@@ -12,7 +12,7 @@ Concrete examples per card type. Parent `SKILL.md` shows the canonical templates
 
 ## Retro Notes
 
-- The cross-link between `SKILL_DEVELOPMENT.md` and `SKILLS.md` was easy to miss when adding the new metadata convention; the next time we add a project-wide concept, search both docs upfront.
+- The cross-link between two governing source-of-truth docs was easy to miss when adding the new metadata convention; the next time we add a project-wide concept, search both docs upfront.
 ```
 
 (Human Verification TODO omitted — no UI surface)
@@ -33,7 +33,7 @@ Concrete examples per card type. Parent `SKILL.md` shows the canonical templates
 
 ## Retro Notes
 
-- The skill's `description` had to be made significantly more "pushy" than initial draft to avoid undertriggering — the empirical pattern in `SKILL_DEVELOPMENT.md` § "description = WHEN, not WHAT" was load-bearing.
+- The skill's `description` had to be made significantly more "pushy" than initial draft to avoid undertriggering — the canonical "description = WHEN, not WHAT" guidance was load-bearing.
 ```
 
 When this card's claim crossed a WIP-limit boundary, add an extra bullet to the `## Automated Verification` block above (regardless of card type) for Manager review-queue visibility:

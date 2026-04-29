@@ -1,6 +1,6 @@
 # operating-kanban — backend-selection reference
 
-Resolution algorithm that turns "the active kanban on this repo" into a concrete projection reference file under `references/<projection-id>.md`. Every protocol-action dispatch in this skill begins by running this algorithm; setup-capability predicates run a parallel form of the same lookup. Per ADR-0027 § Decision 2 the algorithm reads `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`; per ADR-0026 § "Multi-kanban semantics" the registry is shaped as a `kanbans:` list with v1.0 length=1 carve-out.
+Resolution algorithm that turns "the active kanban on this repo" into a concrete projection reference file under `references/<projection-id>.md`. Every protocol-action dispatch in this skill begins by running this algorithm; setup-capability predicates run a parallel form of the same lookup. The algorithm reads `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`; the registry is shaped as a `kanbans:` list with a v1.0 length=1 carve-out (multi-kanban semantics are reserved in the schema but not yet wired in the runtime).
 
 ## Inputs
 
@@ -55,12 +55,12 @@ The function returns the kanban entry plus the path to its projection reference 
 
 ## Composite-key resolution `(kanban_id, Card.key)`
 
-Per ADR-0026 § Multi-kanban semantics the unique card identity across a multi-kanban repo is the pair `(kanban_id, Card.key)` rather than `Card.key` alone. v0.5.0's length=1 carve-out means a bare `Card.key` is resolvable without ambiguity, so the protocol disambiguator below is OPTIONAL on length=1 repos:
+The unique card identity across a multi-kanban repo is the pair `(kanban_id, Card.key)` rather than `Card.key` alone. v0.5.0's length=1 carve-out means a bare `Card.key` is resolvable without ambiguity, so the protocol disambiguator below is OPTIONAL on length=1 repos:
 
-- **Length 1**: `[board-card:#42]` resolves to `(kanbans[0].id, "42")`. Bare `Card.key` references in PR bodies, commit messages, and chat are accepted. Note: `Card.key` is an opaque string per the protocol (00-kanban-protocol.md § Identity, github-project-v2.md: "GitHub Issue number rendered as a string"), NOT an integer — the resolver hands back the slug-decoded string regardless of backend. For non-GitHub projections (Linear, Jira), the key reference shape is `[board-card:#ENG-42]` and resolves to `(kanbans[0].id, "ENG-42")` — the resolver returns the opaque string unchanged.
+- **Length 1**: `[board-card:#42]` resolves to `(kanbans[0].id, "42")`. Bare `Card.key` references in PR bodies, commit messages, and chat are accepted. Note: `Card.key` is an opaque string (e.g., GitHub Issue number rendered as a string for the GitHub Project v2 projection), NOT an integer — the resolver hands back the slug-decoded string regardless of backend. For non-GitHub projections (Linear, Jira), the key reference shape is `[board-card:#ENG-42]` and resolves to `(kanbans[0].id, "ENG-42")` — the resolver returns the opaque string unchanged.
 - **Length >1 (v1.x roadmap)**: `[board-card:<kanban-id>:#42]` REQUIRED. Bare `[board-card:#42]` rejected at the parsing layer; the operating-kanban dispatch surfaces "ambiguous card key — qualify with kanban-id" and refuses to act.
 
-The discriminator MUST be a stable, repo-internal alias (`primary`, `legal`, etc.) — not the projection identifier, not the project_ref. The kanban entry's `id` field is the canonical alias; renaming it requires the architect to rewrite all in-flight branches and PR-body references, which is why ADR-0026 marks the alias `repo-internal alias; unique within this repo` rather than user-facing.
+The discriminator MUST be a stable, repo-internal alias (`primary`, `legal`, etc.) — not the projection identifier, not the project_ref. The kanban entry's `id` field is the canonical alias; renaming it requires the architect to rewrite all in-flight branches and PR-body references, which is why the alias is treated as repo-internal (unique within this repo) rather than user-facing.
 
 ## Fallback — pre-v0.5.0 settings (deprecation path)
 
@@ -86,19 +86,21 @@ Every failure surface MUST include the fix path so the operator can act without 
 
 | Symptom | Caller-visible behavior |
 |---------|-------------------------|
-| Settings file missing entirely. | Surface: "kanban not yet configured on this repo. Run the `bootstrapping-repo` SKILL on this repo (the architect can say 'set up board-superpowers' / 'first time on this repo') to create `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`. See ADR-0026 § Schema for the kanban entry shape." Do NOT invent a projection. |
-| `modules.m10_kanban.kanbans` empty list or absent on a fully-migrated repo. | Surface: "Configuration is empty: add at least one entry to `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.kanbans` — see ADR-0026 § Schema for the kanban entry shape (id / projection / project_ref / role). Run `bootstrapping-repo` to populate." |
+| Settings file missing entirely. | Surface: "kanban not yet configured on this repo. Run the `bootstrapping-repo` SKILL on this repo (the architect can say 'set up board-superpowers' / 'first time on this repo') to create `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`. The kanban entry shape is `{ id, projection, project_ref, role }`." Do NOT invent a projection. |
+| `modules.m10_kanban.kanbans` empty list or absent on a fully-migrated repo. | Surface: "Configuration is empty: add at least one entry to `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.kanbans` (each entry needs `id`, `projection`, `project_ref`, `role`). Run `bootstrapping-repo` to populate." |
 | `kanbans` length > 1 on v0.5.0. | Refuse with: "v1.0 carve-out violated: `kanbans` length=<N> but v0.5.0 supports length=1 only. Multi-kanban runtime is v1.x roadmap; for now keep `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.kanbans` to a single entry. Schema reservation is parser-tolerant but the runtime is not." |
-| Projection identifier names a projection not present in `references/`. | Refuse with: "unknown projection `<id>`. The plugin's shipped projections live in `skills/operating-kanban/references/<projection-id>.md`. Check (a) plugin version (the projection may have shipped in a later version), (b) the `projection:` field in the kanban entry of `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.kanbans`, (c) the projection registry in ADR-0026 § Projection identifiers. Do NOT silently fall back." |
-| Caller passes a `kanban_id` not present in the registry. | Refuse with: "unknown kanban `<id>` on this repo. Registered kanban ids: <list of `kanbans[*].id`>. To register a new kanban, edit `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.kanbans` (per ADR-0026 § Schema) and re-run `bootstrapping-repo`." |
+| Projection identifier names a projection not present in `references/`. | Refuse with: "unknown projection `<id>`. The plugin's shipped projections live in `skills/operating-kanban/references/<projection-id>.md`. Check (a) plugin version (the projection may have shipped in a later version) and (b) the `projection:` field in the kanban entry of `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.kanbans`. Do NOT silently fall back." |
+| Caller passes a `kanban_id` not present in the registry. | Refuse with: "unknown kanban `<id>` on this repo. Registered kanban ids: <list of `kanbans[*].id`>. To register a new kanban, edit `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.kanbans` and re-run `bootstrapping-repo`." |
 | Caller passes a `claim_branch` whose kanban-id segment fails to parse. | Refuse with: "malformed claim branch `<branch>` — expected shape `claim/<kanban-id>-<key>-<slug>`. The kanban-id segment must match a registered kanban id in `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.kanbans`. See `skills/board-canon/references/branch-naming.md` § Disambiguation invariants for the parser's allowlist rules." |
 
 Detailed surfacing tiers (silent / log-only / audit-row / surface-immediately) live in `failure-mode-dispatch.md`. This file documents the resolver itself; surfacing convention is one layer up.
 
 ## Related
 
-- ADR-0026 § "Multi-kanban semantics" — the schema this resolver reads.
-- ADR-0027 § Decision 2 — the predicate evaluator's parallel use of the same lookup for setup-capability dispatch.
 - `action-dispatch.md` — the next layer that consumes the resolver's output.
 - `failure-mode-dispatch.md` — the surfacing convention this resolver's failures plug into.
-- `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` — the runtime authority; schema in [`docs/architecture/0005-contracts/03-config-schemas.md`](../../../docs/architecture/0005-contracts/03-config-schemas.md) § "modules.m10_kanban block".
+- `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` — the runtime authority. The schema is `{ kanbans: [{ id, projection, project_ref, role, wip_limit_local? }, ...] }`.
+
+---
+
+**Maintainer reference (board-superpowers repo only; not shipped with plugin install)**: the multi-kanban semantics schema and predicate-evaluator dispatch design originate in the maintainer-side ADR record (ADR-0026 + ADR-0027); the schema for `modules.m10_kanban` is documented in `docs/architecture/0005-contracts/03-config-schemas.md`. This SKILL's prose IS self-contained — the maintainer pointer is for plugin maintainers wanting full design context, not for downstream agents executing against the SKILL body.

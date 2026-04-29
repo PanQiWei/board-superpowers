@@ -41,7 +41,7 @@ The dispatch layer issues the HTTP call through `curl --silent --show-error --fa
 - `--silent --show-error` suppresses progress noise but preserves error text on stderr.
 - Timeouts MUST be set explicitly (`--max-time 30` is the v1.x default; projections override per documented latency expectations).
 
-For complex JSON construction (multi-line GraphQL queries with string-escaped variable substitution), the dispatch layer falls back to a Python `urllib` wrapper invoked through the plugin's per-repo venv (per ADR-0007 + the per-repo venv discipline in [`AGENTS.md`](../../../AGENTS.md) § "Why per-repo venv"). Shell-only construction is preferred; Python wrappers are reserved for cases where shell quoting fails the test of sanity.
+For complex JSON construction (multi-line GraphQL queries with string-escaped variable substitution), the dispatch layer falls back to a Python `urllib` wrapper invoked through the plugin's per-repo venv (the plugin maintains an isolated `<repo>/.board-superpowers/.venv/` per repo so each repo's plugin-version pin and audit governance behavior stay independent — host-shared venvs would leak version skew across repos). Shell-only construction is preferred; Python wrappers are reserved for cases where shell quoting fails the test of sanity.
 
 ## Response parsing
 
@@ -99,5 +99,4 @@ Form C failures arrive as HTTP status codes plus response bodies. The dispatch l
 - `action-dispatch.md` — per-action dispatch shape, parameterized by Form. The Form C column is what this file concretizes.
 - `form-a-bash.md` / `form-b-mcp.md` — the comparable contracts for the other two forms.
 - `failure-mode-dispatch.md` — failure surfacing across all three forms.
-- ADR-0027 § Decision 3 — bootstrap-side dispatch through projection reference files; the conventions apply to Form C's setup capabilities (e.g., a `provision-rest-credentials` capability for OAuth bootstrap).
-- The first v1.x Form C reference projection (planned): potentially `references/linear-rest.md` (direct Linear GraphQL) or `references/jira-rest.md`, depending on which lands first.
+- The first v1.x Form C reference projection (planned): potentially `references/linear-rest.md` (direct Linear GraphQL) or `references/jira-rest.md`, depending on which lands first. Form C setup capabilities (e.g., a `provision-rest-credentials` capability for OAuth bootstrap) are dispatched through this skill's projection reference file using the same convention as Form A and Form B.

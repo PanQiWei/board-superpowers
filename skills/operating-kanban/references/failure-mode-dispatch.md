@@ -19,7 +19,7 @@ Tier A is the only tier where the dispatch layer itself retries. All other tiers
 |------|-----------|------|--------------|
 | `projection-not-set` | `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` is missing or has no kanbans entries; the legacy `config.yml § board` fallback also failed. | D | Not retryable. The caller routes the architect to bootstrapping-repo. |
 | `projection-id-unknown` | The kanban entry's `projection` field names a value with no matching `references/<projection-id>.md` file. | D | Not retryable. Indicates plugin version skew or registry corruption; architect reviews. |
-| `capability-not-declared` | Bootstrap stage predicate evaluator asks the active projection for a capability the projection does not declare. | (returns `not-applicable`, not failure) | N/A — this is normal flow per ADR-0020 stage applicability semantics. The bootstrap-stage executor skips the stage. |
+| `capability-not-declared` | Bootstrap stage predicate evaluator asks the active projection for a capability the projection does not declare. | (returns `not-applicable`, not failure) | N/A — `not-applicable` is normal flow in the bootstrap-stage applicability model, not a failure. The bootstrap-stage executor skips the stage. |
 | `compliance-gap` | The active projection's advertised compliance level (L0..L3) is below what the requested action requires (e.g., projection L0, caller asked for `claim_card` which needs L2). | D | Not retryable. Surface "this projection does not support claim_card". |
 | `form-a-cli-error` | Form A invocation exited 1 (generic failure) or 2 (pre-condition violation: illegal transition, refused claim, race-loss). Stderr captured. | C (generic) / D (pre-condition) | Not retryable on exit 2 (the violation is deterministic). Exit 1 retryable once with bounded backoff before promoting to tier C. |
 | `form-a-config-error` | Form A invocation exited 3 (configuration / dependency missing: gh not installed, gh not authenticated, project_ref invalid). | D | Not retryable. Architect installs / authenticates / fixes config. |
@@ -73,5 +73,3 @@ This is the same four-part surfacing convention used by `superpowers:systematic-
 - `form-a-bash.md` / `form-b-mcp.md` / `form-c-rest.md` — per-Form failure shapes that funnel into this taxonomy.
 - `auditing-actions` SKILL — the audit-row hand-off recipient.
 - `classifying-actions` SKILL — the autonomy-classification authority unchanged by failures.
-- ADR-0006 § D-AUTONOMY-1 — the autonomy matrix that callers consult before dispatching, never altered by failure.
-- ADR-0020 — stage-applicability semantics (`not-applicable` is normal flow, not a failure).
