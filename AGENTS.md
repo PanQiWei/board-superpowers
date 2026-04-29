@@ -67,23 +67,34 @@ all edits in the `AGENTS.md`, not in the `CLAUDE.md` shim.
 
 ### Cross-cutting reference docs
 
-The three large companion docs below are referenced by name —
+The companion docs below are referenced by name —
 **not loaded with `@`-prefix** — so they don't ride into every
 session's context. Open them on demand using `Read` (or its
 platform equivalent) when the work matches their scope. Each
 nested `AGENTS.md` above sends you to the relevant companion
 doc when its scope is touched.
 
+[`FEATURE_DESIGN_METHODOLOGY.md`](./FEATURE_DESIGN_METHODOLOGY.md)
+is the **upstream** of the other companion docs: it tells you
+**what artifacts to build** (which user-journey nodes warrant
+their own SKILL, which dissolve into nested sub-steps, which
+become thin router SKILLs); the others tell you **how to
+build a given artifact** once that decision is made. Read the
+methodology first when designing a new surface / specific
+role / new SKILL candidate; read the others when authoring
+the artifacts the methodology has approved.
+
 | Doc | When it applies |
 |-----|-----------------|
 | [`PLUGIN_DEVELOPMENT.md`](./PLUGIN_DEVELOPMENT.md) (~440 lines) | hook scripts, bash tooling, plugin manifest, dual-platform (CC + Codex CLI) contracts. |
 | [`MULTI_AGENT_DEVELOPMENT.md`](./MULTI_AGENT_DEVELOPMENT.md) (~700 lines) | subagent / agent-team / orchestration design, `Agent` tool / `SendMessage` / fan-out-fan-in. |
+| [`FEATURE_DESIGN_METHODOLOGY.md`](./FEATURE_DESIGN_METHODOLOGY.md) (~1000 lines) | analytical methodology — three-stage derivation pipeline (Stage 1 two-list user-journey enumeration; Stage 2 five requirement-layer dimensions J1–J5 = trigger-actor / trigger-carrier / autonomy class / D-META-1 strength / result destination; Stage 3 ROI function = (capability gap × frequency × failure cost) / (maintenance cost + routing complexity) producing three SKILL-form archetypes A/B/C); long-term plugin health signals (falsification test for SKILL existence, base-model-evolution-driven pruning); anti-patterns. Read **before** designing a new surface / specific role, **before** proposing a new SKILL outside an existing surface, when an existing SKILL feels mis-sized, and after major base-model upgrades. The other companion docs presuppose the methodology has produced a SKILL candidate. |
 | [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md) (~1290 lines) | skill authoring — frontmatter, body skeletons, anti-patterns, testing, `.skill-meta.yaml` schema. |
 | [`SETUP_STAGES_DEVELOPMENT.md`](./SETUP_STAGES_DEVELOPMENT.md) (~700 lines) | setup-stages system — `scripts/stages-registry.yml`, `scripts/stages_lib/`, `scripts/stages-registry.schema.json`, `hooks/session-start.sh` lifecycle diff, `skills/bootstrapping-repo/`, the four partitioned `settings.yml` files. Read before adding/editing/removing a stage, before changing the 5-callable contract, before introducing a new `applicable_when` form, or before any spec change touching § 1.5 (Bootstrap surface redesign). The legacy filename `BOOTSTRAP_STAGES_DEVELOPMENT.md` is a one-line shim that redirects here. |
 | [`BOARD_DEVELOPMENT.md`](./BOARD_DEVELOPMENT.md) (~600 lines) | board / card / Kanban Protocol layer — `docs/architecture/0005-contracts/00-kanban-protocol.md`, ADR-0025 + ADR-0026, `skills/board-canon/`, the planned `skills/operating-kanban/`, `scripts/claim-card.sh`, the eight protocol actions, six canonical statuses, multi-kanban semantics, flat-Card hierarchy + display-only metadata, AI-native concept hygiene anchors. Read before editing the Kanban Protocol document, before authoring/changing `board-canon` or `operating-kanban`, before adding a new backend projection (Linear / Jira / others), or before touching multi-kanban schema / kanban lifecycle / branch naming / claim primitive. § 7 "Setup-stages bridge" documents how the board layer meets `SETUP_STAGES_DEVELOPMENT.md`'s M10 module. |
 
 **Do not "fix" these references back to `@`-prefix** — that
-change would force-load all five docs into every session and
+change would force-load all six docs into every session and
 is exactly the anti-pattern they themselves warn against.
 
 ### Doctrine
