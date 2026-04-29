@@ -230,6 +230,10 @@ means for board-superpowers" #3 for the full rationale.
 - **References folder**:
   `references/{handoff-to-superpowers,pr-template,surface-protocol,permission-boundary}.md`.
 - **Composes (atomic)**: `board-canon`,
+  `board-superpowers:operating-kanban` (`read_card` Step 2,
+  `claim_card` Step 3, `transition_card` Step 6 / 9.5,
+  `link_pr_to_card` Step 10 — protocol-action dispatch over
+  the active projection),
   `board-superpowers:enforcing-pr-contract` (Step 9.5
   card body sync + Step 10 PR submit; action_ids 112 and 113
   also audit via this path),
