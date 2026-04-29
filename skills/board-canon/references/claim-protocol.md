@@ -4,20 +4,20 @@ Conflict-resolution playbook that the parent `SKILL.md` § "Claim protocol" poin
 
 ## Two Consumers race the same card
 
-Scenario: Consumer A and Consumer B both decide to claim card #12 within seconds of each other.
+Scenario: Consumer A and Consumer B both decide to claim the same card (key `12`) within seconds of each other.
 
-1. **First push wins**. Whichever Consumer's `git push origin claim/12-...` reaches origin first is the canonical owner. The second push is rejected non-fast-forward (different parent commit).
+1. **First push wins**. Whichever Consumer's `git push origin <claim-branch>` (where `<claim-branch>` is the canonical `claim/<kanban-id>-<key-slug>-<title-slug>` form for that card) reaches origin first is the canonical owner. The second push is rejected non-fast-forward (different parent commit).
 2. **Loser detection**. The losing Consumer's `claim-card.sh` exits with a non-zero status; the body of the `consuming-card` skill catches this in its claim step and routes to "ask architect".
 3. **Loser cleanup**. The losing Consumer deletes their local worktree + branch. Status field is NOT reverted (it was set by the winner).
 4. **Optional yield**. The losing Consumer can either pick a different Ready card OR negotiate with the winner to take the card themselves (the winner deletes their claim, then the loser claims).
 
 ## Stale claim recovery
 
-Scenario: a Consumer claimed card #47 days ago, then went silent (closed the laptop, branch never pushed past the empty marker).
+Scenario: a Consumer claimed a card (key `47`) days ago, then went silent (closed the laptop, branch never pushed past the empty marker).
 
 1. **Detection**: the `managing-board` triage routine flags claims older than 72 hours with no commits beyond the claim marker.
 2. **Surface**: Producer notifies the original Consumer via card comment.
-3. **No-response policy**: after 7 days no-response, Producer can `git push origin --delete claim/47-...` to release the claim. Status field reverts to Ready in the same transaction.
+3. **No-response policy**: after 7 days no-response, Producer can `git push origin --delete <claim-branch>` to release the claim. Status field reverts to Ready in the same transaction.
 4. **Audit**: 2 entries — one for the proposal, one for the actual delete.
 
 ## Re-claim after release

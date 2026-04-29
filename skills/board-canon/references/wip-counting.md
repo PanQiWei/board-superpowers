@@ -11,7 +11,7 @@ WIP_count(consumer) =
   + |{cards | status == "In Review" AND PR.author == self AND PR.state == "open"}|
 ```
 
-A card belongs to a Consumer if they pushed the `claim/N-...` branch.
+A card belongs to a Consumer if they pushed the card's claim branch (per the parent SKILL § Branch naming).
 
 ## Edge cases
 
@@ -21,7 +21,7 @@ A "suspended" card is one a Consumer parked because of a deeper dependency or co
 
 ### Abandoned worktrees
 
-If a Consumer's local worktree is deleted but the `claim/N-...` branch still exists on origin, the card is still in "In Progress" and still counts. Recovery: either re-create the worktree (`git worktree add ... claim/N-...`) or release the claim via the `managing-board` triage routine.
+If a Consumer's local worktree is deleted but the card's claim branch still exists on origin, the card is still in "In Progress" and still counts. Recovery: either re-create the worktree (`git worktree add ... <claim-branch>`) or release the claim via the `managing-board` triage routine.
 
 ### Post-merge lag
 
