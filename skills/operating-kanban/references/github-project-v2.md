@@ -1,265 +1,283 @@
 # operating-kanban — github-project-v2 projection reference
 
-The Form A bash CLI projection of the Kanban Protocol for GitHub
-Project v2 backends. v0.5.0 ships this as the only live projection
-instance; second-projection authors (Linear, Jira, etc.) take this
-file as a reference shape for their own `references/<projection-id>.md`.
-
-## Form
-
-Form A (bash CLI). Invocation surface: `gh project` / `gh issue` /
-`gh api graphql` calls plus the `bsp_*` helper family from
-`scripts/lib/common.sh`. Stdin / stdout / exit-code conventions
-follow `form-a-bash.md` § "Invocation conventions" verbatim — this
-file refines them only where the GitHub backend imposes
-projection-specific behaviour.
+GitHub Project v2 projection (Form A — bash CLI). Reader is the runtime caller invoking a protocol action against this backend; this file is a paste-and-run reference. Each per-action section gives you the shell snippet, expected exit codes, idempotency note, and a worked-output example.
 
 ## Backend identity
 
-- **Projection ID**: `github-project-v2`. The literal string the
-  M10 stage persists into
-  `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.<kanban-id>.projection`.
-- **`project_ref` shape**: `<owner>/<project-number>` — for example
-  `PanQiWei/4`. Round-trip stable; the same shape is used uniformly
-  across this projection's invocations so upgrade paths stay
-  mechanical.
-- **`Card.key`**: the GitHub Issue number rendered as a string —
-  `"68"`, not the underlying GraphQL node ID. Per the Kanban
-  Protocol § Identity contract, `Card.key` is the display-stable
-  opaque string the agent uses in `[board-card:#68]` references.
-  GraphQL node IDs are projection-internal and never surface above
-  this file.
-- **Status field discovery**: a `ProjectV2SingleSelectField` named
-  exactly `Status`. The field ID is resolved on first call via
-  `bsp_gh_field_id <project-id> Status` and cached per session.
-- **Status options**: the six canonical states from the Kanban
-  Protocol (Backlog / Ready / In Progress / In Review / Done /
-  Blocked). Custom-state folding applies if a user-extended option
-  appears on the field — the option folds to `Backlog` with a
-  stderr warning, per the Kanban Protocol § "Custom-state folding"
-  contract. Folding never fails the dispatch.
+- **Projection ID**: `github-project-v2`. Recorded literally in `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.kanbans[].projection`.
+- **`project_ref` shape**: `<owner>/<project-number>`. Example: `PanQiWei/4`.
+- **`Card.key`**: the GitHub Issue number rendered as a string. Example: `"68"`. The agent uses this in `[board-card:#68]` references; GraphQL node IDs are projection-internal and never surface.
+- **Identity tuple**: `(kanban_id, Card.key)` — for the GitHub backend the tuple maps to `(kanban_id, issue_number)`. Example: `("primary", "68")` resolves to `https://github.com/PanQiWei/board-superpowers/issues/68` in project `PanQiWei/4`.
+- **Status field**: a `ProjectV2SingleSelectField` named exactly `Status` with the six canonical options (Backlog / Ready / In Progress / In Review / Done / Blocked). Field ID resolved on first call via `bsp_gh_field_id` and cached per session. Custom-state options on the field fold to `Backlog` with a stderr warning.
 
-## Action invocations
-
-Each protocol action below documents its **invocation pattern**
-(the exact `gh` / `bsp_*` shape), **return shape** (the structured
-response the dispatcher hands back to the caller), **idempotency**
-(whether a re-invocation with the same arguments is safe), and any
-**error semantics** beyond the generic exit-code mapping in
-`form-a-bash.md`.
+## Action procedures
 
 ### `read_board`
 
-- **Invocation**: `gh project item-list <project-number> --owner
-  <owner> --format json --limit <N>`. The dispatcher's helper
-  paginates internally when the project has more items than the
-  caller's `--limit`.
-- **Return**: list of card records `(key, title, status, labels,
-  url)`; ordering is GitHub's native creation order, callers sort
-  client-side if needed.
-- **Idempotency**: pure read.
-- **Errors**: exit `4` on rate-limit / 5xx (retryable per
-  `Retry-After`); exit `3` on missing `gh project` scope.
+To list every card on the board with its canonical status, do:
+
+```bash
+set -euo pipefail
+: "${BSP_PROJECT_REF:?missing}"  # e.g. PanQiWei/4
+owner="${BSP_PROJECT_REF%/*}"
+project_num="${BSP_PROJECT_REF##*/}"
+
+gh project item-list "$project_num" --owner "$owner" --format json --limit 500
+```
+
+- **Exit codes**: `0` success with JSON on stdout; `3` if `gh project` scope missing (re-auth: `gh auth refresh -s project`); `4` rate-limit (retry per `Retry-After` from stderr).
+- **Idempotency**: pure read; safe to repeat.
+- **On non-zero exit**: surface stderr verbatim per `failure-mode-dispatch.md` § form-a tier mapping.
+- **Worked example**: stdout is a JSON object with `.items[]`; pipe through `python3 -c 'import json,sys; [print(i["content"]["number"], i["content"]["title"], i["status"], sep="\t") for i in json.load(sys.stdin)["items"]]'` for tab-separated rows.
 
 ### `read_card`
 
-- **Invocation**: `gh issue view <key> --repo <owner>/<repo>
-  --json body,title,labels,state,url,createdAt,updatedAt`.
-- **Return**: full card record, including the `display_*`
-  parent / sub-issue fields when the Issue has sub-issues attached
-  via GitHub's tasklists feature.
+To fetch one card's full body and metadata, do:
+
+```bash
+set -euo pipefail
+: "${BSP_REPO:?missing}"  # owner/repo, e.g. PanQiWei/board-superpowers
+card_key="$1"
+
+gh issue view "$card_key" \
+  --repo "$BSP_REPO" \
+  --json body,title,labels,state,url,createdAt,updatedAt
+```
+
+- **Exit codes**: `0` success with JSON on stdout; `1` if the Issue does not exist; `2` if the Issue exists but is not on the Project.
 - **Idempotency**: pure read.
-- **Errors**: exit `2` when the Issue exists but is not on the
-  Project; exit `1` when the Issue does not exist.
+- **On non-zero exit**: surface stderr verbatim per `failure-mode-dispatch.md`. For exit `2`, the caller may want to also call `read_board` to confirm the project membership.
+- **Worked example**: stdout is a JSON object; `python3 -c 'import json,sys; print(json.load(sys.stdin)["title"])' < /dev/stdin` extracts the title.
 
 ### `create_card`
 
-- **Invocation**: two-call composite —
-  `gh issue create --repo <owner>/<repo> --title <title> --body
-  <body> --label <l1>,<l2>,...` followed by
-  `gh project item-add <project-number> --owner <owner> --url
-  <issue-url>`. The dispatcher reads the new Issue's number from
-  the first call's stdout and threads it into the second.
-- **Return**: the new `Card.key` (Issue number as string).
-- **Idempotency**: NOT idempotent. Re-running creates a duplicate
-  Issue. The caller's molecular skill guards against duplicate
-  creation by reading the board first; this projection does not
-  attempt deduplication.
-- **Errors**: exit `1` on title collision when the repo has the
-  duplicate-title pre-receive hook enabled (rare); exit `4` on
-  rate-limit during the `item-add` half (the Issue exists but is
-  not on the Project — caller retries `item-add` only).
+To land a new card in `Backlog`, do (two-call composite):
+
+```bash
+set -euo pipefail
+: "${BSP_REPO:?missing}"
+: "${BSP_PROJECT_REF:?missing}"
+title="$1"
+body_file="$2"  # path to the card body markdown
+labels="$3"     # comma-separated, e.g. "type:feature,size:M"
+
+# Step 1: create the Issue
+issue_url="$(gh issue create \
+  --repo "$BSP_REPO" \
+  --title "$title" \
+  --body-file "$body_file" \
+  --label "$labels")"
+
+# Step 2: add to the Project
+owner="${BSP_PROJECT_REF%/*}"
+project_num="${BSP_PROJECT_REF##*/}"
+gh project item-add "$project_num" \
+  --owner "$owner" \
+  --url "$issue_url"
+
+# Return the new Card.key (issue number from the URL)
+echo "${issue_url##*/}"
+```
+
+- **Exit codes**: `0` success; `1` if title collides under a duplicate-title pre-receive hook (rare); `4` rate-limit during `item-add` (Issue created but not added — caller retries the second call only).
+- **Idempotency**: NOT idempotent — re-running creates a duplicate Issue. Guard at the molecular layer by reading the board first.
+- **On non-zero exit between steps**: the Issue may exist while not yet on the project. Re-run `gh project item-add` only.
+- **Worked example**: stdout prints the new key on its own line, e.g. `127`.
 
 ### `transition_card`
 
-- **Invocation**: resolve the Status field's option ID via
-  `bsp_gh_field_option_id <project-id> Status <target-status>`,
-  resolve the project item ID via `bsp_gh_item_id <project-id>
-  <key>`, then
-  `gh project item-edit --project-id <project-id> --id <item-id>
-   --field-id <field-id> --single-select-option-id <option-id>`.
-- **Return**: `(success | refused | conflict)`. The dispatcher
-  layers the protocol-level legality check (per `board-canon`'s
-  state machine) on top of the GitHub-level call; refused
-  transitions never reach `gh`.
-- **Idempotency**: transitioning to the current status is a
-  successful no-op.
-- **Errors**: exit `2` on illegal protocol-level transition
-  (caught before `gh`); exit `4` on GitHub-side conflict (item
-  edited concurrently — caller re-reads and re-decides).
+To move a card to a new canonical status, do:
+
+```bash
+set -euo pipefail
+: "${BSP_PROJECT_REF:?missing}"
+card_key="$1"
+target_status="$2"  # one of: Backlog / Ready / In Progress / In Review / Done / Blocked
+
+owner="${BSP_PROJECT_REF%/*}"
+project_num="${BSP_PROJECT_REF##*/}"
+
+# Resolve the project + field + option IDs (cached per session)
+project_id="$(bsp_gh_project_id "$owner" "$project_num")"
+field_id="$(bsp_gh_field_id "$owner" "$project_num" Status)"
+option_id="$(bsp_gh_field_option_id "$owner" "$project_num" Status "$target_status")"
+item_id="$(bsp_gh_item_id "$owner" "$project_num" "$card_key")"
+
+gh project item-edit \
+  --project-id "$project_id" \
+  --id "$item_id" \
+  --field-id "$field_id" \
+  --single-select-option-id "$option_id"
+```
+
+- **Exit codes**: `0` success (including the no-op case where current status equals target); `2` for an illegal protocol-level transition (validate against the six-state machine before invoking — caller responsibility); `4` for GitHub-side conflict (item edited concurrently — caller re-reads and re-decides).
+- **Idempotency**: yes — transition to the current status is a no-op success.
+- **On non-zero exit**: surface stderr verbatim. For `4`, retry once after re-reading the card; if the conflict persists, route via `failure-mode-dispatch.md` tier C.
+- **Worked example**: silent success on stdout; stderr captures any GraphQL warnings.
 
 ### `claim_card`
 
-- **Invocation**: the canonical implementation is
-  `scripts/claim-card.sh`, which performs the four-step claim
-  transaction (the branch-naming convention `claim/<kanban-id>-<key>-<title-slug>`
-  is the atomic single-point-of-truth claim primitive — `git push`
-  of that branch is what wins or loses a race between Consumers):
-  `transition_card` to `In Progress` → create worktree at
-  `$BOARD_SP_WORKTREE_DIR/<repo>/<branch>` → create branch
-  `claim/<kanban-id>-<key>-<title-slug>` → `git push origin
-  <branch>` (the atomicity boundary). The push wins or loses the
-  race; the dispatcher reads `git ls-remote` after a loss to
-  surface who won.
-- **Return**: `(claim acquired | race lost | wip exceeded |
-  refused)`.
-- **Idempotency**: NOT idempotent against partial-failure
-  mid-transaction — a script crash between status flip and push
-  leaves the card in an `In Progress` state with no branch on
-  origin. Recovery is via `release_claim` + retry.
-- **Errors**: exit `2` on race-loss (another Consumer's push
-  arrived first); exit `2` on WIP cap exceeded (per
-  `board-canon`'s WIP formula).
+To acquire exclusive Consumer ownership and create the claim worktree, do:
+
+```bash
+set -euo pipefail
+card_key="$1"
+title="$2"
+kanban_id="${BSP_KANBAN_ID:-primary}"
+
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/claim-card.sh" \
+  --kanban-id "$kanban_id" \
+  --card-key "$card_key" \
+  --title "$title"
+```
+
+- The wrapper performs four steps in order: (1) `transition_card` to `In Progress`; (2) create worktree at `${BOARD_SP_WORKTREE_DIR:-$HOME/.config/superpowers/worktrees}/<repo>/claim/<kanban-id>-<card_key>-<slug>`; (3) create branch `claim/<kanban-id>-<card_key>-<slug>`; (4) `git push origin <branch>`. The push is the atomicity boundary — it wins or loses the race against other Consumers.
+- **Exit codes**: `0` claim acquired; `2` race-loss (another Consumer's push arrived first — read `git ls-remote` to surface the winner) or WIP cap exceeded.
+- **Idempotency**: re-claiming an already-claimed-by-self card is a no-op success. Re-claiming an already-claimed-by-another card returns race-loss.
+- **On non-zero exit**: surface stderr verbatim per `failure-mode-dispatch.md` tier D — the architect chooses whether to retry, override WIP, or pick a different card.
+- **Worked example**: stdout prints `claim acquired: <branch>` on success; stderr captures progress.
 
 ### `release_claim`
 
-- **Invocation**: composite — `git push origin --delete
-  claim/<kanban-id>-<key>-<title-slug>` to delete the remote
-  branch, plus `transition_card` back to `Ready` (the default;
-  callers may override the post-release status when releasing as
-  part of a `Done` merge). The composite-key `(kanban_id,
-  Card.key)` is preserved across release + re-claim, so a
-  released card stays addressable in the audit log and in
-  subsequent claim attempts.
-- **Return**: `(released | not held | branch already gone)`.
-- **Idempotency**: re-releasing an already-released claim is a
-  no-op; the second `git push --delete` returns "remote ref does
-  not exist" which the dispatcher treats as success.
+To release an active claim and delete the claim branch, do:
+
+```bash
+set -euo pipefail
+card_key="$1"
+kanban_id="${BSP_KANBAN_ID:-primary}"
+
+# Find and delete the claim branch on origin
+branch="$(git ls-remote --heads origin "claim/${kanban_id}-${card_key}-*" \
+  | awk '{sub("refs/heads/","",$2); print $2; exit}')"
+[ -n "$branch" ] && git push origin --delete "$branch"
+
+# Then flip status back (default: Ready) via the § transition_card recipe.
+```
+
+- **Exit codes**: `0` released; `git push --delete` of an already-deleted branch returns "remote ref does not exist" — treat as success.
+- **Idempotency**: yes — releasing an already-released claim is a no-op success.
+- **On non-zero exit**: surface stderr verbatim. Branch-already-gone is tier B (log-only, treat as success); other failures route per `failure-mode-dispatch.md`.
 
 ### `link_pr_to_card`
 
-- **Invocation**: PR-body trailer injection — the dispatcher
-  ensures the PR body contains `Closes #<key>` so GitHub's
-  auto-link / auto-close webhook chain fires on merge. The
-  trailer is idempotent: re-running checks for the trailer's
-  presence before appending. The Consumer's `enforcing-pr-contract`
-  Step 10 owns the PR-body authoring; this projection only
-  refines the trailer-shape contract for GitHub.
-- **Return**: `(linked | already linked | fallback inserted)`.
-- **Idempotency**: yes (trailer presence is checked before
-  appending).
+To link a PR to its card so the merge auto-closes the card, do:
 
-### `comment_on_card` (OPTIONAL)
+```bash
+set -euo pipefail
+pr_number="$1"
+card_key="$2"
 
-- **Invocation**: `gh issue comment <key> --repo <owner>/<repo>
-  --body <body>`.
-- **Return**: `(posted | length exceeded)`. GitHub's per-comment
-  size cap (65536 chars) is the only failure mode at the comment
-  layer; the dispatcher pre-checks length client-side and returns
-  `length exceeded` without firing `gh`.
-- **Idempotency**: NOT idempotent — each call posts a new
-  comment. The protocol marks `comment_on_card` itself as
-  not-idempotent, so callers do not retry on transient failures.
+# Read current PR body
+pr_body="$(gh pr view "$pr_number" --json body --jq .body)"
+
+# Idempotency check — skip append if trailer already present
+if printf '%s\n' "$pr_body" | grep -qE "^Closes #${card_key}\b"; then
+  echo "already linked"
+  exit 0
+fi
+
+# Append trailer and update
+new_body="$(printf '%s\n\nCloses #%s\n' "$pr_body" "$card_key")"
+gh pr edit "$pr_number" --body "$new_body"
+echo "linked"
+```
+
+- **Exit codes**: `0` success; `1` PR not found; `4` rate-limit.
+- **Idempotency**: yes — trailer presence is checked before appending. Repeated calls are safe.
+- **On non-zero exit**: surface stderr verbatim per `failure-mode-dispatch.md`.
+- **Worked example**: stdout prints `linked` (first run) or `already linked` (subsequent runs).
+
+### `comment_on_card`
+
+To append a comment on a card, do:
+
+```bash
+set -euo pipefail
+: "${BSP_REPO:?missing}"
+card_key="$1"
+body="$2"  # comment text; must be ≤ 65536 chars (GitHub limit)
+
+# Pre-check length client-side to avoid wasting an API call
+if [ "${#body}" -gt 65536 ]; then
+  echo "length exceeded" >&2
+  exit 2
+fi
+
+gh issue comment "$card_key" \
+  --repo "$BSP_REPO" \
+  --body "$body"
+```
+
+- **Exit codes**: `0` posted; `2` length exceeded (client-side guard); `4` rate-limit.
+- **Idempotency**: NO — each call posts a fresh comment. Do not retry on transient failures unless the caller has explicit dedup logic.
+- **On non-zero exit**: surface stderr verbatim per `failure-mode-dispatch.md`.
 
 ## Setup capabilities
 
-Per the projection setup-capability declaration contract, this
-projection declares the following **setup capabilities**, which the
-M3 stage predicate evaluator consumes via
-`applicable_when: kanban_projection_capability: <name>`. v0.5.0
-declares two; future projections may declare more or fewer.
-
 ### `ensure-labels`
 
-- **Purpose**: ensure the canonical board-superpowers label set
-  exists on the GitHub repository backing this Project. The label
-  set is declared in `scripts/setup-labels.sh`'s constants block.
-- **Invocation form**: Form A bash. The M3 stage executor calls
-  `scripts/setup-labels.sh` with `<owner>` and `<repo>` as
-  arguments. The script enumerates the canonical label set, calls
-  `gh label list --repo <owner>/<repo>` to detect missing
-  labels, then `gh label create` for each missing entry.
-- **Idempotency**: yes. A repo with all canonical labels already
-  present produces zero `gh label create` calls — the script
-  exits 0 with no mutation. Re-running is safe and cheap.
-- **Error modes**: the script exits `1` on any underlying `gh`
-  error (auth, network, repo not found). The M3 stage observes
-  the exit code and propagates as a stage failure under the
-  bootstrap-stage applicability model; `not-applicable` is
-  emitted only when the predicate evaluator determines the
-  capability is not declared, which never happens for v0.5.0
-  `github-project-v2` (the capability is always declared).
-- **Maps to**: M3 stage `m3.repo.ensure-labels` (the canonical M3
-  stage name is finalized in the paired-PR rebase that lands
-  alongside this skill).
+To ensure the canonical board-superpowers label set exists on the GitHub repository backing this Project, do:
+
+```bash
+set -euo pipefail
+: "${BSP_REPO:?missing}"  # owner/repo
+plugin_root="${CLAUDE_PLUGIN_ROOT:-$(bsp_plugin_root)}"
+
+bash "${plugin_root}/scripts/setup-labels.sh" "$BSP_REPO"
+```
+
+The wrapper script:
+
+1. Reads the canonical label set from its constants block.
+2. Calls `gh label list --repo "$BSP_REPO" --json name,color,description` and parses with `python3` to detect missing entries.
+3. For each missing entry, calls `gh label create --repo "$BSP_REPO" --name <n> --color <c> --description <d>`.
+4. For each present-but-drifted entry, calls `gh label edit --repo "$BSP_REPO" <n> --color <c> --description <d>`.
+5. Emits a summary on stdout: `created=<n>, updated=<n>, unchanged=<n>`.
+
+- **Idempotency**: yes — a repo with all canonical labels already in the correct shape produces zero `gh label create` / `edit` calls; exit `0` with `created=0, updated=0, unchanged=N`.
+- **Exit codes**: `0` success; `1` any underlying `gh` error (auth, network, repo not found).
+- **On non-zero exit**: surface stderr verbatim per `failure-mode-dispatch.md`. The bootstrap stage executor propagates as a stage failure.
 
 ### `validate-status-field`
 
-- **Purpose**: verify the GitHub Project's `Status` single-select
-  field contains all six canonical Status options (Backlog /
-  Ready / In Progress / In Review / Done / Blocked).
-- **Invocation form**: Form A bash. The M3 stage executor calls
-  `gh api graphql` with a query enumerating the Status field's
-  options, then diffs the returned set against the canonical six.
-- **Idempotency**: pure read. Validation never mutates the field.
-- **Error modes**: when the diff finds a missing canonical
-  option, the stage surfaces the diff to the architect via the
-  bootstrap-stage config-item elicitation protocol — the
-  architect then either adds the missing option in the GitHub
-  Project UI or accepts a custom-state-folding decision (the
-  Kanban Protocol allows folding a backend-specific status to one
-  of the six canonical statuses, which surfaces a stderr warning
-  but never fails dispatch). Validation that succeeds emits no
-  architect-visible output.
-- **Maps to**: M3 stage `m3.repo.validate-status-field` (the
-  canonical M3 stage name is finalized in the paired-PR rebase
-  that lands alongside this skill).
+To verify the GitHub Project's `Status` field contains all six canonical options, do:
+
+```bash
+set -euo pipefail
+: "${BSP_PROJECT_REF:?missing}"
+owner="${BSP_PROJECT_REF%/*}"; project_num="${BSP_PROJECT_REF##*/}"
+
+gh api graphql -f query='
+  query($owner:String!,$num:Int!){user(login:$owner){projectV2(number:$num){
+    field(name:"Status"){... on ProjectV2SingleSelectField{options{name}}}}}}
+' -F owner="$owner" -F num="$project_num" | python3 -c '
+import json,sys
+canon={"Backlog","Ready","In Progress","In Review","Done","Blocked"}
+opts={o["name"] for o in json.load(sys.stdin)["data"]["user"]["projectV2"]["field"]["options"]}
+missing=canon-opts; extra=opts-canon
+if missing: print("missing:",",".join(sorted(missing)),file=sys.stderr); sys.exit(2)
+if extra:   print("custom-state (folds to Backlog):",",".join(sorted(extra)),file=sys.stderr)
+print("ok")'
+```
+
+- **Idempotency**: pure read — validation never mutates the field.
+- **Exit codes**: `0` success (all six canonical options present); `2` missing canonical option (architect intervention required); `1` underlying `gh` error.
+- **On non-zero exit**: for exit `2`, surface the diff to the architect via the bootstrap-stage config-item elicitation protocol — the architect either adds the missing option in the GitHub Project UI or accepts a custom-state-folding decision. For exit `1`, route per `failure-mode-dispatch.md`.
 
 ## Failure-mode overrides
 
-This projection inherits the generic taxonomy from
-`failure-mode-dispatch.md`. The GitHub backend imposes three
-projection-specific overrides:
+This projection inherits the cross-Form taxonomy from `failure-mode-dispatch.md`. The GitHub backend imposes three projection-specific overrides:
 
-- **GitHub API rate limit**: `gh` returns exit `4` from any call
-  that hits a primary or secondary rate-limit. The 4xx body
-  distinguishes the two: secondary rate-limits carry a
-  `Retry-After` header and are retryable after the indicated
-  delay; primary rate-limits require back-off until the reset
-  epoch in the response headers. The dispatcher surfaces the
-  retry hint to the caller; callers decide whether to retry.
-- **Project not found**: `gh project view <project-number>
-  --owner <owner>` exits `1` with stderr matching `not found`.
-  The dispatcher surfaces this to the architect — the
-  projection's `project_ref` may be misconfigured in
-  `settings.yml § modules.m10_kanban`.
-- **Insufficient `gh` scope**: `gh` exits `1` with stderr
-  matching `requires the .* scope`. The dispatcher surfaces with
-  explicit guidance: re-authenticate via `gh auth refresh -s
-  project` to grant the required Project v2 scope.
+- **Rate limit (primary or secondary)**: `gh` exits `4`; stderr distinguishes the two — secondary rate-limits carry a `Retry-After` header and are retryable after the indicated delay; primary rate-limits require back-off until the reset epoch in the response headers. Surface the retry hint to the caller.
+- **Project not found**: `gh project view <project-number> --owner <owner>` exits `1` with stderr matching `not found`. Surface to the architect: the projection's `project_ref` may be misconfigured in `settings.yml § modules.m10_kanban`.
+- **Insufficient `gh` scope**: `gh` exits `1` with stderr matching `requires the .* scope`. Surface with explicit guidance: re-authenticate via `gh auth refresh -s project`.
 
 ## Related
 
-- `form-a-bash.md` — Form A invocation conventions (exit-code
-  table, helper preference, worktree-relative paths). This file's
-  projection-specific overrides above layer on top.
-- `action-dispatch.md` — protocol-action dispatch sequencing and
-  the audit hand-off contract (caller → classify → propose →
-  dispatch → resolve).
-- `failure-mode-dispatch.md` — generic failure-mode taxonomy
-  this file's overrides extend.
-- `backend-selection.md` — how the active projection is resolved
-  at runtime from `settings.yml § modules.m10_kanban`.
+- `form-a-bash.md` — Form A invocation conventions (exit-code table, helper preference, worktree-relative paths).
+- `action-dispatch.md` — protocol-action dispatch sequencing and the audit hand-off contract.
+- `failure-mode-dispatch.md` — generic failure-mode taxonomy this file's overrides extend.
+- `backend-selection.md` — how the active projection is resolved at runtime from `settings.yml § modules.m10_kanban`.
 
 ---
 

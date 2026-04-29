@@ -7,118 +7,85 @@ user-invocable: false
 
 # operating-kanban
 
-This skill is the dispatch authority for "how to act on the active backend" — the runtime-and-bootstrap counterpart to `board-superpowers:board-canon`'s "what is legal." It does not perform actions itself; it routes the eight Kanban Protocol actions and the per-projection setup capabilities through the projection reference file selected by this repo's kanban configuration.
+Use this skill when you need to do one of the eight Kanban Protocol actions — `read_board` / `read_card` / `create_card` / `transition_card` / `claim_card` / `release_claim` / `link_pr_to_card` / `comment_on_card` — on the active backend. Caller passes the action name + payload + (optional) `kanban_id`. Caller receives back the action's typed result or a typed failure.
+
+This skill is also the bootstrap-side dispatcher that answers "does the active projection declare capability X?" so a bootstrap stage predicate can decide to run or skip.
 
 ## Reflexive constraint
 
-This skill is atomic. It MUST NOT call any other same-plugin skill. It is a leaf in the skill graph: molecular skills (`managing-board`, `consuming-card`, `decomposing-into-milestones`, `bootstrapping-repo`) call this skill; this skill does not call upward. Externally it invokes the active projection (a bash command, an MCP tool, or an HTTP endpoint), but it never reaches back into the plugin's other skills. Calling another same-plugin skill from here would form a cycle through the molecular layer that consumes this skill, defeating the single-source-of-truth purpose.
+This skill is atomic: it MUST NOT call any other same-plugin skill. Externally it invokes the active projection (a bash command, an MCP tool, or an HTTP endpoint), but it never reaches back into `managing-board` / `consuming-card` / `decomposing-into-milestones` / `bootstrapping-repo` / `board-canon` / `classifying-actions` / `auditing-actions`. The molecular caller orchestrates; this skill dispatches.
 
-## The eight protocol actions
+## How to apply this skill
 
-Every board-touching molecular skill issues at most these eight named actions. Each action carries a contract — intent, pre-condition, post-condition, failure modes, idempotency property — that holds uniformly across every projection; this skill dispatches the action per the active projection while preserving the contract.
+You arrive here with an action name plus a payload. Run these four steps in order.
 
-| Action | Intent (one line) | Compliance level |
-|--------|-------------------|------------------|
-| `read_board` | Snapshot all cards on the board with their canonical statuses. | L0 |
-| `read_card` | Fetch one card's complete body, labels, status, url, timestamps. | L0 |
-| `create_card` | Land a new card in `Backlog`. | L1 |
-| `transition_card` | Move a card from one canonical status to another. | L1 |
-| `claim_card` | Acquire exclusive Consumer ownership of a card. | L2 |
-| `release_claim` | Release Consumer ownership; delete the claim branch. | L2 |
-| `link_pr_to_card` | Establish bidirectional discoverability between a Card and a PR. | L2 |
-| `comment_on_card` (OPTIONAL) | Append a textual exchange entry on a card. | L1 |
+1. **Resolve the active projection.** Read `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` to find the active kanban entry's `projection` field. Full procedure (including multi-kanban disambiguation, legacy fallback, and every refusal message) is in `references/backend-selection.md`. Output: a path to `references/<projection-id>.md`.
 
-The compliance level column tells callers which actions to expect from a projection: L0 projections are read-only (only `read_board` + `read_card`); L1 projections add card creation, status transitions, and comments; L2 projections add the full claim / release / PR-link suite needed for the Consumer flow. A projection that advertises a lower level than the action requires is refused at dispatch time.
+2. **Pick the action's procedure.** Look up the action name in the per-action quick reference below. The row tells you what to pass, what you get back, the action's compliance level, idempotency, and failure tier. For the full per-action breakdown — what `Form A` / `Form B` / `Form C` invocation look like and the audit hand-off sequencing — read `references/action-dispatch.md`.
 
-Each action's invariants (the contract surface every Form A / B / C implementation must honor):
+3. **Invoke per the loaded reference.** Open the projection reference (e.g., `references/github-project-v2.md` for the v0.5.0 GitHub Project v2 backend) and run that file's per-action procedure. Form A invocation conventions (exit-code mapping, helper preference, worktree-relative paths) are in `references/form-a-bash.md`; Form B and Form C have analogous files.
 
-- `read_board` / `read_card`: pure reads, no mutations, idempotent. Pre-condition: caller has read access on the backend. Post-condition: returns the canonical-status snapshot — never the raw backend status; status folding happens in the projection's reference file.
-- `create_card`: lands a card in `Backlog`. Pre-condition: card body schema is valid (per `board-canon`). Post-condition: card exists on the backend with a stable identifier; subsequent `read_card` of that identifier returns the body. NOT idempotent — repeated calls create duplicate cards.
-- `transition_card`: moves a card between canonical statuses. Pre-condition: source-status → target-status is a legal edge in `board-canon`'s state machine; the caller has already consulted `classifying-actions` (autonomy) and `auditing-actions` (audit row). Post-condition: subsequent `read_card` returns the new status. Idempotent on the (card, target-status) pair: a transition to a status the card already has is a no-op success.
-- `claim_card`: acquires exclusive Consumer ownership. Pre-condition: card is in `Backlog` or `Ready`; no existing claim branch for the card; caller's WIP under the cap. Post-condition: claim branch `claim/<N>-<slug>` exists on the remote; card status is `In Progress`. NOT idempotent — a second claim by the same actor on the same card surfaces a typed conflict.
-- `release_claim`: releases Consumer ownership. Pre-condition: caller is the current claimant. Post-condition: claim branch is gone; card returns to its pre-claim status (typically `Ready`). Idempotent: calling on an already-released card is a no-op success.
-- `link_pr_to_card`: establishes bidirectional discoverability. Pre-condition: PR exists; card exists; caller has rights on both. Post-condition: card body contains a PR link AND PR body contains a card link (per `enforcing-pr-contract`). Idempotent: repeated calls produce the same final state.
-- `comment_on_card` (OPTIONAL): appends a comment. Pre-condition: card exists. Post-condition: the comment is visible on the card. NOT idempotent — repeated calls create duplicate comments. Projections that don't support free-text comments may decline this action with a typed `not-supported` response.
+4. **On failure, route per `references/failure-mode-dispatch.md`.** Match the underlying signal (Form A exit code, Form B MCP error, Form C HTTP status) to the typed failure mode, take the tier action (silent retry / log-only / audit-row / surface-immediately), and surface to the caller. Do NOT retry unconditionally — the failure-mode table tells you which modes are retryable and at what budget.
 
-Per-action invocation patterns (how each action maps to a concrete bash / MCP / REST call on each backend) live in `references/action-dispatch.md` and the per-projection reference files in this same `references/` directory.
+## Per-action quick reference
 
-## Backend selection algorithm
+You arrive at the right entry below by matching your action name. Each row tells you what to pass, what you get back, idempotency, the compliance level a projection must advertise to support it, and the failure tier of a typical refusal.
 
-When a caller hands in a protocol action plus the repo root, this skill resolves the active projection by reading this repo's kanban configuration. The procedure:
+| Action | What you pass | What you get back | Idempotent? | Compliance |
+|--------|---------------|-------------------|-------------|------------|
+| `read_board` | `(kanban_id?)` | List of card records `(key, title, status, labels, url)` | Yes (read) | L0 |
+| `read_card` | `(kanban_id, card_key)` | Full card record `(key, title, body, status, labels, url, timestamps, display_*)` | Yes (read) | L0 |
+| `create_card` | `(kanban_id, title, body, labels)` — backend assigns `Card.key`, status starts at `Backlog` | New `Card.key` (opaque string) | No — re-running creates duplicates | L1 |
+| `transition_card` | `(kanban_id, card_key, target_status)` | `(success | refused | conflict)` | Yes — transition to current status is a no-op success | L1 |
+| `claim_card` | `(kanban_id, card_key, title)` | `(claim acquired | race lost | wip exceeded | refused)` | No across actors — race-loss is a real failure | L2 |
+| `release_claim` | `(kanban_id, card_key)` | `(released | not held | branch already gone)` | Yes — repeat release is a no-op | L2 |
+| `link_pr_to_card` | `(kanban_id, card_key, pr_url, pr_body)` | `(linked | already linked | fallback inserted)` | Yes — trailer presence is checked before appending | L2 |
+| `comment_on_card` (OPTIONAL) | `(kanban_id, card_key, comment_body)` | `(posted | not supported | length exceeded)` | No — each call posts a fresh comment | L1 |
 
-1. Read `<repo>/.board-superpowers/settings.yml` and walk to the kanban registry block (`modules.m10_kanban`).
-2. From the registry, pick the active kanban entry. Single-kanban repos have exactly one entry; multi-kanban repos disambiguate via the `<kanban-id>` segment of the caller's claim branch or via an explicit qualifier passed by the caller.
-3. Read the `projection` field of that kanban entry (e.g., `github-project-v2`) — the projection identifier names the per-projection reference file in this skill's `references/` directory.
-4. Load `references/<projection-id>.md`. The reference file documents the projection's invocation form (Form A / B / C) and the per-action invocation patterns.
-5. Dispatch the requested action per the loaded reference.
-
-Failure modes — and the corresponding caller-visible behavior — are tabulated in `references/backend-selection.md` (kanban registry missing or malformed; projection identifier unknown to this skill; setup not yet completed).
+The compliance column is what the projection must advertise to accept the action. If the projection's level is below the row, dispatch refuses synchronously with a typed compliance-gap failure (tier D — surface immediately).
 
 ## Three invocation forms
 
-The Kanban Protocol is transport-agnostic. Each projection chooses one form for its invocation surface; this skill dispatches uniformly across all three.
+The protocol is transport-agnostic: each projection picks one of three forms for its invocation surface. The choice is the projection's; this skill dispatches uniformly.
 
-| Form | What it looks like | When backends choose it |
-|------|--------------------|--------------------------|
-| **Form A — bash CLI** | The reference file documents `gh project ...` / `linear ...` / equivalent shell invocations; this skill runs them through the plugin's `scripts/` helpers. | Backends with a stable, scriptable CLI and no MCP server. The v0.5.0 GitHub Project v2 projection is Form A. |
-| **Form B — plugin-shipped MCP server** | The plugin's `.mcp.json` registers the backend's MCP server; the reference file names the MCP tools and their input shapes; this skill calls the MCP tools through the platform's MCP runtime. | Backends with an official MCP server (Linear, Atlassian Remote MCP for Jira). Roadmap for v1.x. |
-| **Form C — REST / GraphQL** | The reference file documents the HTTP endpoint shape, auth header derivation, and response parsing; this skill issues the HTTP calls directly. | Backends with no MCP server and where CLI is insufficient. No instances at v0.5.0; the form is recognized so future authors don't feel forced to ship Form B. |
+| Form | What the reference file documents | Where backends pick it |
+|------|------------------------------------|-------------------------|
+| Form A — bash CLI | `gh project ...` / `linear ...` / equivalent shell calls plus `bsp_*` helpers from `scripts/lib/common.sh`. | Backends with a stable scriptable CLI. The shipped GitHub Project v2 projection is Form A. |
+| Form B — plugin-shipped MCP server | The plugin's `.mcp.json` registers the backend's MCP server; the reference names the tools and their input shapes. | Backends with an official MCP server (Linear, Atlassian Remote MCP for Jira). |
+| Form C — REST / GraphQL | The reference documents endpoint shape, auth header derivation, response parsing. | Backends with no MCP server and where a CLI is insufficient. |
 
-Per-form dispatch conventions (stdout / stderr / exit-code expectations for Form A; tool-call patterns for Form B; auth + response parsing for Form C) live in `references/form-a-bash.md`, `references/form-b-mcp.md`, and `references/form-c-rest.md`.
+Per-form invocation conventions live in `references/form-a-bash.md`, `references/form-b-mcp.md`, `references/form-c-rest.md`. The active projection's reference file tells you which form applies.
 
-## Setup capabilities — the bootstrap-side dispatch
+## Setup capabilities — bootstrap-side dispatch
 
-Every projection also declares a list of **setup capabilities** — one-time board-preparation operations the projection can perform during the architect's bootstrap flow (creating the canonical label set, validating the backend's status taxonomy, and similar). A setup capability has a stable name, an idempotent invocation contract (re-running it on an already-prepared backend is a no-op success), and a typed failure surface that the bootstrap stage executor handles uniformly across projections. This skill owns the registry side: which projection declares which capabilities, and how the bootstrap stage predicate evaluator looks up a capability before dispatching it.
+Some board-preparation operations (creating the canonical label set, validating the backend's status taxonomy) run only at bootstrap time, not in the runtime action loop. Each projection declares which of these capabilities it supports; bootstrap stage predicates consult that declaration to decide whether to run or skip a stage.
 
-How the registry is consumed:
+When the bootstrap stage predicate evaluator asks for capability X, do this:
 
-1. A bootstrap stage declares `applicable_when: {kanban_projection_capability: <capability-name>}`.
-2. The bootstrap stage predicate evaluator asks this skill whether the active projection declares `<capability-name>`.
-3. This skill reads the active projection's reference file under `references/<projection-id>.md` § "Setup capabilities" and returns true / false based on whether the named capability is in the declared list.
-4. Match → bootstrap stage runs, invoking the capability through the same Form-aware dispatch as runtime actions. Miss → bootstrap stage returns `not-applicable` and the bootstrap flow continues.
+1. Resolve the active projection per Step 1 above (`references/backend-selection.md`).
+2. Read the projection reference (`references/<projection-id>.md`) § "Setup capabilities".
+3. Return `true` if the named capability is declared; return `not-applicable` if it is not. `not-applicable` is normal flow (the bootstrap stage executor skips the stage); it is NOT a failure.
 
-The v0.5.0 GitHub Project v2 projection declares two capabilities (`ensure-labels`, `validate-status-field`); future Linear / Jira projections add their own. The capability vocabulary is registry-internal — no external surface depends on it, so renames are cheap until a second projection ships.
-
-## Failure-mode taxonomy
-
-| Symptom | Caller-visible behavior |
-|---------|-------------------------|
-| `<repo>/.board-superpowers/settings.yml` missing or has no kanban registry block. | Surface "kanban not yet configured on this repo; route to the bootstrapping flow"; do NOT invent a projection. |
-| Active projection identifier names a projection not present in this skill's `references/`. | Surface "unknown projection <id>; check plugin version or projection registry"; do NOT silently fall back to a different projection. |
-| Bootstrap stage predicate asks for a capability the active projection does not declare. | Return `not-applicable` (this is normal flow per the bootstrap predicate contract); the stage executor skips. |
-| Form A invocation fails (non-zero exit, malformed JSON on stdout). | Surface the exit code and the captured stderr to the caller verbatim; the caller decides whether to retry, escalate, or surface to the architect. |
-| Form B / Form C invocation fails (transport error, auth rejection, 5xx response). | Surface a typed failure to the caller (transport / auth / server / unknown); do not retry transparently — retry policy is the caller's. |
-| Active projection's compliance level is below what the requested action requires (e.g., the projection advertises L0 but the caller asked for `claim_card` which needs L2). | Refuse before invoking the projection; surface the compliance gap. |
-
-Detailed failure surfacing rules and the architect-visibility tiers (silent / log-only / audit-row / surface-immediately) live in `references/failure-mode-dispatch.md`.
-
-## Composition
-
-| Direction | Who calls this skill, and from where | Who this skill calls |
-|-----------|--------------------------------------|----------------------|
-| Inbound | `managing-board` (Producer routines that read the board, transition cards, create new cards on intake), `consuming-card` (Consumer's claim, transition, link-PR steps), `decomposing-into-milestones` (creates new cards on the active backend), `bootstrapping-repo` (bootstrap stage predicate evaluator + capability dispatch — consumed once the v0.5.0 paired-PR setup-stages rebase lands). | None in-plugin (atomic = reflexive). Externally: the active projection's bash command / MCP tool / REST endpoint. |
-| Outbound | — | Active projection only. |
-
-Cross-plugin invocations (e.g., `superpowers:test-driven-development`, `gstack:/qa`) are NOT made from this skill — they live on the molecular skills that consume protocol actions.
-
-## What this skill does NOT cover
-
-- **What is legal** — the state machine, the Card body schema, the branch-naming convention, the WIP counting formula. That is the `board-superpowers:board-canon` skill. This skill enacts the protocol; that skill defines the protocol's read-only contract.
-- **Whether an action proceeds automatically or waits for architect approval** — that is the `board-superpowers:classifying-actions` skill. The caller consults that skill before invoking this one.
-- **Audit-row writing** — that is the `board-superpowers:auditing-actions` skill. The caller writes the audit row before and after invoking this skill, per the propose / resolve sequencing rules in that skill.
-- **Bootstrap stage execution machinery** — running a bootstrap stage end-to-end (lifecycle diff, executor selection, stale-state detection) is the bootstrapping flow's responsibility. This skill answers the predicate question and dispatches the capability invocation; orchestration sits one layer up.
-- **Discovering the projection list** — the projection identifiers this skill recognizes are the names of files in its `references/` directory. There is no introspection API; new projections land by adding a reference file in a normal PR.
+The capability vocabulary is registry-internal — capability names are valid only within this skill's reference files. The shipped GitHub Project v2 projection declares two capabilities (`ensure-labels`, `validate-status-field`); their procedures live in `references/github-project-v2.md` § "Setup capabilities".
 
 ## References
 
-| File | Purpose |
-|------|---------|
-| `references/action-dispatch.md` | Per-action dispatch patterns — invocation shape, return shape, idempotency property, error semantics — for each of the eight protocol actions, parameterized by Form. |
-| `references/backend-selection.md` | The kanban-registry read algorithm + composite identity `(kanban-id, Card.key)` resolution + multi-kanban disambiguation + fallback paths when the registry is absent. |
-| `references/form-a-bash.md` | Form A (bash CLI) projection conventions — stdout / stderr / exit-code expectations, helper-script invocation patterns, the v0.5.0 GitHub Project v2 projection as the reference instance. |
-| `references/form-b-mcp.md` | Form B (plugin-shipped MCP server) conventions — `userConfig.sensitive` credential storage, MCP tool-call shape, response parsing. No live instance at v0.5.0; documented for the v1.x roadmap. |
-| `references/form-c-rest.md` | Form C (REST / GraphQL) conventions — auth header derivation, request shape, response parsing. No live instance at v0.5.0; documented so future authors are not forced into Form B. |
-| `references/failure-mode-dispatch.md` | The full failure-mode taxonomy + architect-visibility tier per failure + the surfacing convention each tier uses. |
-| `references/github-project-v2.md` | Live v0.5.0 projection — invocation entries for the 8 protocol actions over GitHub Project v2 (Form A bash CLI). |
+| File | When to read | Purpose |
+|------|--------------|---------|
+| `references/action-dispatch.md` | When you have an action name and need its procedure (the per-Form invocation rows, audit hand-off sequencing). | Per-action dispatch entries — input/output shape, idempotency, failure tier, per-Form invocation pointers. |
+| `references/backend-selection.md` | When you need to resolve the active projection from this repo's settings (Step 1 above), or when you hit a missing-registry / unknown-projection refusal. | The settings → projection resolver; multi-kanban disambiguation; legacy fallback; refusal-message taxonomy. |
+| `references/failure-mode-dispatch.md` | When the dispatch returned a non-success outcome and you need to classify, pick a tier, and decide retry / log / audit / surface. | Cross-Form failure taxonomy + four-tier visibility model + architect-surfacing template. |
+| `references/form-a-bash.md` | When the active projection is Form A and you need exit-code mapping, helper preference, or worktree-path conventions. | Form A operational contract — invocation conventions, exit-code table, helper preference (`bsp_*` over raw CLI). |
+| `references/form-b-mcp.md` | When you are authoring a future Form B projection (Linear, Jira via Atlassian Remote MCP). | Form B conventions — `userConfig.sensitive` credential storage, MCP tool-call shape, response parsing. |
+| `references/form-c-rest.md` | When you are authoring a future Form C projection (REST / GraphQL backends with no MCP server). | Form C conventions — auth header derivation, request shape, response parsing. |
+| `references/github-project-v2.md` | When the active projection is `github-project-v2` and you need the per-action procedure or setup-capability procedure for this backend. | The shipped GitHub Project v2 projection — paste-and-run shell snippets per action plus the two setup-capability procedures. |
 
-When a new backend projection ships, its per-projection reference file lands in this same `references/` directory under the projection's identifier (e.g., `references/github-project-v2.md`, `references/linear.md`, `references/jira.md`) — the projection's reference file declares the projection's chosen Form, the per-action invocation patterns, the custom-state folding mapping, the markdown / native body conversion, and the supported setup capabilities.
+When a new projection ships (Linear, Jira, etc.), its per-projection reference file lands in this directory under the projection's identifier. The reference file declares the projection's chosen Form, the per-action procedure, the custom-state folding map, and the supported setup capabilities.
+
+## What this skill does NOT cover
+
+- Want to know what states a card has, what the Card body schema looks like, how WIP is counted, or how a claim branch is named? See `board-canon`.
+- Want to know whether your action proceeds automatically or waits for architect approval? See `classifying-actions`.
+- Want to write the audit row that records what was decided and what happened? See `auditing-actions`.
+- Want to run a bootstrap stage end-to-end (lifecycle diff, executor selection, stale-state detection)? That is the bootstrapping flow's responsibility; this skill answers the predicate question and dispatches the capability invocation, but does not orchestrate the stage.
+- Want to discover which projections this skill recognizes? Read the file names under `references/<projection-id>.md`. There is no introspection API — new projections land by adding a reference file in a normal PR.
