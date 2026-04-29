@@ -408,6 +408,6 @@ the protocol's purpose as a single agent mental model.
   § "Multi-kanban semantics" + § "Card hierarchy" — protocol-
   document amendments encoding this ADR's decisions at the
   semantic-contract level.
-- [`../../README.md`](../../README.md) § "Why there's no
+- [`../../../README.md`](../../../README.md) § "Why there's no
   sprint, no sub-issue, no story points" — community-facing
   framing of the concept hygiene argument.
