@@ -1,8 +1,17 @@
 # operating-kanban — Form A (bash CLI) reference
 
-Form A is the bash-CLI invocation form: the projection's reference file documents shell invocations (e.g., `gh project ...`, `gh issue ...`, `gh api graphql ...`) wrapped through the plugin's `scripts/lib/common.sh` helpers; this skill runs them and parses stdout / stderr / exit-code per the conventions below.
+**When you arrive here**: the active projection is a Form A projection (its reference file documents bash-CLI invocations such as `gh project ...`, `gh issue ...`, `gh api graphql ...` wrapped through the plugin's `scripts/lib/common.sh` helpers). This file gives you the operational contract — how to invoke the helper, capture output, and react to exit codes.
 
-Form A is the **only live invocation form at v0.5.0** — the GitHub Project v2 projection ships as Form A. Form B and Form C are documented for v1.x roadmap projections. This file is therefore both an authoring guide for future Form A projections AND the operational contract for the v0.5.0 dispatch path.
+## How to invoke a Form A action — 4 steps
+
+For every protocol action whose dispatch table row picks Form A, run these in order:
+
+1. **Locate the helper.** Open the projection's reference file (resolved by `backend-selection.md`) and read the row for the requested action. The row names the helper script (typically a `bsp_*` helper from `scripts/lib/common.sh`, or a wrapper such as `claim-card.sh` / `submit-pr.sh`) plus the per-action argument list.
+2. **Export required env vars.** The helper's documented contract names the env vars it consumes — typically `BSP_PROJECT_REF`, `BSP_KANBAN_ID`, `BSP_REPO_ROOT` (resolved from the worktree, not the host plugin install dir). Set them per the projection reference file's invocation row.
+3. **Run the helper, capture exit code + stdout + stderr.** Treat stdout as the typed payload (JSON when documented, tab-separated where noted), stderr as the diagnostic stream, and the exit code as the typed-failure-class signal per the table below. Do NOT parse stdout to learn whether the call succeeded — the exit code is authoritative.
+4. **On non-zero exit, surface stderr verbatim** per `failure-mode-dispatch.md`. Map exit codes to typed failure modes (table below); the caller's policy reads the typed shape, never the raw exit code.
+
+The remaining sections in this file are the supporting reference for these four steps — exit-code semantics, helper preference, idempotency notes, and worktree-path conventions.
 
 ## When backends choose Form A
 
@@ -12,24 +21,24 @@ A projection ships as Form A when its backend has:
 - No vendor-shipped MCP server (or one whose tool surface is too coarse to cover the eight protocol actions cleanly).
 - A response shape that survives shell pipelines — JSON-on-stdout is preferred; tab-separated is acceptable; everything else needs wrapping.
 
-The v0.5.0 GitHub Project v2 projection chose Form A because `gh` is stable, scriptable, ubiquitously installed on architect hosts, and exposes enough of the GraphQL surface (via `gh api graphql`) to cover the eight actions. Linear has an MCP server (Form B candidate) AND a CLI (Form A candidate) — its v1.x landing is currently planned as Form B per the registration cost / multi-tool-call latency trade-off.
+The shipped GitHub Project v2 projection is Form A because `gh` is stable, scriptable, ubiquitously installed on architect hosts, and exposes enough of the GraphQL surface (via `gh api graphql`) to cover the eight actions. Linear has both an MCP server (Form B candidate) and a CLI (Form A candidate); when its projection ships, the registration cost / multi-tool-call latency trade-off determines which form lands.
 
 ## Invocation conventions
 
 ### stdout
 
-- **Preferred**: JSON. The projection reference file documents the expected schema; this skill parses with `python3 -c 'import json,sys; ...'` (no `jq` dependency — shellcheck-clean and cross-host portable).
+- **Preferred**: JSON. The projection reference file documents the expected schema; parse with `python3 -c 'import json,sys; ...'` (no `jq` dependency — shellcheck-clean and cross-host portable).
 - **Acceptable**: tab-separated values when the underlying CLI does not emit JSON for that command. The reference file documents column order.
 - **Forbidden**: free-form prose. If a CLI emits prose by default, the reference file MUST specify the JSON-mode flag (`--json`, `--format json`, etc.) to bypass it.
 
 ### stderr
 
-- All CLI diagnostics (rate-limit warnings, deprecation notices, network retries) flow through stderr verbatim. This skill captures stderr but does NOT parse it — the caller decides whether to surface to the architect or log silently per the failure-mode taxonomy.
-- The skill MUST NOT swallow stderr. Even on success, captured stderr is part of the return record so the caller can detect deprecation notices or rate-limit pressure.
+- All CLI diagnostics (rate-limit warnings, deprecation notices, network retries) flow through stderr verbatim. Capture stderr but do NOT parse it — the caller decides whether to surface to the architect or log silently per the failure-mode taxonomy.
+- Do NOT swallow stderr. Even on success, captured stderr is part of the return record so the caller can detect deprecation notices or rate-limit pressure.
 
-### Exit codes
+### Exit codes — mapping table
 
-Every helper script invoked through Form A obeys strict exit-code conventions (the plugin treats stdout as data and exit code as the typed-failure-class signal — callers never parse stdout to learn whether the call succeeded):
+Every helper script invoked through Form A obeys strict exit-code conventions:
 
 | Code | Meaning |
 |------|---------|
@@ -40,7 +49,7 @@ Every helper script invoked through Form A obeys strict exit-code conventions (t
 | `4` | Transient failure (network timeout, rate-limited, 5xx). Caller MAY retry. |
 | `≥5` | Reserved for projection-specific extension; reference file documents per-projection. |
 
-This skill maps the exit code to a typed return shape; the caller's own retry/escalation policy reads the typed shape, never the raw exit code.
+Map the exit code to a typed return shape and hand the typed shape to the caller. The caller's own retry/escalation policy reads the typed shape per `failure-mode-dispatch.md`.
 
 ## Helper preference — `bsp_*` over raw CLI
 
@@ -60,7 +69,7 @@ The reference file documents which helper covers which action. When a new helper
 
 ## Idempotency property — per `gh` call shape
 
-Idempotency is per-call, not per-action. The same protocol action may be idempotent on Form A and not on Form B/C, or vice versa. For the v0.5.0 GitHub projection:
+Idempotency is per-call, not per-action. The same protocol action may be idempotent on Form A and not on Form B/C, or vice versa. For the GitHub Project v2 projection:
 
 | `gh` call | Idempotent? | Notes |
 |-----------|-------------|-------|
@@ -72,7 +81,7 @@ Idempotency is per-call, not per-action. The same protocol action may be idempot
 | `git push origin <branch>` | Yes (push of the same SHA succeeds with "Everything up-to-date"). | Used by `claim_card` for branch publication. |
 | `git push origin --delete <branch>` | Conditional — first call succeeds, subsequent calls fail with "remote ref does not exist". The dispatcher treats the second-and-later as a successful no-op for `release_claim`. |
 
-When in doubt, the reference file's `Idempotency` row in `action-dispatch.md` is authoritative. This file's table is the v0.5.0 snapshot for one projection; it does not generalize.
+When in doubt, the reference file's `Idempotency` row in `action-dispatch.md` is authoritative. This file's table is a single-projection snapshot; it does not generalize.
 
 ## Worktree-relative paths
 
@@ -90,4 +99,4 @@ The convention is uniform across maintainer worktrees and Consumer worktrees; th
 - `backend-selection.md` — how the active projection is resolved before any Form A invocation runs.
 - `failure-mode-dispatch.md` — how Form A exit codes 1/2/3/4 map to caller-visible surfacing tiers.
 - `scripts/lib/common.sh` — the `bsp_*` helper implementations.
-- The v0.5.0 reference projection: `references/github-project-v2.md` (lands in this PR's projection-reference batch; documents the per-action `gh` invocations per Form A conventions above).
+- `references/github-project-v2.md` — the shipped Form A projection; documents the per-action `gh` invocations against the conventions above.

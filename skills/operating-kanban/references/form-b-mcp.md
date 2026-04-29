@@ -1,64 +1,57 @@
 # operating-kanban — Form B (plugin-shipped MCP server) reference
 
-**Status: v1.x roadmap.** This document is an authoring guide for future Form B (MCP) projections; no live Form B projection ships in v0.5.0.
+**Use this file ONLY when authoring a future Form B (MCP-server) projection.** Runtime callers do not enter this file in current ship — return to your active projection's reference file via `backend-selection.md`.
 
-Form B is the plugin-shipped MCP server invocation form: when implementing Form B, the plugin SHOULD register the backend's MCP server through its plugin manifest's `.mcp.json` (Claude Code) or `mcp_servers` block (Codex CLI), and the projection reference file SHOULD name the MCP tools and their input/output shapes; this skill calls the MCP tools through the platform's MCP runtime.
+The rest of this document is an authoring contract for Form B. Read it when you are about to add a new projection whose backend exposes a vendor MCP server (Linear, Jira Cloud, etc.); the contract is concrete enough that a Form B projection can ship without re-deriving the wiring.
 
-**v0.5.0 has no live Form B projection.** This file is an authoring guide for the v1.x roadmap — the first Form B candidate is the Linear projection backed by Linear's official MCP server. The contract below is concrete enough that future Form B authors can ship a projection without re-deriving it.
+## Form B at a glance — what you are committing to as an author
+
+When you author a Form B projection, you are committing to:
+
+- Register the backend's MCP server in the plugin manifest (`.claude-plugin/plugin.json` for Claude Code; `.codex-plugin/plugin.json` for Codex CLI) per the platform's MCP-server registration shape.
+- Document, in your projection reference file, the exact MCP tool names plus per-action input / response shapes that the dispatch layer hands the platform's MCP runtime.
+- Store credentials through `userConfig.sensitive` so secrets stay out of the plain-text settings.yml.
+
+Form B's payoff: the backend's vendor-published, vendor-maintained tool definitions handle the auth flow, schema validation, and retry policy that Form A or Form C would force you to script by hand.
 
 ## When backends choose Form B
 
-A projection ships as Form B when its backend has:
+To author a Form B projection, the backend you target should have:
 
 - An official, vendor-published MCP server with stable tool definitions.
-- A permission model compatible with `userConfig.sensitive` credential storage (per the platform's MCP runtime — CC keychain on macOS, Codex `mcp login` on Codex CLI).
+- A permission model compatible with `userConfig.sensitive` credential storage (Claude Code keychain on macOS, Codex `mcp login` on Codex CLI).
 - A tool surface that covers enough of the eight protocol actions for the projection to advertise compliance ≥ L1 (and ≥ L2 for Consumer-flow support).
 
-Linear is the canonical Form B candidate at v1.x: Linear's MCP server is well-maintained, exposes `list_issues` / `get_issue` / `create_issue` / `update_issue` / `comment_on_issue` natively, and Linear's API key model maps cleanly to `userConfig.sensitive`. Atlassian's Remote MCP for Jira Cloud is a second candidate, with the caveat that its OAuth flow is heavier than Linear's API-key flow.
+Linear is the canonical Form B candidate: Linear's MCP server is well-maintained, exposes `list_issues` / `get_issue` / `create_issue` / `update_issue` / `comment_on_issue` natively, and Linear's API key model maps cleanly to `userConfig.sensitive`. Atlassian's Remote MCP for Jira Cloud is a second candidate, with the caveat that its OAuth flow is heavier than Linear's API-key flow.
 
-## Plugin-manifest registration
+## To author a Form B projection — 5 authoring steps
 
-The plugin manifest (`.claude-plugin/plugin.json` for CC; `.codex-plugin/plugin.json` for Codex CLI) registers the MCP server statically per platform conventions (CC reads `mcpServers` blocks; Codex CLI reads `mcp_servers` blocks; both honor `userConfig.sensitive` for credential keys). This section captures the Form-B-specific contract:
+1. **Register the MCP server in the plugin manifest.** Add the server entry to `.claude-plugin/plugin.json` (Claude Code reads `mcpServers` blocks) and `.codex-plugin/plugin.json` (Codex CLI reads `mcp_servers` blocks). Both honor `userConfig.sensitive` for credential keys. Reference the server unconditionally — the projection reference file owns the gating ("only invoke these tools when the active projection is `<your-projection>`").
+2. **Declare the credential fields as `userConfig.sensitive`.** Name the per-projection credential keys (e.g., `linear_api_key`, `jira_oauth_access_token`, `jira_oauth_refresh_token`). Claude Code stores them in the macOS keychain; Codex stores them via `codex mcp login`. Document the lifecycle in your reference file (one-shot setup at bootstrap, refresh-on-failure for OAuth, etc.).
+3. **Document the per-action MCP tool-call shape.** For each protocol action your projection supports, write three rows in the projection reference file:
+   - **Tool name** — the exact MCP tool the protocol action invokes (e.g., `mcp__linear__list_issues`). Do NOT rename the vendor's tool; document its actual name.
+   - **Input schema** — the JSON shape the tool expects, mapping the protocol action's parameters into the vendor's parameter names. Field-by-field; no implicit conversions.
+   - **Response shape** — the JSON shape the tool returns and how the dispatch layer flattens it back into the protocol's return shape (per `action-dispatch.md` § "Return shape").
+4. **Wire bootstrap-side credential provisioning.** Declare a `provision-mcp-credentials` setup capability in your projection reference file. The bootstrap stage executor dispatches through this skill into the projection's reference-file procedure for the credential prompt. The bootstrap stage executor never invokes a backend directly; it always goes through this skill's per-projection reference file.
+5. **Map the Form B failure surface.** Document, in your projection reference file, which MCP error codes you expect (`tool-not-found`, `permission-denied`, `invalid-input`, plus any backend-specific codes) and the failure-mode taxonomy entry each maps to. Inherit tier assignments from `failure-mode-dispatch.md`'s base table; override only when your backend's semantics genuinely diverge.
 
-- The MCP server registration is **conditional on the projection being active** — registering an unused MCP server consumes architect tool budget. The plugin manifest references the server unconditionally; the projection reference file owns the gating ("only invoke these tools when the active projection is `linear`").
-- `userConfig.sensitive` fields name the per-projection credential keys. CC stores them in the macOS keychain; Codex stores them via `codex mcp login` per the Codex CLI MCP credential flow.
-- The MCP server's tool names are NOT renamed by the plugin — the projection reference file documents the vendor's actual tool names (e.g., `mcp__linear__list_issues`) and adapts the plugin's protocol-action vocabulary to the vendor's vocabulary at the dispatch layer.
+## Lifecycle the platform runs for you — install → registration → discovery → invocation
 
-## Per-action MCP tool-call shape
+The platform handles four lifecycle stages once your manifest registration lands:
 
-Each action's projection reference file documents the dispatch on three rows:
-
-- **Tool name** — the exact MCP tool the protocol action invokes (e.g., `mcp__linear__list_issues`).
-- **Input schema** — the JSON shape the tool expects, mapping the protocol action's parameters into the vendor's parameter names. Field-by-field mapping; no implicit conversions.
-- **Response shape** — the JSON shape the tool returns and how the dispatch layer flattens it back into the protocol's return shape (per `action-dispatch.md` § "Return shape").
-
-Form B dispatch reads the projection reference file's per-action mapping and issues the MCP tool call through the platform runtime. The dispatch layer never invents a tool name — if the vendor's tool surface lacks coverage for a protocol action, the projection's compliance level drops accordingly (e.g., a backend MCP without a state-transition tool advertises L0 only).
-
-## Credential storage — `userConfig.sensitive`
-
-Per CC's MCP runtime conventions and Codex CLI's MCP login flow:
-
-- API keys / OAuth tokens / refresh tokens MUST be declared `userConfig.sensitive` so the platform stores them outside the plain-text settings.yml.
-- The projection reference file documents the credential field names and their lifecycle (one-shot setup at bootstrap, refresh-on-failure for OAuth, etc.).
-- `<repo>/.board-superpowers/settings.yml` MAY reference the credential field NAMES but MUST NEVER inline the secret values — that would leak through git, audit log dumps, and `cat settings.yml` shell sessions.
-
-Bootstrap-side wiring lands through `bootstrapping-repo`'s setup-capability dispatch: a Form-B projection declares a `provision-mcp-credentials` capability, and the bootstrap stage executor dispatches through this skill into the projection's reference-file procedure for the credential prompt. The same dispatch convention applies to every per-projection setup capability — the bootstrap stage executor never invokes a backend directly; it always goes through this skill's per-projection reference file.
-
-## Lifecycle — install → registration → discovery → invocation
-
-1. **Plugin install** — the plugin's manifest is read by the platform's plugin loader; `.mcp.json` server entries are registered with the MCP runtime.
-2. **First-time bootstrap** — when the architect picks a Form-B projection at the M10 stage, the bootstrap flow runs the `provision-mcp-credentials` setup capability (dispatched through this skill's projection reference file) to populate `userConfig.sensitive` keys.
+1. **Plugin install** — the platform's plugin loader reads your manifest and registers `.mcp.json` server entries with the MCP runtime.
+2. **First-time bootstrap** — when the architect picks your projection at the M10 setup stage, the bootstrap flow runs your `provision-mcp-credentials` setup capability (dispatched through this skill's projection reference file) to populate `userConfig.sensitive` keys.
 3. **Tool discovery** — the platform's MCP runtime advertises the registered tools to the model on session start. The dispatch layer's `mcp__<server>__<tool>` references resolve at call time.
-4. **Invocation** — every Form-B protocol-action dispatch issues exactly one MCP tool call; the response is parsed per the projection reference file.
+4. **Invocation** — every Form B protocol-action dispatch issues exactly one MCP tool call; the dispatch layer parses the response per your projection reference file.
 
-The lifecycle is uniform across CC and Codex CLI; the differences are in the credential-storage backend (keychain vs. `mcp login`) and the runtime's MCP tool advertisement format. Both are abstracted by the platform; this skill's dispatch layer sees a single tool-call surface.
+The lifecycle is uniform across Claude Code and Codex CLI; the differences are in the credential-storage backend (keychain vs. `mcp login`) and the runtime's MCP tool advertisement format. Both are abstracted by the platform; the dispatch layer sees a single tool-call surface.
 
 ## Form A ↔ Form B semantic equivalence
 
-The same protocol action's intent / pre-condition / post-condition are projection-independent. Only the dispatch shape differs. Authoring a Form B projection is therefore a translation from Form A's bash-CLI vocabulary to MCP tool-call vocabulary, NOT a reinvention of the action contract:
+The same protocol action's intent / pre-condition / post-condition are projection-independent. Only the dispatch shape differs. Authoring a Form B projection is therefore a translation from a comparable Form A projection's bash-CLI vocabulary to MCP tool-call vocabulary, NOT a reinvention of the action contract:
 
-| Action | Form A invocation (v0.5.0 GitHub) | Form B equivalent (Linear, illustrative) |
-|--------|-----------------------------------|------------------------------------------|
+| Action | Form A invocation (GitHub Project v2 reference) | Form B equivalent (Linear, illustrative) |
+|--------|--------------------------------------------------|------------------------------------------|
 | `read_board` | `gh project item-list <project>` | `mcp__linear__list_issues(project=<id>)` |
 | `read_card` | `gh issue view <key> --json ...` | `mcp__linear__get_issue(id=<key>)` |
 | `create_card` | `gh issue create` + `gh project item-add` | `mcp__linear__create_issue(...)` |
@@ -68,11 +61,11 @@ The same protocol action's intent / pre-condition / post-condition are projectio
 | `link_pr_to_card` | `submit-pr.sh` (Closes-trailer injection) | `mcp__linear__attach_pr` OR fallback body insertion |
 | `comment_on_card` | `gh issue comment` | `mcp__linear__create_comment` |
 
-The git-layer push is the atomicity boundary regardless of Form — Form B's `claim_card` and `release_claim` still run `git push` outside the MCP path, because branch publication is a git-server operation, not a kanban-backend operation. This is identical to Form A.
+The git-layer push is the atomicity boundary regardless of Form — Form B's `claim_card` and `release_claim` still run `git push` outside the MCP path, because branch publication is a git-server operation, not a kanban-backend operation. The same atomicity boundary applies to Form A and Form C.
 
 ## Failure mode notes
 
-Form B failures arrive as MCP tool-call errors with structured error codes, NOT as exit codes. The dispatch layer maps:
+Form B failures arrive as MCP tool-call errors with structured error codes, NOT as exit codes. Map them through the dispatch layer:
 
 - **Transport errors** (network timeout, MCP server crashed) → caller-visible `transient`.
 - **Auth errors** (401 from the underlying API, OAuth refresh failed) → caller-visible `auth-failed`.
@@ -81,14 +74,17 @@ Form B failures arrive as MCP tool-call errors with structured error codes, NOT 
 
 `failure-mode-dispatch.md` documents the surfacing tiers per category.
 
+## Credential storage — `userConfig.sensitive`
+
+Per Claude Code's MCP runtime conventions and Codex CLI's MCP login flow:
+
+- API keys / OAuth tokens / refresh tokens MUST be declared `userConfig.sensitive` so the platform stores them outside the plain-text settings.yml.
+- The projection reference file documents the credential field names and their lifecycle.
+- `<repo>/.board-superpowers/settings.yml` MAY reference the credential field NAMES but MUST NEVER inline the secret values — that would leak through git, audit log dumps, and `cat settings.yml` shell sessions.
+
 ## Related
 
 - `action-dispatch.md` — per-action dispatch shape, parameterized by Form. The Form B column is what this file concretizes.
-- `form-a-bash.md` — the comparable contract for the v0.5.0-live Form A projection.
+- `form-a-bash.md` — the comparable contract for projections shipping as Form A.
 - `form-c-rest.md` — the third invocation form, for when neither CLI nor MCP fits.
 - `failure-mode-dispatch.md` — failure surfacing across all three forms.
-- The v1.x reference projection (planned): `references/linear.md` — Linear's MCP server projection, the first Form B instance.
-
----
-
-**Maintainer reference (board-superpowers repo only; not shipped with plugin install)**: platform-level MCP wiring conventions and the bootstrap-side dispatch design originate in maintainer-side docs (`PLUGIN_DEVELOPMENT.md` § "MCP server registration", ADR-0027). This file's prose is self-contained — the maintainer pointer is for plugin maintainers wanting full design context, not for downstream agents.
