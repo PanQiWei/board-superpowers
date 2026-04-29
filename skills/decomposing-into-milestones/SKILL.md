@@ -165,15 +165,18 @@ The batch creation is a mutating action governed by the atomic SKILLs:
 3. If A: for each card body, prepend `bsp_render_creator_trace_block` output (see
    `scripts/lib/common.sh`) before invoking `board-superpowers:operating-kanban` with the
    `create_card` protocol action — that atomic dispatch SPOT resolves the active projection
-   per `<repo>/.board-superpowers/config.yml § kanban` / `modules.m10_kanban` and routes the
-   per-Form invocation (Form A bash → `gh issue create` for the `github-project-v2`
-   projection at v0.5.0). Then transition the new card to `Ready` via the `transition_card`
-   protocol action (action_id 5). Prepend pattern (Form A example, current projection):
+   per `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` (with v0.4.x legacy
+   fallback to `<repo>/.board-superpowers/config.yml § board`) and routes the per-Form
+   invocation (Form A bash → `gh issue create` for the `github-project-v2` projection at
+   v0.5.0). Each create_card lands the card in `Backlog`, then immediately flips Status to
+   `Ready` as part of the same batch mutating action (the Backlog→Ready transition is
+   `create_card`'s immediate post-condition, not a separate `transition_card`). Governance
+   section (below) classifies the entire batch as one action_id 1 dispatch. Prepend pattern
+   (Form A example, current projection):
    ```bash
    creator_trace="$(bsp_render_creator_trace_block)"
    body="${creator_trace}
    ${body}"
-   # operating-kanban dispatches this as create_card → Form A bash for github-project-v2
    gh issue create --title "<title>" --body "${body}"
    ```
    See `skills/board-canon/references/card-body-schema.md` § "Creator-trace marker" for field

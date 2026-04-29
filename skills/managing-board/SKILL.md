@@ -43,7 +43,7 @@ flowchart TD
 
 Goal: produce a one-screen briefing of the board's current state that helps the Producer decide what to do next.
 
-1. **Read the board**. This is the `read_board` protocol action — invoke `board-superpowers:operating-kanban` with action `read_board`; it resolves the active projection per `<repo>/.board-superpowers/config.yml § kanban` / `modules.m10_kanban` (with v0.4.x legacy fallback) and returns the board state grouped by status. The owner + project number live in `.board-superpowers/config.yml` and are resolved by the active projection's reference. Parse the JSON output.
+1. **Read the board**. This is the `read_board` protocol action — invoke `board-superpowers:operating-kanban` with action `read_board`; it resolves the active projection per `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` (with v0.4.x legacy fallback to `<repo>/.board-superpowers/config.yml § board`) and returns the board state grouped by status. The owner + project number live in `.board-superpowers/config.yml` and are resolved by the active projection's reference. Parse the JSON output.
 
 2. **Group by Status field**. Produce a markdown summary in this format:
 
@@ -107,7 +107,7 @@ Goal: turn a new requirement (text, design doc, idea) into a shape decision: spe
    - **Idea / vision** → `gstack:/office-hours` for direction-setting. Produces an "is this worth building" verdict.
    - **Architecture decision** → `gstack:/plan-eng-review`. Produces an architecture lock.
    - **Multi-step requirement** that's already direction-set → `superpowers:brainstorming` for sharper decomposition. Then the architect hand-decomposes the result into Ready cards.
-   - **Single-card-sized work** that's clearly defined → draft a card body using the schema from `board-superpowers:board-canon` § "Card body schema". Creating the card on the board is a mutating action — apply the 5-step sequence from "How mutating actions are handled" below (action_id 1).
+   - **Single-card-sized work** that's clearly defined → draft a card body using the schema from `board-superpowers:board-canon` § "Card body schema". Creating the card on the board is the `create_card` protocol action (dispatched via `board-superpowers:operating-kanban`); it's a mutating action — apply the 5-step sequence from "How mutating actions are handled" below (action_id 1).
 
 3. **NOT this skill's job to do the work itself**. The intake routine ends with the work being either a spec / design artifact or a Ready card on the board. If the architect tries to "just do it" mid-intake, push back: the design rests on intake → decompose → claim being separate acts.
 
@@ -117,7 +117,7 @@ Goal: turn a new requirement (text, design doc, idea) into a shape decision: spe
 
 Goal: scan Blocked cards + stale claims; recommend either unblocking actions or release.
 
-1. **Read Blocked cards**: `bash scripts/read-board.sh --status Blocked`. For each, inspect the card body for the named blocker (per `board-superpowers:board-canon` state machine, Blocked entries name their blocker in a card comment). Recommend an action.
+1. **Read Blocked cards**: the `read_board` protocol action via `board-superpowers:operating-kanban` (with status filter `Blocked`). For each, inspect the card body for the named blocker (per `board-superpowers:board-canon` state machine, Blocked entries name their blocker in a card comment). Recommend an action.
 
 2. **Read stale claims**: list `claim/N-...` branches; check commit count beyond the initial empty claim marker; flag any > 72h with no progress.
 
