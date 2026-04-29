@@ -83,6 +83,7 @@ then jump back via cross-references.
 | [`06-audit-log-schema.md`](./06-audit-log-schema.md) | Core 7-column AuditEntry schema; per-`action_id` payload sub-schemas (Producer rows 1–14 + Consumer rows 100–105); `outcome` enum; AuditTrail scope decision (per-Project); DDL ownership decision; migration model. |
 | [`07-path-conventions.md`](./07-path-conventions.md) | Worktree path resolution priority; PlanBrief location; `.board-superpowers/` per-repo layout; `~/.board-superpowers/` per-host layout; session-log paths (CC + Codex); precise `.gitignore` block. |
 | [`08-environment-variables.md`](./08-environment-variables.md) | Canonical table of every `BOARD_SP_*` env var: format, default, which scripts read it, cited ADR or feature spec. Plus `CLAUDE_PLUGIN_ROOT` / `CLAUDE_PROJECT_DIR` consumption. |
+| [`09-session-agent-protocol.md`](./09-session-agent-protocol.md) | **Cross-surface mother contract.** The five orthogonal requirement-layer axes J1–J5 (trigger actor / trigger carrier / autonomy class / D-META-1 strength / result destination) shared by Producer / Consumer / Bootstrap surfaces. Pins enum value sets, the K-budget rule for `session-hook`, the cross-axis legal-combination matrix, and the surface-extension contract. Cited by all `0002-product-features-and-flows/0[3-5]-*-redesign.md` and by [`../../FEATURE_DESIGN_METHODOLOGY.md`](../../FEATURE_DESIGN_METHODOLOGY.md) Stage 2 ("Locating each node"). |
 
 ---
 

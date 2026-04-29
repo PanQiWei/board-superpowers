@@ -149,12 +149,66 @@ feature implemented as skill OR hook OR script?) is dissolved
 
 ## The orthogonal axes
 
-The Producer feature catalog is indexed by **four axes**.
-Each axis answers a distinct question; together they pin
-down a feature's identity. Cross-axis sparsity is the value
-of the table form — most cells of the abstract N-dimensional
-matrix are empty, so the catalog is rendered as a flat table
-with axis values as columns.
+The Producer feature catalog is positioned along **two
+coordinate systems**:
+
+1. **Requirement-layer axes (J1–J5)** — defined canonically
+   in
+   [`../0005-contracts/09-session-agent-protocol.md`](../0005-contracts/09-session-agent-protocol.md)
+   (the Session Agent Protocol mother contract introduced
+   alongside this redesign): trigger actor / trigger carrier
+   / autonomy class / D-META-1 strength / result destination.
+   This surface inherits J1–J5 by reference and does not
+   redefine them. § "J1–J5 distribution observation" below
+   records Producer-specific value distribution.
+2. **SKILL-layer axes (A1–A4)** — four axes describing
+   *the SKILL that may implement* a node, retained inline
+   in this surface because A2 (workflow stage) is
+   surface-specific and A1 (goal-loop phase coverage) has
+   not yet migrated into
+   [`../../../SKILLS.md`](../../../SKILLS.md) as a top-level
+   axis: A1 Agent goal-loop phase / A2 Workflow stage / A3
+   Skill nature / A4 Skill layer. A3 and A4 recap
+   definitions from
+   [`../../../SKILLS.md`](../../../SKILLS.md).
+
+The two coordinate systems are **independent**: J1–J5
+locate the **node** (the requirement); A1–A4 locate the
+**SKILL** (the artifact that may implement the node). The
+ROI function in
+[`../../../FEATURE_DESIGN_METHODOLOGY.md`](../../../FEATURE_DESIGN_METHODOLOGY.md)
+is the only place where the two systems combine.
+
+Cross-axis sparsity is the value of the catalog table form
+— most cells of the abstract N-dimensional matrix are
+empty, so the catalog is rendered as a flat table with axis
+values as columns.
+
+### J1–J5 distribution observation (requirement-layer)
+
+The mother protocol defines J1–J5 dimensions and value
+enums; this surface declares how Producer's 21 journey
+nodes (the Stage 1 enumeration per
+[`../../../FEATURE_DESIGN_METHODOLOGY.md`](../../../FEATURE_DESIGN_METHODOLOGY.md)
+§ "Stage 1 — User-journey node enumeration", pending
+explicit catalog) distribute across the J values:
+
+| Axis | Producer distribution |
+|------|-----------------------|
+| **J1** Trigger actor | 13 `agent-self` (A1–A3, D2, E1–E3, F1, G1–G5) / 9 `architect` (A4, A5, B1–B4, C1, D1, F2) / 4 `nested-within-routine` (C2–C5, all nested in C1 review-queue routine). |
+| **J2** Trigger carrier | mixed; `cron-job` heavy on cadence-driven nodes (E1–E3 retro / weekly / hygiene; A1–A3 compute side via compute-present split); `session-hook` for K-budget present-only nodes; `in-process-reflex` for G1–G5; `explicit-prompt` for architect-driven B / C / D / F nodes (sub-mode: prompter = architect, except F-07 dispatch where prompter = Producer-agent in Mode-2). |
+| **J3** Autonomy class | A-class for governance reflex (G1–G5), label cleanup, batch dispatch (F-07); R-class for SoT-modifying actions (B4 re-split, F2 harness landing); N-class reserved (zero entries at v1). |
+| **J4** D-META-1 strength | wide spread — `low` (G1–G5 governance, A1–A3 mechanism); `medium` (B2 INVEST framing, E1 retro Derby & Larsen template); `high` (B1 design conversation, F2 harness setup). |
+| **J5** Result destination | `inject-session` for briefing nodes (A1–A3); `persist-state` heavy (board mutations, audit rows, claim states); `emit-external` for PR comments and dispatched artifacts; `inline-return` exclusive to the 4 nested nodes (C2–C5). |
+
+Per-node J 5-tuple positioning lives in § "Producer feature
+catalog (table)" below.
+
+> **Note**: 21 Producer journey nodes (A1–G5) are referenced
+> symbolically here; the explicit Stage 1 enumeration is
+> pending application as the next round of redesign work.
+> This distribution table will be regenerated once the
+> enumeration lands.
 
 ### Axis 1 — Agent goal-loop phase
 
@@ -353,38 +407,45 @@ list with the misplacement marker; the cleanup is independently
 scheduled (see § "Open design choices" → "skill-relocation
 cleanup timing").
 
-### Axes orthogonality self-check
+### Axes orthogonality self-check (SKILL-layer)
 
-Each pair of axes is independent — moving along one axis does
-not constrain another:
+Each pair of A1–A4 (SKILL-layer) axes is independent —
+moving along one does not constrain another. **J1–J5
+orthogonality is verified by the mother protocol**
+([`../0005-contracts/09-session-agent-protocol.md`](../0005-contracts/09-session-agent-protocol.md)
+§ "Cross-axis legal-combination matrix"); this surface does
+not re-verify J1–J5 orthogonality.
 
-- 1 ⊥ 2: an `orient` phase serves multiple workflows (daily
-  briefing's board read, intake's context fetch, and
+For A1–A4 (the four axes inlined in this surface):
+
+- A1 ⊥ A2: an `orient` phase serves multiple workflows
+  (daily briefing's board read, intake's context fetch, and
   decompose-handoff's spec walk all share the `orient` phase
   but belong to different workflows).
-- 1 ⊥ 3: any cognitive phase can be hosted by either a
+- A1 ⊥ A3: any cognitive phase can be hosted by either a
   workflow SKILL (the agent enters a procedural narrative)
   or a mental-model SKILL (the agent consults a framework).
   A workflow feature in `orient` phase typically composes
   one or more mental-model atomics consulted during that
   same `orient` — phase and nature are independent.
-- 2 ⊥ 3: every workflow contains feature steps that compose
-  mental-model atomics. A routing-decision step (workflow
-  nature) at `intake` workflow / `plan` phase consults a
-  classification atomic (mental-model nature) for autonomy
-  class resolution; both halves coexist at the same workflow
-  step but on different natures.
-- 3 ⊥ 4: although currently strongly correlated (entrypoint
-  and molecular trend workflow; atomic trends mental-model),
-  the redesign treats them as independent because future
-  shapes can break the correlation (a molecular mental-model
-  framework SKILL; an atomic workflow primitive). The 2×3
-  design-space cells are all reachable; current uniformity
-  on the diagonal is empirical, not structural.
-- 1 / 2 / 3 ⊥ 4: any cognitive phase × any workflow × any
-  nature can in principle sit at any layer — though atomic
-  layer is reflexive (no upward calls to same-plugin skills),
-  which constrains some workflows.
+- A2 ⊥ A3: every workflow contains feature steps that
+  compose mental-model atomics. A routing-decision step
+  (workflow nature) at `intake` workflow / `plan` phase
+  consults a classification atomic (mental-model nature)
+  for autonomy class resolution; both halves coexist at the
+  same workflow step but on different natures.
+- A3 ⊥ A4: although currently strongly correlated
+  (entrypoint and molecular trend workflow; atomic trends
+  mental-model), the redesign treats them as independent
+  because future shapes can break the correlation (a
+  molecular mental-model framework SKILL; an atomic
+  workflow primitive). The 2×3 design-space cells are all
+  reachable; current uniformity on the diagonal is
+  empirical, not structural.
+- A1 / A2 / A3 ⊥ A4: any cognitive phase × any workflow ×
+  any nature can in principle sit at any layer — though
+  atomic layer is reflexive (no upward calls to same-plugin
+  skills), which constrains some workflows.
 
 ## Producer feature catalog (table)
 
@@ -459,18 +520,6 @@ Phase 1.]
 
 ### Still open
 
-- **Form choice (mother protocol vs surface-only).** Whether
-  to extract a mother-layer Session/Agent Protocol contract
-  in `0005-contracts/0X-session-agent-protocol.md`
-  (candidate B) before 03 / 04 redesign land, or to author
-  03 / 04 as self-contained drafts and only extract a mother
-  layer if commonality empirically justifies (candidate A).
-  The decision affects ADR family size and spec cascade. The
-  empirical case for B: axes 1, 3, 4 are all
-  Producer-Consumer-shared (with the Adjuncts attribute also
-  shared); only axis 2 is role-specific.
-  3-of-4 axes shared is a strong B signal. Default B; await
-  architect ratification.
 - **Workflow granularity.** Whether each row in the catalog
   is a feature (F-01..F-15, current numbering preserved)
   with workflow as a column, or a workflow step (claim /
@@ -540,6 +589,16 @@ Phase 1.]
   `scripts/`. The plugin protocol recognizes `hooks/`,
   `skills/<name>/`, `commands/`, `agents/`, plus the
   manifest dirs (`.claude-plugin/`, `.codex-plugin/`).
+- **Mother-protocol form choice (candidate B accepted, 2026-04-29).**
+  Extract a mother-layer Session Agent Protocol contract at
+  [`../0005-contracts/09-session-agent-protocol.md`](../0005-contracts/09-session-agent-protocol.md).
+  Trigger: J1–J5 are 5-of-5 shared between Producer / Consumer
+  / Bootstrap surfaces (axis definitions and value enums
+  identical; only value distribution and node catalogs
+  differ). 5-of-5 sharedness exceeds the original 3-of-4
+  threshold that defaulted to candidate B. Mother protocol
+  pins J1–J5; this surface declares Producer-specific
+  distribution and 21-node catalog without redefining J1–J5.
 
 ## Replacement plan (when this draft is approved)
 

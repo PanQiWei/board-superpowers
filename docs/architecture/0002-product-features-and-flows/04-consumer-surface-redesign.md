@@ -152,22 +152,71 @@ restoring the catalog to platform-agnostic agentic descriptions.
 
 ## The orthogonal axes
 
-The Consumer feature catalog is indexed by **four axes** —
-identical structure to Producer's redesign with one role-shape
-asymmetry on Axis 2 (workflow stage). Each axis answers a
-distinct question; together they pin down a feature's identity.
-Cross-axis sparsity is the value of the table form.
+The Consumer feature catalog is positioned along **two
+coordinate systems**, identical structure to
+[`03-producer-surface-redesign.md`](./03-producer-surface-redesign.md)
+§ "The orthogonal axes":
 
-> **Cross-reference**: axes 1, 3, 4 are defined identically to
-> [`03-producer-surface-redesign.md`](./03-producer-surface-redesign.md)
-> § "The orthogonal axes". The duplication here is intentional
-> — each surface stands self-contained at this draft stage.
-> If the architect chooses **candidate B** (mother-layer
-> protocol extraction), these three shared axes plus the
-> Adjuncts attribute migrate up to
-> `0005-contracts/0X-session-agent-protocol.md` and both
-> surfaces inherit by reference. Until that decision is made,
-> definitions duplicate by design.
+1. **Requirement-layer axes (J1–J5)** — defined canonically
+   in
+   [`../0005-contracts/09-session-agent-protocol.md`](../0005-contracts/09-session-agent-protocol.md)
+   (the Session Agent Protocol mother contract introduced
+   alongside this redesign): trigger actor / trigger carrier
+   / autonomy class / D-META-1 strength / result destination.
+   This surface inherits J1–J5 by reference and does not
+   redefine them. § "J1–J5 distribution observation" below
+   records Consumer-specific value distribution.
+2. **SKILL-layer axes (A1–A4)** — four axes describing
+   *the SKILL that may implement* a node, retained inline:
+   A1 Agent goal-loop phase / A2 Workflow stage / A3 Skill
+   nature / A4 Skill layer. A2 (workflow stage) has a
+   different shape from Producer's — Consumer is
+   **lifecycle-driven** (single flow, multi-stage); Producer
+   is **call-driven** (multi-flow, cross-cutting features).
+   A1, A3, A4 are shape-identical to Producer.
+
+The two coordinate systems are **independent**: J1–J5
+locate the **node** (the requirement); A1–A4 locate the
+**SKILL** (the artifact that may implement the node). The
+ROI function in
+[`../../../FEATURE_DESIGN_METHODOLOGY.md`](../../../FEATURE_DESIGN_METHODOLOGY.md)
+is the only place where the two systems combine.
+
+Cross-axis sparsity is the value of the catalog table form.
+
+### J1–J5 distribution observation (requirement-layer)
+
+The mother protocol defines J1–J5 dimensions and value
+enums; this surface declares how Consumer's 14+ journey
+nodes (the Stage 1 enumeration per
+[`../../../FEATURE_DESIGN_METHODOLOGY.md`](../../../FEATURE_DESIGN_METHODOLOGY.md)
+§ "Stage 1 — User-journey node enumeration", pending
+explicit catalog) distribute across the J values.
+
+Consumer's distribution differs from Producer's in shape
+because Consumer is **lifecycle-driven, single-card,
+single-session**: most nodes fire automatically as the
+agent self-progresses through the lifecycle; architect-class
+nodes are concentrated at review-feedback / surface-answer
+boundaries; `cron-job` carrier is rare (Consumer sessions
+are typically short-lived, not cadence-driven).
+
+| Axis | Consumer distribution (preliminary) |
+|------|-------------------------------------|
+| **J1** Trigger actor | nested-heavy — implementation stage hosts multiple nested test / debug / verify sub-nodes; `agent-self` for inter-stage transitions; `architect`-class concentrated on review-feedback and surface-answer; `explicit-prompt` rare. |
+| **J2** Trigger carrier | `session-hook` for SessionStart card-context injection; `in-process-reflex` heavy (every mutating sub-node fires governance reflex); `cron-job` rare (long-stuck self-surface case only); `explicit-prompt` for architect review-feedback and Producer-agent dispatch (Mode-2 sub-mode). |
+| **J3** Autonomy class | A-class for routine TDD-driven mutations and self-check; R-class for SoT-modifying actions (PR submit, branch deletion, post-merge cleanup); N-class reserved. |
+| **J4** D-META-1 strength | `low`-dominated — Consumer is an executor, ships mechanism (claim protocol, PR three-section template, AC sync rule); few `medium` nodes (TDD handoff to `superpowers`); near-zero `high` nodes (Consumer does not elicit architect taste). |
+| **J5** Result destination | `emit-external` heavy (commit, push, PR creation, PR-comment posting); `persist-state` for card body / claim marker / audit rows; `inject-session` rare (only on `surface` escalation); `inline-return` for nested phase transitions inside implementation. |
+
+Per-node J 5-tuple positioning lives in § "Consumer feature
+catalog (table)" below.
+
+> **Note**: 14+ Consumer journey nodes are referenced
+> symbolically here; the explicit Stage 1 enumeration is
+> pending application as the next round of redesign work.
+> This distribution table will be regenerated once the
+> enumeration lands.
 
 ### Axis 1 — Agent goal-loop phase
 
@@ -305,36 +354,46 @@ when the SKILL decomposition decision is made; each affected
 feature's `script_adjuncts` field will carry a `*-misplaced`
 suffix in the catalog row until relocation lands.
 
-### Axes orthogonality self-check
+### Axes orthogonality self-check (SKILL-layer)
 
-- 1 ⊥ 2: an `act` phase serves multiple workflow stages
+Each pair of A1–A4 (SKILL-layer) axes is independent.
+**J1–J5 orthogonality is verified by the mother protocol**
+([`../0005-contracts/09-session-agent-protocol.md`](../0005-contracts/09-session-agent-protocol.md)
+§ "Cross-axis legal-combination matrix"); this surface does
+not re-verify J1–J5 orthogonality.
+
+For A1–A4 (the four axes inlined in this surface):
+
+- A1 ⊥ A2: an `act` phase serves multiple workflow stages
   (claim's `act` is F-C1's atomic push; impl's `act` is
   F-C4's TDD step; submit's `act` is F-C12's PR open).
-- 1 ⊥ 3: an `orient` phase can be hosted by either workflow
-  SKILL (procedural narrative for fetching context) or
-  mental-model SKILL (the consulted schema reference during
-  the orient). The phase-vs-nature combination is free.
-- 2 ⊥ 3: every workflow stage contains workflow-natured
+- A1 ⊥ A3: an `orient` phase can be hosted by either
+  workflow SKILL (procedural narrative for fetching context)
+  or mental-model SKILL (the consulted schema reference
+  during the orient). The phase-vs-nature combination is
+  free.
+- A2 ⊥ A3: every workflow stage contains workflow-natured
   feature steps that compose mental-model atomics —
   implementation stage's TDD-driven mutations (workflow
   nature) consult an autonomy classification atomic
   (mental-model nature) for autonomy class on every
   mutation.
-- 3 ⊥ 4: although currently strongly correlated (Consumer's
-  workflow features all sit at molecular; consumed
-  mental-model atomics all sit at atomic), the redesign
-  treats them as independent because future shapes can
-  break the correlation (a molecular mental-model framework
-  spanning Consumer's lifecycle; an atomic workflow
-  primitive callable from multiple molecular Consumer
-  variants). Same as Producer's 3⊥4 self-check.
-- 1 / 2 / 3 ⊥ 4: any cognitive phase × any workflow stage ×
-  any nature can in principle sit at any layer. Empirical:
-  Consumer features span all 9 goal-loop phases (`receive`
-  through `conclude`) and all 5 workflow stages (bootstrap
-  through termination), uniformly at (workflow, molecular).
-  The single-cell uniformity within Consumer surface is
-  itself a finding — see Axis 4 empirical observation above.
+- A3 ⊥ A4: although currently strongly correlated
+  (Consumer's workflow features all sit at molecular;
+  consumed mental-model atomics all sit at atomic), the
+  redesign treats them as independent because future shapes
+  can break the correlation (a molecular mental-model
+  framework spanning Consumer's lifecycle; an atomic
+  workflow primitive callable from multiple molecular
+  Consumer variants). Same as Producer's A3⊥A4 self-check.
+- A1 / A2 / A3 ⊥ A4: any cognitive phase × any workflow
+  stage × any nature can in principle sit at any layer.
+  Empirical: Consumer features span all 9 goal-loop phases
+  (`receive` through `conclude`) and all 5 workflow stages
+  (bootstrap through termination), uniformly at (workflow,
+  molecular). The single-cell uniformity within Consumer
+  surface is itself a finding — see Axis 4 empirical
+  observation above.
 
 ## Consumer feature catalog (table)
 
@@ -415,21 +474,6 @@ edits, no SKILL or hook code change).]
 
 ### Still open
 
-- **Form choice (mother protocol vs surface-only).** Mirrored
-  with [`03-producer-surface-redesign.md`](./03-producer-surface-redesign.md)
-  § "Open design choices". The empirical case for B
-  (mother-layer protocol extraction) is even stronger after
-  Axis 1, 3, 4 are confirmed identically defined in both
-  files (plus the Adjuncts attribute); only Axis 2 differs by
-  role-shape (Consumer lifecycle-driven vs Producer
-  call-driven). 3 of 4 axes shared (plus shared adjuncts) is
-  a strong B signal. Default B; await architect ratification.
-- **Mode projection placement.** Whether the Mode-1 / Mode-2
-  distinction lives as a per-feature column in this catalog
-  (provisional choice in the table above), or migrates to
-  mother-protocol trigger model (under candidate B), or stays
-  in 04 alone (under candidate A). The choice cascades
-  with Form choice.
 - **F-C13 scope-judgment extraction.** Under the new Axis 3
   (skill nature) framing, F-C13 is workflow-natured (a
   procedural response loop) but its scope-judgment portion
@@ -513,6 +557,20 @@ edits, no SKILL or hook code change).]
   finding (based on the now-retired capability vs
   meta-capability axis) is superseded by this layer-vs-nature
   framing.
+- **Mother-protocol form choice (candidate B accepted, 2026-04-29).**
+  Extract a mother-layer Session Agent Protocol contract at
+  [`../0005-contracts/09-session-agent-protocol.md`](../0005-contracts/09-session-agent-protocol.md).
+  Trigger: J1–J5 are 5-of-5 shared between Producer /
+  Consumer / Bootstrap surfaces (axis definitions and value
+  enums identical; only value distribution and node catalogs
+  differ). 5-of-5 sharedness exceeds the original 3-of-4
+  threshold that defaulted to candidate B. Mother protocol
+  pins J1–J5; this surface declares Consumer-specific
+  distribution and 14+-node catalog without redefining
+  J1–J5. Mode-1 / Mode-2 projection is part of the mother
+  protocol's J2 (`explicit-prompt` carrier sub-modes — the
+  prompter being architect vs Producer-agent), not a
+  per-feature column in 04.
 
 ## Replacement plan (when this draft is approved)
 
