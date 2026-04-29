@@ -11,6 +11,17 @@
 > 2. Note: this directory is for **AI-callable tools**, not
 >    user-facing CLIs. The plugin is consumed via skills /
 >    slash commands, not a dedicated CLI binary.
+> 3. **If your work touches setup-stages files** —
+>    `stages-registry.yml`, `stages_lib/**`,
+>    `stages-registry.schema.json`, `lib/_canonical.py`, or any
+>    helper consumed by the lifecycle diff — **also Read
+>    [`../SETUP_STAGES_DEVELOPMENT.md`](../SETUP_STAGES_DEVELOPMENT.md)**
+>    end-to-end before the first edit. The guide carries the
+>    judgment calls (when to add a stage vs alternatives,
+>    common axis misclassifications, the canonicalization
+>    invariant, anti-patterns) the spec doesn't encode.
+>    Same-PR contract: any change that makes the guide stale
+>    fixes the guide in this PR.
 
 This contract is the per-directory operational checklist for
 bash tooling. The full platform contract lives in
@@ -90,3 +101,6 @@ shape for intent-injection markers (see
   [`../PLUGIN_DEVELOPMENT.md`](../PLUGIN_DEVELOPMENT.md).
 - Hook-specific contracts (timeout, marker grammar) →
   [`../hooks/AGENTS.md`](../hooks/AGENTS.md).
+- Setup-stages system (registry, 5-callable contract,
+  applicable_when, settings layering, anti-patterns) →
+  [`../SETUP_STAGES_DEVELOPMENT.md`](../SETUP_STAGES_DEVELOPMENT.md).

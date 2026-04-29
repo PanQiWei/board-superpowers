@@ -16,6 +16,15 @@
 >    snippet generator — Codex CLI does not auto-discover
 >    `hooks/hooks.json`, so a new event without an updated
 >    register script silently breaks Codex installs.
+> 4. **If your edit touches `session-start.sh`'s lifecycle
+>    diff path** (reading partitioned settings, computing
+>    stage state, emitting `INVOKE: bootstrapping-repo`) —
+>    **also Read
+>    [`../SETUP_STAGES_DEVELOPMENT.md`](../SETUP_STAGES_DEVELOPMENT.md)**
+>    end-to-end. The hook is observation-only by contract
+>    ([ADR-0012](../docs/architecture/adr/0012-unified-check-script-trigger-model.md));
+>    violating the hook-cheap or always-exit-0 invariants
+>    silently breaks every architect's session start.
 
 This contract is the per-directory operational checklist for
 hook authoring. The full platform contract lives in
@@ -164,3 +173,7 @@ cite "invariants 1–4" as a fixed enumeration.
 - Hook intent injection pattern rationale →
   [`../docs/architecture/0004-component-architecture.md`](../docs/architecture/0004-component-architecture.md)
   § "Hook intent injection pattern".
+- `session-start.sh` lifecycle-diff path semantics
+  (registry read, three-layer fingerprint, marker emission
+  for setup-stages) →
+  [`../SETUP_STAGES_DEVELOPMENT.md`](../SETUP_STAGES_DEVELOPMENT.md).

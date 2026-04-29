@@ -190,6 +190,39 @@ When adding / removing / renaming / re-layering any skill:
   directory (e.g., skill-bundled scripts under
   `<skill>/scripts/`).
 
+## Stage-touching SKILLs — additional read
+
+If your work edits **`skills/bootstrapping-repo/`** or
+introduces a new SKILL whose body executes setup-stage
+machinery (registry walk, lifecycle diff, agentic config-item
+elicitation per [ADR-0023](../docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md)),
+**also Read [`../SETUP_STAGES_DEVELOPMENT.md`](../SETUP_STAGES_DEVELOPMENT.md)**
+end-to-end before the first edit. The Process gate above
+(skill-creator + SKILL_DEVELOPMENT.md) covers SKILL-authoring
+discipline; the setup-stages guide covers the system the SKILL
+operates against (the 5-callable contract, three axes,
+`applicable_when` forms, partitioned settings layout, anti-
+patterns). Skill-authoring discipline + setup-stages
+discipline are independent concerns — both reads are required
+when the SKILL touches stages.
+
+Concrete trigger conditions (any one suffices):
+
+- The SKILL body invokes the bootstrap stage executor or the
+  lifecycle-diff helper.
+- The SKILL writes to any of the four partitioned
+  `settings.yml` files.
+- The SKILL adds a new `action_id` that classifies a
+  setup-stage operation through `classifying-actions` /
+  `auditing-actions`.
+- The SKILL's spec changes the consumer-side contract for
+  the agentic config-item protocol (the 5 protocol elements
+  per [ADR-0023](../docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md)).
+
+Same-PR contract: any SKILL change that makes
+[`../SETUP_STAGES_DEVELOPMENT.md`](../SETUP_STAGES_DEVELOPMENT.md)
+or [`../SKILLS.md`](../SKILLS.md) stale fixes both in this PR.
+
 ## Where the long-form rules live
 
 This file is intentionally the per-directory checklist, not
@@ -204,3 +237,7 @@ the manual. For:
 - Subagent / Mode-2 orchestration constraints (`max_depth=1`,
   procedural fallback patterns, `Agent` tool use) →
   [`../MULTI_AGENT_DEVELOPMENT.md`](../MULTI_AGENT_DEVELOPMENT.md).
+- Setup-stages system (when the SKILL operates against
+  stages — registry, 5-callable contract, agentic config-item
+  protocol, partitioned settings layering) →
+  [`../SETUP_STAGES_DEVELOPMENT.md`](../SETUP_STAGES_DEVELOPMENT.md).
