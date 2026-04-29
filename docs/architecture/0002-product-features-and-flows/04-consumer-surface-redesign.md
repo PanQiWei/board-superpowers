@@ -187,11 +187,11 @@ Cross-axis sparsity is the value of the catalog table form.
 ### J1–J5 distribution observation (requirement-layer)
 
 The mother protocol defines J1–J5 dimensions and value
-enums; this surface declares how Consumer's 14+ journey
+enums; this surface declares how Consumer's 23 journey
 nodes (the Stage 1 enumeration per
 [`../../../FEATURE_DESIGN_METHODOLOGY.md`](../../../FEATURE_DESIGN_METHODOLOGY.md)
-§ "Stage 1 — User-journey node enumeration", pending
-explicit catalog) distribute across the J values.
+§ "Stage 1 — User-journey node enumeration") distribute
+across the J values.
 
 Consumer's distribution differs from Producer's in shape
 because Consumer is **lifecycle-driven, single-card,
@@ -201,8 +201,8 @@ nodes are concentrated at review-feedback / surface-answer
 boundaries; `cron-job` carrier is rare (Consumer sessions
 are typically short-lived, not cadence-driven).
 
-| Axis | Consumer distribution (preliminary) |
-|------|-------------------------------------|
+| Axis | Consumer distribution |
+|------|------------------------|
 | **J1** Trigger actor | nested-heavy — implementation stage hosts multiple nested test / debug / verify sub-nodes; `agent-self` for inter-stage transitions; `architect`-class concentrated on review-feedback and surface-answer; `explicit-prompt` rare. |
 | **J2** Trigger carrier | `session-hook` for SessionStart card-context injection; `in-process-reflex` heavy (every mutating sub-node fires governance reflex); `cron-job` rare (long-stuck self-surface case only); `explicit-prompt` for architect review-feedback and Producer-agent dispatch (Mode-2 sub-mode). |
 | **J3** Autonomy class | A-class for routine TDD-driven mutations and self-check; R-class for SoT-modifying actions (PR submit, branch deletion, post-merge cleanup); N-class reserved. |
@@ -216,10 +216,6 @@ catalog (table)" below.
 > enumerated in § "Consumer journey nodes (Stage 1
 > enumeration)" below; per-node J 5-tuple positioning is in
 > § "Consumer feature catalog (table)" further below.
-> The 14+ symbolic count earlier in this draft underestimated
-> the cross-cutting governance nodes (G1–G5) and several
-> Consumer-specific implementation discipline reflexes;
-> the explicit Stage 1 enumeration recovers them.
 
 ### Axis 1 — Agent goal-loop phase
 
@@ -582,29 +578,29 @@ column with its candidate SKILL home.
 
 | ID | Name | J1 | J2 | J3 | J4 | J5 | A1 phases | A2 workflow stage | Archetype + SKILL home |
 |----|------|-----|-----|-----|-----|-----|-----------|-------------------|------------------------|
-| **A1** | Receive card assignment | architect (Mode-1) or nested (Mode-2 dispatched) | session-hook (`INVOKE: consuming-card`) or explicit-prompt | A | low | inject-session (card briefing) | receive → orient | bootstrap | C → fold into `consuming-card` |
-| **A2** | Atomic claim + worktree entry | nested | in-process-reflex (`claim-card.sh`) | A (per ADR-0002) | low | persist-state (claim marker + branch on remote) | act → observe | bootstrap | C → fold into `consuming-card` |
+| **A1** | Receive card assignment | architect (Mode-1) or nested (Mode-2 dispatched) | session-hook (`INVOKE: consuming-card`) or explicit-prompt | A | low | inject-session (card briefing) | receive → orient | bootstrap | C → fold into `consuming-card` (lifecycle entry) |
+| **A2** | Atomic claim + worktree entry | nested | in-process-reflex (`claim-card.sh`) | A (per ADR-0002) | low | persist-state (claim marker + branch on remote) | act → observe | bootstrap | C → fold into `consuming-card`; mechanism delegated to `scripts/claim-card.sh`; branch naming SPOT in `board-canon` |
 | **A3** | Spec fetch | nested | in-process-reflex (file read) | N/A (read-only) | low | inline-return (spec content) | orient | bootstrap | C → fold into `consuming-card` |
-| **B1** | Plan synthesis (delegate) | nested | in-process-reflex (Skill tool: `superpowers:writing-plans`) | A | medium | inline-return (plan brief) | plan | implementation | C → fold into `consuming-card` (router pattern) |
+| **B1** | Plan synthesis (delegate) | nested | in-process-reflex (Skill tool: `superpowers:writing-plans`) | A | medium | inline-return (plan brief) | plan | implementation | C → fold into `consuming-card`; cross-plugin routing via `composing-siblings` atomic |
 | **B2** | TDD-driven mutation cycle (delegate) | nested | in-process-reflex (Skill tool: `superpowers:test-driven-development`) | A (each mutation per ADR-0006 rows 100+) | low | persist-state (commits) + emit-external (push) | act → observe → reflect (loop) | implementation | C → fold into `consuming-card` |
-| **B3** | TDD-skip refusal (governance reflex) | nested | in-process-reflex | N/A (refusal of override) | low (rule) | inline-return (gate signal) | reflect (gate) | implementation | C → fold into `consuming-card` body or shared atomic if reuse pattern emerges |
+| **B3** | TDD-skip refusal (governance reflex) | nested | in-process-reflex | N/A (refusal of override) | low (rule) | inline-return (gate signal) | reflect (gate) | implementation | C → fold into `consuming-card` (refusal pattern; SPOT not yet structurally same across B3/B4/B5 — defer atomic lift to v1.x if a 3-caller same-rhythm pattern emerges) |
 | **B4** | Cross-card refusal (boundary reflex) | nested | in-process-reflex | N/A (refusal) | low (rule) | inline-return (gate signal) | reflect (gate) | implementation | C → fold into `consuming-card` |
-| **B5** | Permission-boundary preservation (governance reflex) | nested | in-process-reflex | N/A (gate of D-AUTONOMY-1) | low (rule) | inline-return (gate signal) | reflect (gate) | implementation | C → fold into `consuming-card`; G2 / G3 atomic enforces classification |
-| **C1** | Verification chain (delegate) | nested | in-process-reflex (Skill tools: `superpowers:verification-before-completion` + `requesting-code-review` + `gstack:/review`) | A | low | inline-return (verification artifacts) | verify | self-check | C → fold into `consuming-card` (router pattern) |
-| **C2** | Cross-platform review (delegate) | nested | in-process-reflex (Skill tool / explicit-prompt to sibling platform) | A | medium | emit-external (review notes posted on PR) | verify | self-check | C → fold into `consuming-card` |
-| **C3** | Conditional QA (delegate) | nested (gated by card label) | in-process-reflex (Skill tool: `gstack:/qa <url>`) | A | medium | emit-external (QA report) | verify | self-check | C → fold into `consuming-card` |
-| **C4** | Conditional security audit (delegate) | nested (gated by card label / path) | in-process-reflex (Skill tool: `gstack:/cso`) | A | medium | emit-external (security report) | verify | self-check | C → fold into `consuming-card` |
+| **B5** | Permission-boundary preservation (governance reflex) | nested | in-process-reflex | N/A (gate of D-AUTONOMY-1) | low (rule) | inline-return (gate signal) | reflect (gate) | implementation | C → fold into `consuming-card`; classification reflex delegated to `classifying-actions` atomic |
+| **C1** | Verification chain (delegate) | nested | in-process-reflex (Skill tools: `superpowers:verification-before-completion` + `requesting-code-review` + `gstack:/review`) | A | low | inline-return (verification artifacts) | verify | self-check | C → fold into `consuming-card`; cross-plugin routing via `composing-siblings` atomic |
+| **C2** | Cross-platform review (delegate) | nested | in-process-reflex (Skill tool / explicit-prompt to sibling platform) | A | medium | emit-external (review notes posted on PR) | verify | self-check | C → fold into `consuming-card`; cross-plugin routing via `composing-siblings` atomic |
+| **C3** | Conditional QA (delegate) | nested (gated by card label) | in-process-reflex (Skill tool: `gstack:/qa <url>`) | A | medium | emit-external (QA report) | verify | self-check | C → fold into `consuming-card`; cross-plugin routing via `composing-siblings` atomic |
+| **C4** | Conditional security audit (delegate) | nested (gated by card label / path) | in-process-reflex (Skill tool: `gstack:/cso`) | A | medium | emit-external (security report) | verify | self-check | C → fold into `consuming-card`; cross-plugin routing via `composing-siblings` atomic |
 | **D1** | PR submit with three-section contract | nested | in-process-reflex (atomic SKILL: `enforcing-pr-contract`) | R (per ADR-0006 — PR open is SoT-modifying) | low (mechanism: contract validation) | persist-state (card body sync) + emit-external (PR open) | act → verify → conclude | pr-cycle | A → atomic SKILL: `enforcing-pr-contract` (shipped — used here as SPOT) |
-| **D2** | Card body AC terminal-state sync | nested (within D1) | in-process-reflex (within `enforcing-pr-contract`) | R (with D1; SoT-modifying) | low (rule) | persist-state (card body) | reflect → act | pr-cycle | C → folded into D1's atomic SKILL |
+| **D2** | Card body AC terminal-state sync | nested (within D1) | in-process-reflex (within `enforcing-pr-contract`) | R (with D1; SoT-modifying) | low (rule) | persist-state (card body) | reflect → act | pr-cycle | C → folded into D1's atomic SKILL `enforcing-pr-contract` |
 | **D3** | Review-feedback response loop | architect (Producer's review returns the card) | explicit-prompt (Producer comment / status flip) | mixed (A integrate / R re-submit) | low | persist-state (additional commits) + emit-external (reply comment) | receive → orient → plan → act → verify | pr-cycle | C → fold into `consuming-card` |
-| **E1** | Post-merge cleanup | nested or cron-fired | in-process-reflex (within `consuming-card`) or cron-job (`post_merge_cleanup` config) | A (per ADR-0006 row) | low (mechanism) | persist-state (state.yml + audit) + emit-external (branch / worktree delete) | conclude | termination | C → fold into `consuming-card` or cron-helper script |
+| **E1** | Post-merge cleanup | nested or cron-fired | in-process-reflex (within `consuming-card`) or cron-job (`post_merge_cleanup` config; per ADR-0027) | A (per ADR-0006 row) | low (mechanism) | persist-state (state.yml + audit) + emit-external (branch / worktree delete) | conclude | termination | C → fold into `consuming-card`; mechanism delegated to per-routine cron helper script (compute / present split) |
 | **E2** | Crash / failure path | nested (heartbeat / abnormal exit handler) | in-process-reflex | A (heartbeat audit row) | low | persist-state (heartbeat row + partial-state recovery hint) | conclude (abnormal) | termination | C → fold into `consuming-card` |
-| **F1** | Stakeholder routing | nested or architect-triggered | in-process-reflex or explicit-prompt | mixed (A integrate within slice; R if cross-card touch needed) | high (D-META-1: scope judgment is architect taste) | inject-session (proposal for cross-card escalation) + emit-external (acknowledge stakeholder) | reflect → plan → surface | (cross-stage) | B → thin router SKILL with `scope-judgment` atomic, OR fold into `consuming-card` with inlined judgment (Open) |
+| **F1** | Stakeholder routing | nested or architect-triggered | in-process-reflex or explicit-prompt | mixed (A integrate within slice; R if cross-card touch needed) | high (D-META-1: scope judgment is architect taste) | inject-session (proposal for cross-card escalation) + emit-external (acknowledge stakeholder) | reflect → plan → surface | (cross-stage) | C → fold into `consuming-card`; scope-judgment knowledge inline (1 caller; SPOT threshold not met). v1.x lift candidate: `scope-judgment` atomic if cross-routine reuse emerges. |
 | **G1** | Audit row on every mutating action | nested | in-process-reflex | N/A (record, not action) | low (schema) | persist-state (audit DB) | act (record reflex) | N/A | A → atomic SKILL: `auditing-actions` (shipped v0.3.0 — shared with Producer's G1) |
 | **G2** | R-class propose-await | nested | in-process-reflex | R (governs R class) | low | inject-session (proposal) + persist-state (proposal audit row) | reflect → surface | N/A | A → atomic SKILL: `classifying-actions` (shipped v0.3.0 — shared with Producer; G2 + G3 share the classifier) |
-| **G3** | A-class no-interrupt gate | nested | in-process-reflex | A (governs A class) | low | persist-state (audit) | reflect | N/A | A → folded into `classifying-actions` |
-| **G4** | Mode topology surfacing | nested (every Mode-2-sensitive action) | in-process-reflex | N/A (projection) | low | inline-return (mode signal) | act (helper) | N/A | C → folded into `consuming-card` body, or extracted as a small mode-projection shared helper if cross-SKILL reuse emerges (Open) |
-| **G5** | Cross-platform parity | nested | in-process-reflex | N/A | low (path / hook resolution) | inline-return | act (helper) | N/A | C → folded into `scripts/lib/common.sh` (`bsp_plugin_root()` etc.); same as Producer's G5 |
+| **G3** | A-class no-interrupt gate | nested | in-process-reflex | A (governs A class) | low | persist-state (audit) | reflect | N/A | C → folded into `classifying-actions` (G2 + G3 share the classifier reflex) |
+| **G4** | Mode topology surfacing | nested (every Mode-2-sensitive action) | in-process-reflex | N/A (projection) | low | inline-return (mode signal) | act (helper) | N/A | C → fold into `consuming-card` body. v1.x lift candidate: `mode-projection` atomic when caller count reaches ≥2 (e.g., when Producer overnight-dispatch ships). |
+| **G5** | Cross-platform parity | nested | in-process-reflex | N/A | low (path / hook resolution) | inline-return | act (helper) | N/A | C → script-only: `scripts/lib/common.sh` (`bsp_plugin_root()` etc.), NOT a SKILL — same script as Producer's G5 |
 
 ### Cross-references to F-C0..F-C14 (currently-shipped surface)
 
@@ -653,145 +649,198 @@ Two structural findings from the cross-reference:
    `gstack:/cso`) because they have different gating
    heuristics and different sibling-skill targets.
 
-## Consumer SKILL set candidate (Stage 3 ROI synthesis)
+## Consumer SKILL set decision (Stage 3 ROI synthesis)
 
 Applying the ROI function (per
 [`../../../FEATURE_DESIGN_METHODOLOGY.md`](../../../FEATURE_DESIGN_METHODOLOGY.md)
 § "Stage 3 — Derivation function (ROI)") to each of the 23
-nodes yields an archetype distribution that differs
-markedly from Producer's:
+nodes yields the archetype distribution below. Strict
+re-evaluation under v1-complete scope (architect intake
+2026-04-29, post-methodology) confirms Consumer's
+**lifecycle-driven single-session** structure — Producer's
+"routine-as-archetype-A" promotion (per
+[`03-producer-surface-redesign.md`](./03-producer-surface-redesign.md)
+§ "Producer SKILL set decision") does NOT replicate to
+Consumer's stages because Consumer stages are internal
+lifecycle phases, not user-facing call-points.
 
-- **Archetype A** (must own SKILL) — 4 distinct outcomes,
-  3 atomic + 1 molecular: D1 → atomic
-  `enforcing-pr-contract` (already shipped); G1 → atomic
-  `auditing-actions` (shipped, shared with Producer);
-  G2 + G3 → atomic `classifying-actions` (shipped, shared
-  with Producer); the molecular Consumer-host SKILL itself
-  (currently `consuming-card`, shipped) → archetype A by
-  virtue of hosting all the in-flight discipline +
-  delegation routing (high gap × extreme freq × high
-  fail-cost).
-- **Archetype B** (thin router SKILL) — 1 node: F1
-  stakeholder routing (high D-META-1, low gap on the
-  routing skeleton, high fail-cost on cross-card vs
-  in-slice judgment).
-- **Archetype C** (fold into other) — 18 nodes: A1–A3,
-  B1–B5, C1–C4, D2, D3, E1, E2, G3 (folded into G2's
-  atomic), G4, G5. All fold into `consuming-card` (Shape
-  X) or into per-stage sub-molecular SKILLs (Shape Y).
+### Archetype distribution (v1-complete scope)
 
-The high archetype-C ratio (18/23 = 78%) is structural,
-not a calibration error: Consumer is **lifecycle-driven,
-single-card, single-session** — the entire lifecycle is
-naturally one orchestration unit; the per-stage nodes are
-internal phases rather than independent SKILL candidates.
-This contrasts sharply with Producer's archetype-C ratio
-(12/21 = 57%) where Producer's call-driven multi-flow
-shape produces more independent routine candidates.
+| Archetype | Count | Nodes |
+|-----------|-------|-------|
+| **A — MUST own SKILL** (independent molecular or atomic) | 4 | D1 → atomic `enforcing-pr-contract` (shipped); G1 → atomic `auditing-actions` (shipped); G2 → atomic `classifying-actions` (shipped); `consuming-card` host SKILL itself (shipped) → archetype A by virtue of hosting all 19 fold-in nodes plus the lifecycle orchestration logic (high gap × extreme freq × high fail-cost). |
+| **C — fold into other** | 19 | A1, A2, A3 → fold into `consuming-card`; B1, B2, B3, B4, B5 → fold into `consuming-card`; C1, C2, C3, C4 → fold into `consuming-card`; D2 → fold into `enforcing-pr-contract`; D3 → fold into `consuming-card`; E1, E2 → fold into `consuming-card`; F1 → fold into `consuming-card` (scope-judgment inline; 1 caller below SPOT threshold); G3 → fold into `classifying-actions`; G4 → fold into `consuming-card`; G5 → script-only (`scripts/lib/common.sh`, deterministic mechanism). |
 
-The SKILL set shape decision is **Open** (deferred to
-architect ratification per § "Open design choices" →
-"SKILL decomposition granularity"). Two candidate shapes
-are compared below; both honor the same Stage 2 + Stage 3
-positioning.
+**Strict ROI corrections** versus the prior Stage 3 draft:
 
-### Shape X — Single mega `consuming-card` (current v0.4.0 shape)
+- **F1 archetype B → C.** The prior draft tagged F1 as
+  archetype-B candidate for a thin `scope-judgment` router
+  SKILL. Strict ROI re-evaluation: caller count = 1 (F1
+  itself), SPOT threshold not met. The scope-judgment
+  knowledge inlines into `consuming-card`'s F1 section
+  until v1.x cross-routine reuse emerges (e.g., a future
+  Triager-like specific role that also performs
+  in-slice-vs-cross-card decisions).
+- **G3 archetype A → C.** The prior draft tagged G3 as
+  archetype-A "folded into `classifying-actions`" — that
+  phrasing is structurally an archetype-C (fold into G2's
+  atomic). The atomic SKILL is `classifying-actions`
+  serving G2; G3 is one of its consumed code paths, not a
+  separate SKILL candidate.
+
+**Archetype-B count is 0** at v1-complete scope. Every node
+is either archetype-A (independent SKILL) or archetype-C
+(fold into another SKILL or script). Archetype-B remains a
+valid form for v1.x landings (e.g., the future
+`scope-judgment` atomic if cross-routine reuse emerges) but
+no v1-complete Consumer SKILL ships in archetype-B shape.
+
+### Why Shape X (mega `consuming-card`) wins — and why this is NOT inconsistent with Producer's Shape Y
+
+The Stage 3 SKILL set shape decision lands **Shape X**
+(single mega-`consuming-card`), the **opposite** of
+Producer's Shape Y per-routine split. This is not a
+methodology inconsistency; it is the methodology correctly
+detecting **two surfaces with structurally different
+shapes**.
+
+| Dimension | Shape X — mega `consuming-card` (**chosen**) | Shape Y — per-stage 6 SKILL split |
+|-----------|----------------------------------------------|-----------------------------------|
+| Trigger description precision | 1 user-facing trigger (`[board-card:#N]` / "claim card N" / "work on card N"); the 5 stages (bootstrap / impl / self-check / pr-cycle / termination) are **internal time-ordered phases**, not independent user-facing trigger points | 6 stage SKILLs **cannot have non-overlapping user-facing trigger phrases** — the architect does not say "now do self-check" or "now do termination". This violates SKILL_DEVELOPMENT.md "description = WHEN, not WHAT" first principle. |
+| Lifecycle coherence | Single orchestrator agent owns the full receive → conclude lifecycle; plan → tests → impl → verify → PR chain flows linearly inside the body | 5+ cross-SKILL handoffs per card; each handoff serializes lifecycle context across SKILL boundaries; introduces per-edge handoff contract maintenance |
+| Mode-2 portability (per ADR-0008) | `consuming-card` mature procedural form under Mode-2 `max_depth=1`; verified compatibility | 6 stage SKILLs each need fresh ADR-0008 verification; introduces compatibility risk that may not pass without re-architecting |
+| Body-length budget | Currently 229 lines; finalized lifecycle estimated at 350–420 lines, comfortably inside molecular 250–450 budget; stage detail moves to `references/` per progressive disclosure | Each stage SKILL 150–250 lines; but 6× frontmatter + `references/` + `.skill-meta.yaml` overhead and 6 disjoint trigger descriptions to maintain |
+| Cross-stage helper sharing | Same body → trivial | Atomic layer + scripts (already the structural mechanism — accidentally pulled into Shape Y as an artifact, not a benefit) |
+| Evolution discipline | A future v1.x specific role that is **lifecycle-driven** (e.g., Refiner) inherits this shape; a future role that is **call-driven** (e.g., Triager) inherits Producer's Shape Y. The Producer/Consumer Shape divergence becomes a **placement guidance signal** for future roles. | Forces all future Consumer-like roles into Shape Y regardless of fit |
+
+**Producer Shape Y / Consumer Shape X — the structural reason**:
+
+- **Producer = call-driven multi-flow.** Architect triggers
+  one of N independent routines (`daily` / `intake` /
+  `review-queue` / `triage`) per session entry; each
+  routine has its own user-facing trigger phrases. Independent
+  trigger surfaces force per-routine SKILL split (Shape Y).
+- **Consumer = lifecycle-driven single-session.** Architect
+  triggers one card claim; all stages happen in time-ordered
+  sequence inside that one session. Single trigger surface
+  rules out per-stage SKILL split (Shape Y becomes a SKILL
+  protocol violation), favors mega orchestrator (Shape X).
+
+Same ROI function, same five factors, opposite shape
+decisions — driven by surface-level trigger topology, not
+by methodology preference. This is exactly what the ROI
+function is supposed to do: detect structural fit instead
+of imposing a single shape.
+
+### Final SKILL set (v1-complete Consumer-side)
 
 ```
-consuming-card                  (molecular, mega-routine)
-├── bootstrap stage             (A1, A2, A3)
-├── implementation stage        (B1, B2, B3, B4, B5)
-├── self-check stage            (C1, C2, C3, C4)
-├── pr-cycle stage              (D1, D2, D3)
-├── termination stage           (E1, E2)
-└── stakeholder routing         (F1, inlined judgment)
+Entry layer (1 SKILL — shared with Producer)
+─────────────────────────────────────────────
+using-board-superpowers              shipped — routing unchanged
+                                     (consuming-card remains the entry's
+                                     Consumer-routing target)
 
-enforcing-pr-contract           (atomic, shipped — used at D1)
+Molecular layer (1 SKILL — Consumer-exclusive)
+─────────────────────────────────────────────
+consuming-card                       shipped v0.1.0 — finalized to host
+                                     all 23 journey nodes; lifecycle
+                                     orchestrator from receive to conclude;
+                                     stage detail progressively disclosed
+                                     via `references/`; preserves
+                                     Mode-1 / Mode-2 dual compatibility
 
-board-canon                     (atomic, shipped — mental-model SPOT)
-└── consumed by all mutating actions (state machine, branch naming, Card schema)
+Atomic layer (5 SKILLs — ALL shared with Producer)
+─────────────────────────────────────────────
+board-canon                          shipped   schema + state machine + WIP formula
+enforcing-pr-contract                shipped   Contract A + B (D1 + D2 SPOT)
+classifying-actions                  shipped   D-AUTONOMY-1 matrix; G2 + G3 + B5
+auditing-actions                     shipped   audit schema + degradation; G1
+composing-siblings                   NEW (Producer-side decision; Consumer-side validates with 5 callers — B1/C1/C2/C3/C4)
 
-classifying-actions             (atomic, shipped v0.3.0 — shared with Producer)
-└── G2, G3 + B5 enforcement
-
-auditing-actions                (atomic, shipped v0.3.0 — shared with Producer)
-└── G1
+Consumer-side total: 7 SKILLs (1 + 1 + 5)
+Of which Consumer-exclusive: 1 (consuming-card, already shipped)
 ```
 
-Estimated SKILL count at v1-complete (Consumer side):
+The Consumer surface contributes **zero new SKILLs** in
+v1-complete scope. `consuming-card` is shipped and only
+gets body-content updates to host the 23 journey nodes;
+all 5 atomics are shared with Producer (4 already shipped;
+`composing-siblings` lifted by Producer's Shape Y decision).
 
-- v1-minimum molecular: 1 (`consuming-card`).
-- v1.x molecular: 0–1 (F1 stakeholder routing may extract
-  a thin router SKILL if reuse pattern emerges).
-- atomic: 4 (`enforcing-pr-contract`, `board-canon`,
-  `classifying-actions`, `auditing-actions` — 3 of 4
-  shared with Producer).
-- **Consumer-side total: 5–6 SKILLs**, of which 3 are
-  shared atomics with Producer.
+### `composing-siblings` cross-surface validation
 
-### Shape Y — Per-stage sub-molecular SKILLs
+`composing-siblings` was lifted as a new atomic SKILL in
+Producer's Stage 3 finalization (per
+[`03-producer-surface-redesign.md`](./03-producer-surface-redesign.md)
+§ "Producer SKILL set decision" → "New atomic SKILL").
+Producer-side caller count: 4 molecular SKILLs
+(`intaking-requirement`, `reviewing-pr-queue`,
+`triaging-board`, `decomposing-into-milestones`).
 
-```
-bootstrapping-card-claim        (molecular)
-└── A1, A2, A3
+Consumer-side caller count under Shape X: **5 nodes**
+within `consuming-card` body — B1 (plan synthesis
+delegate), C1 (verification chain delegate), C2
+(cross-platform review delegate), C3 (conditional QA
+delegate), C4 (conditional security audit delegate).
 
-implementing-card               (molecular)
-└── B1, B2, B3, B4, B5
+**Cross-surface total caller count: 9** (4 Producer +
+5 Consumer). This validates the SPOT consolidation: the
+cross-plugin routing decision framework is Producer's
+multi-routine concern AND Consumer's multi-stage concern.
+Single SoT in `composing-siblings` atomic; both Producer
+molecular SKILLs and `consuming-card` body declare
+`composes_atomic: composing-siblings` and consult the same
+routing table.
 
-self-checking-card              (molecular)
-└── C1, C2, C3, C4
+### v1.x atomic candidates (NOT shipped at v1-complete)
 
-submitting-card-pr              (molecular)
-└── D1, D2, D3
+Three Consumer-related SPOT candidates were evaluated and
+**deliberately deferred** to v1.x:
 
-terminating-card-session        (molecular)
-└── E1, E2
+- **`scope-judgment`** (F1 stakeholder routing) — D-META-1
+  high judgment of in-slice-vs-cross-card-vs-defer. v1-complete
+  caller count = 1 (F1 only); SPOT threshold not met.
+  v1.x lift trigger: when a future Triager-like specific
+  role also performs scope judgment, OR when Producer's
+  `triaging-board` formalizes its "5-step ladder" remediation
+  judgments around scope. At ≥2 callers with structurally
+  same rhythm, lift `scope-judgment` to atomic.
+- **`mode-projection`** (G4 Mode topology surfacing) —
+  Mode-1 / Mode-2 dispatching protocol + ADR-0008
+  `max_depth=1` boundary projection. v1-complete caller
+  count = 1 (`consuming-card` only; Producer's overnight-
+  dispatch D1 is v1.x defer). v1.x lift trigger: when
+  Producer overnight-dispatch ships, caller count reaches
+  2; lift to atomic at that point with paired Mode-2
+  contract documentation.
+- **`refusing-out-of-scope`** (B3 + B4 + B5 refusal /
+  gate pattern) — three refusal reflexes share an element
+  structure but trigger conditions are not yet structurally
+  same (TDD skip vs cross-card edit vs permission bypass).
+  v1-complete: keep inlined in `consuming-card`. v1.x lift
+  trigger: when a 4th refusal node lands AND ≥3 of the 4
+  share a same-rhythm refusal-with-explanation framework.
+  Until then, multiple unshared inline refusals are
+  strictly worse than one over-generalized atomic but
+  strictly better than absent documentation.
 
-routing-stakeholder-feedback    (molecular)
-└── F1
-
-[plus the 4 atomic SKILLs same as Shape X]
-```
-
-Estimated SKILL count at v1-complete:
-
-- v1-minimum molecular: 6 (split from `consuming-card`
-  into 6 per-stage SKILLs).
-- atomic: 4 (same as Shape X).
-- **Consumer-side total: 10 SKILLs**, of which 3 are
-  shared atomics with Producer.
-
-### Shape comparison
-
-| Dimension | Shape X (mega-routine) | Shape Y (per-stage split) |
-|-----------|-----------------------|----------------------------|
-| SKILL count | 5–6 | 10 |
-| Trigger description granularity | 1 description (`consuming-card` activated by `[board-card:#N]` / "claim card N" / "work on card N") | 6 stage-keyed descriptions (one per per-stage SKILL) |
-| Body-length budget pressure | High — `consuming-card` body covers full lifecycle (currently 229 lines, growing as redesign lands) | Low — each per-stage SKILL fits comfortably in 150–250 lines |
-| Lifecycle coherence | Single orchestrator agent owns the full card lifecycle; transitions are body section moves (no SKILL boundary) | Stage transitions cross SKILL boundaries; explicit handoff contracts needed between stage SKILLs |
-| Mode-2 compatibility (per ADR-0008) | Mature: `consuming-card` is procedural under Mode-2 `max_depth=1` | Untested: per-stage SKILLs would each need procedural-fallback verification under Mode-2 |
-| Cross-stage helper sharing | Easy (same body) | Requires shared atomic helpers or cross-SKILL invocation |
-
-**Methodology-neutral note**: the ROI function does not
-mandate either shape. Consumer's lifecycle-driven nature
-slightly favors Shape X (single coherent lifecycle
-orchestrator with low cross-SKILL coordination cost), but
-Shape Y has a Mode-2 portability risk that requires
-empirical verification per ADR-0008 before adoption. The
-choice is the architect's per Open list "SKILL
-decomposition granularity"; this redesign records both
-shapes for transparent comparison.
-
-### Same-PR cleanup obligations (regardless of shape)
+### Same-PR cleanup obligations (Shape X)
 
 When this redesign moves from draft to shipped:
 
+- **No new SKILL authoring needed.** `consuming-card` is
+  already shipped (v0.1.0); finalization is body / references
+  refactor only — host the 23 journey nodes (with stage
+  detail moved to `skills/consuming-card/references/`),
+  declare `composes_atomic: composing-siblings`, lift
+  Mode-2 caveats from per-feature mentions into the G4
+  cross-cutting subsection.
 - **Lift Mode-1 / Mode-2 caveats** out of F-C4 / F-C8 /
   F-C10 / F-C11 / F-C13 individual feature blocks into the
-  G4 (Mode topology surfacing) cross-cutting node and the
-  Trigger model section. The currently-shipped 04
-  surface's per-feature Mode-2 paragraphs become "see
-  G4 / Trigger model" pointers.
+  G4 (Mode topology surfacing) cross-cutting subsection of
+  `consuming-card`. The currently-shipped 04 surface's
+  per-feature Mode-2 paragraphs become "see G4" pointers.
 - **Add B1, D3, G1–G5** as explicit catalog rows
   (currently absent or implicit in F-C0..F-C14).
 - **Split F-C11** into two catalog rows (C3 + C4) with
@@ -800,10 +849,14 @@ When this redesign moves from draft to shipped:
   references that scattered across F-C0..F-C14 into the
   A1 catalog row's J2 column (the carrier is now
   explicit, not implicit per-feature footnote).
-
-These cleanups are independent of the SKILL set shape
-decision and land regardless of whether Shape X or Shape Y
-is chosen.
+- **Update `consuming-card` body to consult `composing-siblings`**
+  at B1 / C1 / C2 / C3 / C4 instead of inlined cross-plugin
+  routing references.
+- **Cross-impact propagation** — Spec change-impact matrix
+  in [`../AGENTS.md`](../AGENTS.md) walked top-to-bottom:
+  rows referencing `consuming-card` body content do not
+  rename, but new row added for `consuming-card ↔
+  composing-siblings` SKILL-tool dependency.
 
 ## Trigger model
 
@@ -854,18 +907,6 @@ edits, no SKILL or hook code change).]
 
 ### Still open
 
-- **F-C13 scope-judgment extraction.** Under the new Axis 3
-  (skill nature) framing, F-C13 is workflow-natured (a
-  procedural response loop) but its scope-judgment portion
-  (decide whether to integrate stakeholder feedback or
-  escalate as cross-card touch) is mental-model in shape.
-  Whether to extract a `scope-judgment` atomic mental-model
-  skill that F-C13 composes (cleaner architectural
-  separation), or keep the rule inlined as F-C13 prose
-  (current state). Extraction is the orthogonal-purity
-  choice; inlining preserves continuity. Mirrors the broader
-  question of "when should an inlined rule be promoted to
-  an atomic SKILL".
 - **Codex Mode-2 inclusion in v1-complete.** v1 ships
   Mode-2 as CC-only. Whether the redesign reserves Codex
   Mode-2 as a future-supported projection value (table grows
@@ -879,12 +920,6 @@ edits, no SKILL or hook code change).]
   Same tradeoff as Producer; decisions should be coordinated
   between 03 / 04 to avoid splitting cleanup across multiple
   PRs.
-- **SKILL decomposition granularity.** Whether to split a
-  multi-stage Consumer molecular SKILL (one SKILL covering
-  all lifecycle stages from bootstrap through termination)
-  into per-stage sub-molecular skills. Mirrors Producer's
-  decomposition question. Same Axis 4 cardinality trade-off
-  applies.
 
 ### Decided (by intake conversation, 2026-04-29)
 
@@ -960,14 +995,13 @@ edits, no SKILL or hook code change).]
   precise count is 23 = 3 + 5 + 4 + 3 + 2 + 1 + 5);
   Stage 2 positions each node on J1–J5 + A1–A2 in
   § "Consumer feature catalog (table)"; Stage 3 yields the
-  archetype distribution (4 A / 1 B / 18 C — 78%
+  final archetype distribution (4 A / 0 B / 19 C — 83%
   archetype-C ratio, structural to lifecycle-driven shape)
-  and a SKILL set candidate (Shape X mega-`consuming-card`
-  vs Shape Y per-stage split) in § "Consumer SKILL set
-  candidate (Stage 3 ROI synthesis)". Two structural
-  findings landed: (i) seven nodes (B1, D3, G1–G5)
-  recovered from methodology cross-product, absent in
-  F-C0..F-C14 thematic grouping; (ii) F-C11 splits into
+  and the SKILL set decision (Shape X mega-`consuming-card`)
+  in § "Consumer SKILL set decision (Stage 3 ROI synthesis)".
+  Two structural findings landed: (i) seven nodes (B1, D3,
+  G1–G5) recovered from methodology cross-product, absent
+  in F-C0..F-C14 thematic grouping; (ii) F-C11 splits into
   two distinct nodes (C3 QA vs C4 security audit) due to
   different gating heuristics + sibling-skill targets.
   The currently-shipped F-C0..F-C14 numbering remains
@@ -976,6 +1010,72 @@ edits, no SKILL or hook code change).]
   the canonical Stage 1 / 2 / 3 frame. Mode-1 / Mode-2
   projection lifted from per-feature caveats into G4 +
   Trigger model.
+- **SKILL decomposition granularity — Shape X chosen
+  (2026-04-29).** Per § "Consumer SKILL set decision
+  (Stage 3 ROI synthesis)" → "Why Shape X (mega
+  `consuming-card`) wins". Consumer keeps the existing
+  `consuming-card` mega molecular SKILL hosting all 23
+  journey nodes (lifecycle from receive to conclude); does
+  NOT split into 6 per-stage sub-molecular SKILLs.
+  Decisive dimensions: trigger description precision (1
+  user-facing trigger vs 6 stage SKILLs that cannot have
+  non-overlapping trigger phrases — violates
+  SKILL_DEVELOPMENT.md "description = WHEN" first
+  principle), lifecycle coherence (single orchestrator vs
+  5+ cross-SKILL handoffs), and Mode-2 portability
+  (`consuming-card` already verified procedural under
+  ADR-0008 `max_depth=1`; per-stage SKILLs would each need
+  fresh verification). Producer's Shape Y / Consumer's
+  Shape X is **not a methodology inconsistency** — it is
+  the methodology correctly detecting two surfaces with
+  structurally different shapes (Producer = call-driven
+  multi-flow; Consumer = lifecycle-driven single-session).
+- **Cross-surface validation of `composing-siblings` atomic
+  (2026-04-29).** The `composing-siblings` atomic SKILL
+  lifted by Producer's Stage 3 finalization (per
+  [`03-producer-surface-redesign.md`](./03-producer-surface-redesign.md)
+  § "Producer SKILL set decision" → "New atomic SKILL")
+  receives 5 additional callers from Consumer side under
+  Shape X — B1 (plan synthesis delegate), C1 (verification
+  chain delegate), C2 (cross-platform review delegate),
+  C3 (conditional QA delegate), C4 (conditional security
+  audit delegate). Total cross-surface caller count: 9
+  (4 Producer + 5 Consumer). The SPOT census is empirically
+  validated cross-surface, not just intra-Producer; ships
+  once at v1-complete and serves both surfaces.
+- **F1 archetype B → C correction (2026-04-29).** The
+  prior Stage 3 draft tagged F1 stakeholder routing as
+  archetype-B candidate for a thin `scope-judgment` router
+  SKILL. Strict ROI re-evaluation: caller count = 1
+  (F1 itself), SPOT threshold not met. Final archetype
+  assignment: C, fold into `consuming-card`; scope-judgment
+  knowledge inlines until v1.x cross-routine reuse emerges.
+  See § "v1.x atomic candidates" for lift triggers.
+- **v1.x atomic candidate roadmap — three SPOT-watch
+  entries (2026-04-29).** Three Consumer-related atomics
+  deliberately deferred to v1.x and recorded as
+  SPOT-watchlist:
+  (i) `scope-judgment` (F1) — lift when ≥2 callers with
+  same rhythm emerge;
+  (ii) `mode-projection` (G4) — lift when Producer
+  overnight-dispatch ships and creates the 2nd caller;
+  (iii) `refusing-out-of-scope` (B3 + B4 + B5 refusal /
+  gate pattern) — lift when a 4th refusal node lands AND
+  ≥3 of 4 share same-rhythm refusal-with-explanation
+  framework. Each remains inline in `consuming-card` body
+  until its lift trigger fires.
+- **Final v1-complete Consumer SKILL set: 7 SKILLs
+  (2026-04-29).** Entry layer 1 (`using-board-superpowers`,
+  shared with Producer); molecular layer 1 (`consuming-card`,
+  Consumer-exclusive, already shipped); atomic layer 5
+  (all shared with Producer — `board-canon`,
+  `enforcing-pr-contract`, `classifying-actions`,
+  `auditing-actions`, `composing-siblings`). Consumer
+  surface contributes **zero new SKILLs** in v1-complete
+  scope; `consuming-card` only receives body-content
+  refactor to host the 23 journey nodes. Authoritative
+  listing in § "Consumer SKILL set decision" → "Final
+  SKILL set".
 
 ## Replacement plan (when this draft is approved)
 
