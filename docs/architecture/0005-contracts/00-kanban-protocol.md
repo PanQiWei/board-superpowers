@@ -816,6 +816,139 @@ projection layer.
 
 ---
 
+## Setup capabilities
+
+The eight protocol actions above are **runtime** contracts: every
+agentic flow that reads or mutates the board issues one of those
+eight named actions, on every invocation, for the lifetime of the
+repo. Setup capabilities are a separate projection-authoring
+surface, layered on the same projection but **not consumed at
+runtime**. They cover the **one-time board-preparation
+operations** every projection needs the architect's bootstrap
+flow to perform — creating the canonical label set, validating
+that the backend's status taxonomy folds cleanly to the six
+canonical states, provisioning credentials, and similar — and
+nothing else.
+
+The split is load-bearing: runtime actions are stable across the
+plugin's lifetime once a backend ships; setup capabilities are
+specific to the backend's first-time preparation. Conflating them
+would force the runtime SKILL to carry bootstrap logic and would
+force the bootstrap stage executors to know the runtime action
+table.
+
+### Capability declaration
+
+Each Kanban Protocol projection declares the setup capabilities
+it supports as a list of free-form lowercase-kebab-case strings
+in its reference file under
+`skills/operating-kanban/references/<projection-id>.md` § "Setup
+capabilities". The strings are **registry-internal** — no
+external API exposes them, no end user types them, and renames
+are cheap until a second projection ships.
+
+The v0.5.0 GitHub Project v2 projection declares two
+capabilities:
+
+```
+ensure-labels             # canonical type:* / size:* labels
+                          # exist on this repo
+validate-status-field     # the kanban's Status field has all
+                          # six canonical option values, in
+                          # the legal transition order
+```
+
+Future Linear / Jira projections add their own capability
+strings (or omit ones that don't apply); per
+[`../adr/0027-m3-dispatch-via-kanban-protocol-projection.md`](../adr/0027-m3-dispatch-via-kanban-protocol-projection.md)
+§ Decision 2, an architect repo whose active projection does
+**not** declare a given capability transparently skips the
+corresponding setup stage rather than failing.
+
+### What every capability declaration MUST specify
+
+Each declared capability gets one section in the projection's
+reference file under § "Setup capabilities" → `<capability-name>`.
+The section MUST cover:
+
+- **Plain-language description** — one paragraph stating the
+  outcome the capability achieves on the backend (e.g.,
+  "ensures the canonical `type:*` and `size:*` labels exist on
+  the GitHub repo, creating any that are missing").
+- **Invocation form** — Form A (bash CLI), Form B
+  (plugin-shipped MCP server), or Form C (REST/GraphQL), per
+  the three-form vocabulary in § "Implementation surface
+  (backend projections)" below. Bootstrap stage executors read
+  the form to dispatch correctly.
+- **Idempotency contract** — what happens when the capability
+  runs against an already-prepared backend (the canonical
+  expectation: idempotent no-op; deviations explicitly called
+  out).
+- **Failure modes** — what the capability surfaces when it
+  cannot complete (insufficient permissions, missing prerequisite
+  field, unsupported native taxonomy, etc.) and whether the
+  failure is recoverable.
+- **Rollback semantics** — whether the capability is reversible,
+  and if not, what the architect's recovery path looks like.
+
+The declaration set across all of a projection's reference-file
+sections under § "Setup capabilities" forms that projection's
+**capability set** — the registry the bootstrap stage's predicate
+evaluator checks per ADR-0027 § Decision 2.
+
+### How bootstrap stage predicates consume the registry
+
+When a bootstrap stage declares
+`applicable_when: {kanban_projection_capability: <capability-name>}`,
+its predicate evaluator reads the active projection's identifier
+from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`,
+loads the projection's reference file, and checks whether
+`<capability-name>` is in the declared capability set. Match →
+stage runs. Miss → stage returns `not-applicable` and the
+bootstrap flow continues.
+
+This indirection is what keeps the bootstrap layer
+projection-agnostic: bootstrap stages declare what capability
+they need, projections declare what capabilities they support,
+and the predicate evaluator does the matching. Adding a new
+projection to the plugin (Linear, Jira, future Form C REST) is a
+single-file edit — drop a new reference file under
+`skills/operating-kanban/references/`, declare the supported
+capability set, and every bootstrap stage either runs or skips
+accordingly without source edits anywhere else.
+
+### Why "setup" is not a runtime action
+
+A capability is **not** a ninth protocol action and never
+appears in the Action contracts catalog above. The split exists
+because:
+
+- **Runtime actions are stable** — the eight names and their
+  semantic contracts are versioned modulo superseding ADR
+  (per § Versioning + immutability). Setup capabilities are
+  registry-internal vocabulary owned by the projection layer,
+  with no equivalent stability commitment.
+- **Runtime actions are agent-issued** — agents reason in the
+  protocol's eight names every time they touch the board.
+  Setup capabilities are issued exclusively by the bootstrap
+  stage executor, once per repo per first-time setup, with no
+  agent involvement.
+- **Runtime actions are uniform across projections** — every
+  projection MUST implement L1 actions, MUST implement L2 if
+  it supports the Consumer flow. Setup capabilities are
+  per-projection: a Linear-via-MCP projection that surfaces
+  Linear's project-default-state inheritance may declare zero
+  or one setup capabilities; the GitHub Form A projection
+  declares two; a future projection may declare more.
+
+If a future bootstrap need turns out to be uniform across **all**
+projections, that signals the operation belongs in a runtime
+action (or a new infrastructure surface), not in the per-projection
+setup-capability registry. Promote it via ADR; do not fork it
+into every projection's reference file.
+
+---
+
 ## Compliance levels
 
 Backends declare their compliance level under `modules.m10_kanban`
