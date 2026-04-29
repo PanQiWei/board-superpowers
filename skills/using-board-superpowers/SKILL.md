@@ -80,7 +80,7 @@ Three layers, strictly downward dependency (Entry → Molecular → Atomic). Ato
 **Atomic layer (4)** — single-purpose contracts, reused by molecular skills:
 - `board-canon` — read-only contract: state machine + Card body schema + branch naming + WIP rules.
 - `enforcing-pr-contract` — PR three-section enforcement (Automated Verification / Human Verification TODO / Retro Notes) + Card acceptance-criteria sync at submit.
-- `classifying-actions` — D-AUTONOMY-1 matrix: classifies any mutating action as A (auto) / R (architect approval required) / N (forbidden).
+- `classifying-actions` — autonomy-classification SPOT. Per `board-superpowers:classifying-actions` (the atomic SKILL that owns the autonomy matrix + override merging + 5-step triage rule), invoke that skill with the action_id and act on its A (auto) / R (architect approval required) / N (forbidden) decision.
 - `auditing-actions` — Audit log schema + propose/resolve sequencing + BYO-RDBMS write conventions.
 
 Status as of v0.4.0: **9 of 10 shipped**, only `migrating-repo-version` pending.

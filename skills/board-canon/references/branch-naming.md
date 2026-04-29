@@ -23,6 +23,23 @@ The slugifier (`bsp_slugify` in `scripts/lib/common.sh`) applies to both `<key-s
 - Leading and trailing hyphens trimmed.
 - Title slug truncated at 40 characters at the last hyphen boundary (deterministic).
 
+## Disambiguation invariants
+
+**Disambiguation invariant**: A registered kanban-id MUST NOT be a prefix of any other registered kanban-id. This is required for the branch parser to unambiguously split `claim/<kanban-id>-<key-slug>-<title-slug>` — without this rule, a branch like `claim/foo-42-bar` cannot be decomposed cleanly when both `foo` and `foo-42` are registered as kanban-ids. `bootstrapping-repo` enforces this when adding a new kanban entry to `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`.
+
+The parser otherwise depends on the kanban-id allowlist from `settings.yml` to disambiguate: because `-` is permitted inside both `<key-slug>` and `<title-slug>`, the parser scans the kanban-id segment using the allowlist (longest-match) before delegating the remainder to the key-slug + title-slug split.
+
+## Length budgets
+
+Per-segment caps keep branch refnames inside git's 255-char ref limit AND under typical filesystem path budgets (most filesystems target ≤ 255 chars per path component, and worktrees nest the branch under `<base>/<repo>/<branch>`):
+
+- `<kanban-id>`: ≤ 32 chars (lowercase, hyphens, alphanumeric only).
+- `<key-slug>`: ≤ 64 chars.
+- `<title-slug>`: ≤ 64 chars (the existing 40-char target is the deterministic truncation point; the 64-char ceiling is a hard upper bound for unusual cases).
+- Total branch path under `claim/`: ≤ 200 chars (well under git's 255-char refname max + most filesystems' path component limits).
+
+Slugifier callers MUST enforce these budgets at slug-generation time. `bootstrapping-repo` validates the kanban-id segment when registering a new kanban entry; the slugifier (`bsp_slugify`) enforces key-slug and title-slug caps.
+
 ## Slug edge cases (title-slug)
 
 | Title | Title-slug | Branch (kanban-id `primary`, key `N`) |

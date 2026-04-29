@@ -13,6 +13,12 @@ WIP_count(consumer) =
 
 A card belongs to a Consumer if they pushed the card's claim branch (per the parent SKILL § Branch naming).
 
+## Multi-kanban WIP semantics
+
+When multiple kanbans are registered (per ADR-0026), the WIP formula `In Progress + suspended + In Review` is evaluated **per kanban**, not summed across kanbans. Each kanban's `wip_limit` (from `<repo>/.board-superpowers/settings.yml § modules.m5_wip.kanbans.<kanban-id>.wip_limit`) is checked independently. Cross-kanban totals are observability metrics, not gating constraints.
+
+The v1.0 carve-out of length=1 means single-kanban repos see no behavioral difference from v0.4.x.
+
 ## Edge cases
 
 ### Suspended cards

@@ -4,7 +4,7 @@
 > - Editing the **Kanban Protocol document**
 >   ([`docs/architecture/0005-contracts/00-kanban-protocol.md`](./docs/architecture/0005-contracts/00-kanban-protocol.md)).
 > - Authoring or modifying the **`board-canon`** atomic SKILL or
->   the (planned v0.5.0) **`operating-kanban`** atomic SKILL.
+>   the **`operating-kanban`** atomic SKILL (shipped v0.5.0).
 > - Adding a new **backend projection** (Linear, Jira, others)
 >   for the Kanban Protocol.
 > - Touching multi-kanban schema, kanban lifecycle states, the
@@ -12,7 +12,7 @@
 >   ontology / hierarchy decision, branch-naming convention, or
 >   the claim primitive.
 > - Updating any of the spec docs that anchor the protocol
->   (ADR-0001 / 0002 / 0005 / 0025 / 0026 / 0001-positioning.md
+>   (ADR-0001 / 0002 / 0005 / 0025 / 0026 / 0027 / 0001-positioning.md
 >   "AI-native concept hygiene" section).
 
 This is the **board-layer-development companion** to
@@ -23,9 +23,9 @@ covers the **runtime side**: how the plugin reads / mutates the
 kanban board through a backend-agnostic Kanban Protocol +
 per-backend projection. The two systems meet at one bridge —
 main's M10 config-item stage writes the kanban backend selection
-into `settings.yml`; the (planned) `operating-kanban` runtime
-SKILL reads it. § 7 "Setup-stages bridge" below documents the
-seam in detail.
+into `settings.yml`; the `operating-kanban` runtime SKILL
+(shipped v0.5.0) reads it. § 7 "Setup-stages bridge" below
+documents the seam in detail.
 
 **URL freshness:** all citations verified 2026-04-29.
 
@@ -78,7 +78,7 @@ This guide applies whenever your work touches:
   one.
 - The `board-canon` atomic SKILL (state machine SPOT) or the
   `operating-kanban` atomic SKILL (backend-projection dispatch
-  SPOT, planned v0.5.0).
+  SPOT, shipped v0.5.0).
 - The four molecular SKILLs that consume protocol actions:
   `managing-board`, `consuming-card`, `decomposing-into-milestones`,
   `bootstrapping-repo`.
@@ -110,6 +110,7 @@ canonical reading order on first pass:**
 | 2 | [`docs/architecture/adr/0025-kanban-protocol-as-top-contract.md`](./docs/architecture/adr/0025-kanban-protocol-as-top-contract.md) | Why the contract is protocol-shape, not SDK-shape; ADR-0005 rescoping |
 | 3 | [`docs/architecture/0005-contracts/00-kanban-protocol.md`](./docs/architecture/0005-contracts/00-kanban-protocol.md) | The protocol itself — ontology, identity, 8 action contracts, 6 statuses, body schema, custom-state folding, multi-kanban semantics, card hierarchy stance, compliance levels, projection forms |
 | 4 | [`docs/architecture/adr/0026-multi-kanban-lifecycle-and-flat-card-hierarchy.md`](./docs/architecture/adr/0026-multi-kanban-lifecycle-and-flat-card-hierarchy.md) | Three coupled v0.5.0+ decisions: lifecycle (5 states); multi-kanban schema (`modules.m10_kanban.kanbans`); flat-Card hierarchy + display-only metadata |
+| 4b | [`docs/architecture/adr/0027-capability-dispatch-through-kanban-protocol.md`](./docs/architecture/adr/0027-capability-dispatch-through-kanban-protocol.md) | Supersedes ADR-0022 § M3 capability dispatch; routes capability dispatch through Kanban Protocol projections rather than ADR-0005's SDK-shaped adapter handles |
 | 5 | [`docs/architecture/adr/0001-pluggable-board-backend-with-github-project-v1.md`](./docs/architecture/adr/0001-pluggable-board-backend-with-github-project-v1.md) | Substrate-pluggability commitment (ADR rescoped reading note included) |
 | 6 | [`docs/architecture/adr/0002-claim-via-branch-push.md`](./docs/architecture/adr/0002-claim-via-branch-push.md) | Atomic claim primitive at git-push layer |
 | 7 | [`docs/architecture/adr/0005-board-adapter-contract.md`](./docs/architecture/adr/0005-board-adapter-contract.md) | The v1 GitHubProjectAdapter projection's bash-implementation shape (rescoped per ADR-0025) |
@@ -372,7 +373,7 @@ Setup time (per SETUP_STAGES_DEVELOPMENT.md):
       <repo>/.board-superpowers/settings.yml
 
 Runtime (per ADR-0025 + ADR-0026):
-  operating-kanban (atomic SKILL, lands v0.5.0)
+  operating-kanban (atomic SKILL, shipped v0.5.0)
     → reads `modules.m10_kanban.{backend, project_ref, kanbans, ...}`
     → dispatches the 8 protocol actions through the named
       backend's projection
@@ -404,15 +405,14 @@ M10 stage never invokes runtime protocol actions.
 
 ### What still needs to be sorted (v0.5.0+ work)
 
-- ADR-0022 ("BoardAdapter capability dispatch") was authored
-  before ADR-0025 elevated the Kanban Protocol. ADR-0022's
-  current language anchors M3 capability dispatch to ADR-0005's
-  SDK shape — the framing ADR-0025 supersedes. **A separate
-  follow-up ADR (working name ADR-0027) revises ADR-0022's
-  capability dispatch hook to flow through Kanban Protocol
-  projections** instead of the SDK contract. Until that ADR
-  lands, treat M10's persisted backend selection as protocol-
-  projection metadata, not as ADR-0005-shaped adapter handles.
+- ADR-0022 § M3 ("BoardAdapter capability dispatch") was authored
+  before ADR-0025 elevated the Kanban Protocol. **ADR-0027
+  supersedes ADR-0022 § M3** — capability dispatch now flows
+  through Kanban Protocol projections rather than ADR-0005's
+  SDK-shaped adapter handles. Treat M10's persisted backend
+  selection as protocol-projection metadata; routes through
+  `operating-kanban`'s backend-selection logic (per ADR-0027 +
+  ADR-0026 § Schema), not as ADR-0005-shaped adapter handles.
 - The exact shape of the v0.5.0 `migrating-repo-version` skill's
   legacy_claims write (`modules.m10_kanban.legacy_claims`) needs
   alignment with ADR-0017 cross-clone state sharing. ADR-0026
@@ -518,14 +518,11 @@ and a SKILL spec), add a row to the matrix in the same PR.
 ## Maintenance discipline for this doc
 
 - All cross-references to spec docs verified **2026-04-29**.
-- When ADR-0025 or ADR-0026 are amended or superseded, this doc
-  must be updated in the same PR.
+- When ADR-0025 / 0026 / 0027 are amended or superseded, this
+  doc must be updated in the same PR.
 - When a new backend projection ships, § 6 acquires the new
   backend in its examples; the projection's reference file
   should be linked from § 2.
-- When ADR-0027 (the planned ADR-0022 supersession) lands, § 7
-  "What still needs to be sorted" gets that bullet replaced with
-  the new contract.
 - This doc is referenced **by name** from the root
   [`AGENTS.md`](./AGENTS.md) "Cross-cutting reference docs"
   table — not loaded with `@`-prefix — so it does not ride into
@@ -549,7 +546,7 @@ and a SKILL spec), add a row to the matrix in the same PR.
   authoring discipline; required reading when authoring any
   board SKILL.
 - [`SKILLS.md`](./SKILLS.md) — SKILL catalog including
-  `board-canon` and the planned `operating-kanban`.
+  `board-canon` and `operating-kanban` (shipped v0.5.0).
 - [`PLUGIN_DEVELOPMENT.md`](./PLUGIN_DEVELOPMENT.md) — plugin
   manifest / hook / script platform contracts.
 - [`MULTI_AGENT_DEVELOPMENT.md`](./MULTI_AGENT_DEVELOPMENT.md) —

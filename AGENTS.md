@@ -6,36 +6,37 @@ user-facing overview.
 
 @SKILLS.md
 
-## Project status — v1 catalog 8/10 shipped
+## Project status — v1 catalog 10/11 shipped
 
 > **The plugin is loadable at runtime.** `hooks/`,
 > `scripts/`, and `skills/` directories exist at the repo root.
-> `SessionStart` fires. The 8 v1-catalog skills auto-match.
+> `SessionStart` fires. The 10 v1-catalog skills auto-match.
 > The plugin dogfoods itself for any new skill / script / hook.
 
-**v1 catalog = 8 of 10 skills shipped** (10 once `decomposing-into-milestones` + `migrating-repo-version` ship), per [`SKILLS.md`](./SKILLS.md):
+**v1 catalog = 10 of 11 skills shipped** (11 once `migrating-repo-version` ships), per [`SKILLS.md`](./SKILLS.md):
 
 - **Shipped**: `using-board-superpowers` (entry),
-  `managing-board` + `consuming-card` + `bootstrapping-repo`
-  (molecular), `board-canon` + `enforcing-pr-contract` +
-  **`classifying-actions` + `auditing-actions`** (atomic).
-- **Roadmap (pending shipment)**: `decomposing-into-milestones`,
-  `migrating-repo-version`. Reasons live in the SKILLS.md table.
+  `managing-board` + `consuming-card` + `bootstrapping-repo` +
+  `decomposing-into-milestones` (molecular), `board-canon` +
+  `enforcing-pr-contract` + `classifying-actions` +
+  `auditing-actions` + `operating-kanban` (atomic).
+- **Roadmap (pending shipment)**: `migrating-repo-version`.
+  Reason lives in the SKILLS.md table.
 
 **Remaining degraded behavior**:
 
 - **No `migrating-repo-version` skill yet** — current plugin
-  version is `v0.3.0`; the schema-aware migration runner lands
-  starting from the v0.3.x → v0.4.x transition. The hook never
-  injects `INVOKE: migrating-repo-version` in v0.3.0.
+  version is `v0.5.0`; the schema-aware migration runner lands
+  starting from the v0.5.x → v0.6.x transition. The hook never
+  injects `INVOKE: migrating-repo-version` in v0.5.0.
 
 The single source of truth for v1 design remains
 [`docs/architecture/`](./docs/architecture/) — read
 `0001-positioning.md` first; the
 [`docs/architecture/README.md`](./docs/architecture/README.md)
-index lists everything else in canonical order. The 8 shipped
-skills are the operating substrate; the 2 deferred skills are
-roadmap items, not gates on day-to-day work.
+index lists everything else in canonical order. The 10 shipped
+skills are the operating substrate; the 1 deferred skill is a
+roadmap item, not a gate on day-to-day work.
 
 ## Subdirectory contracts
 

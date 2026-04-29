@@ -1,6 +1,8 @@
 # operating-kanban — Form B (plugin-shipped MCP server) reference
 
-Form B is the plugin-shipped MCP server invocation form: the plugin registers the backend's MCP server through its plugin manifest's `.mcp.json` (Claude Code) or `mcp_servers` block (Codex CLI), and the projection reference file names the MCP tools and their input/output shapes; this skill calls the MCP tools through the platform's MCP runtime.
+**Status: v1.x roadmap.** This document is an authoring guide for future Form B (MCP) projections; no live Form B projection ships in v0.5.0.
+
+Form B is the plugin-shipped MCP server invocation form: when implementing Form B, the plugin SHOULD register the backend's MCP server through its plugin manifest's `.mcp.json` (Claude Code) or `mcp_servers` block (Codex CLI), and the projection reference file SHOULD name the MCP tools and their input/output shapes; this skill calls the MCP tools through the platform's MCP runtime.
 
 **v0.5.0 has no live Form B projection.** This file is an authoring guide for the v1.x roadmap — the first Form B candidate is the Linear projection backed by Linear's official MCP server. The contract below is concrete enough that future Form B authors can ship a projection without re-deriving it.
 

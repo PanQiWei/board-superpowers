@@ -46,12 +46,15 @@ This skill maps the exit code to a typed return shape; the caller's own retry/es
 
 `scripts/lib/common.sh` exposes a `bsp_*` helper family that the projection reference file SHOULD prefer over raw CLI invocations:
 
-- `bsp_gh_project_id <owner> <project-number>` — resolves the project's GraphQL node ID. Cached per session; avoids repeat GraphQL roundtrips.
-- `bsp_gh_field_id <project-id> <field-name>` — resolves a Status / Type / Size field's GraphQL node ID. Cached.
+- `bsp_gh_field_id <project-id> <field-name>` — resolves a Status / Type / Size field's GraphQL node ID. Cached per session; avoids repeat GraphQL roundtrips.
 - `bsp_gh_field_option_id <project-id> <field-name> <option-label>` — resolves a single-select field option's ID. Cached.
-- `bsp_gh_item_id <project-id> <issue-number>` — resolves a Project v2 item's ID for a given Issue.
 
-Direct `gh project field-list ...` / `gh project item-list ...` calls work but issue redundant GraphQL queries every invocation. The helpers are not optional for performance; they ARE optional for correctness — fresh projections may inline the raw call during initial authoring and refactor to helpers later.
+For data the helpers do not yet cover, fall back to the underlying `gh` invocation parsed with `python3 -c 'import json,sys; ...'`:
+
+- Project GraphQL node ID (given `<owner> <project-number>`) → `gh project view <project-number> --owner <owner> --format json` and read `.id`.
+- Project v2 item ID (given `<project-id> <issue-number>`) → `gh project item-list <project-number> --owner <owner> --format json --limit 200` and filter by `.items[].content.number == <issue-number>` to read `.id`.
+
+Direct `gh project field-list ...` / `gh project item-list ...` calls work but issue redundant GraphQL queries every invocation. The helpers above are not optional for performance; they ARE optional for correctness — fresh projections may inline the raw call during initial authoring and refactor to helpers later.
 
 The reference file documents which helper covers which action. When a new helper is needed, it lands in `scripts/lib/common.sh` in the same PR as the projection update, per the same-PR contract.
 

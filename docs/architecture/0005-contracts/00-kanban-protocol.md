@@ -274,11 +274,14 @@ deleted cards is backend-defined.
 Every Consumer claim branch has the form:
 
 ```
-claim/<key-slug>-<title-slug>
+claim/<kanban-id>-<key-slug>-<title-slug>
 ```
 
 Where:
 
+- `<kanban-id>` = the registered local id of the active kanban
+  (read from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`;
+  for repos with one active kanban, the id is typically `primary`).
 - `<key-slug>` = `slugify(Card.key)`
   - Lowercase, alphanumeric + hyphens.
   - GitHub: `42` → `42`.
@@ -286,14 +289,11 @@ Where:
   - Jira: `PROJ-42` → `proj-42`.
 - `<title-slug>` = `slugify(Card.title)` truncated to ≤40 chars.
 
-The full slugifier rules and edge cases live in
+The full slugifier rules, kanban-id allowlist disambiguation,
+and per-segment length budgets live in
 [`board-canon`](../../../skills/board-canon/SKILL.md) § Branch
-naming. board-canon will become the SPOT for branch naming once
-its v0.5.0 patch lands (board-canon currently still hard-codes
-the GitHub-shaped `claim/<N>-<slug>` form; the patch generalizes
-to `claim/<key-slug>-<title-slug>`). Until that patch ships,
-this protocol document is the authoritative cross-backend form
-and board-canon's prose is read in light of this generalization.
+naming + `references/branch-naming.md`. board-canon is the SPOT
+for branch naming as of v0.5.0.
 
 **Why branch naming is protocol-level**: the claim primitive
 (ADR-0002) is git-layer atomic. Branch names are observable by
@@ -302,12 +302,17 @@ machines, without the board's involvement. Naming convention IS
 the inter-session communication channel.
 
 **Migration note**: prior to v0.5.0, branch naming was
-`claim/<N>-<slug>` where N is GitHub issue number — implicitly
-GitHub-shaped. The v0.5.0 abstraction generalizes N to
-`<key-slug>` derived from `Card.key`. ADR-0001 and ADR-0002 carry
-this patch in their § Decision sections; existing GitHub-Project-
-v2 claim branches (e.g., `claim/42-fix-bug`) remain valid because
-GitHub `<key-slug>` of `42` is `42`.
+`claim/<key-slug>-<title-slug>` (two-segment, with `<key-slug>` =
+GitHub issue number for v0.4.x repos — implicitly GitHub-shaped).
+The v0.5.0 form prepends `<kanban-id>` to disambiguate
+multi-kanban repos. ADR-0001 / ADR-0002 / ADR-0026 carry this
+patch in their § Decision sections; existing v0.4.x claim
+branches (e.g., `claim/42-fix-bug`) remain valid via the
+parser's segment-count fallback (two segments → legacy form;
+three segments + kanban-id allowlist match → canonical form).
+See `skills/board-canon/references/branch-naming.md` § "v0.4.x
+legacy form — historical callout" for the parser's accept-both
+contract.
 
 ---
 
@@ -848,14 +853,48 @@ external API exposes them, no end user types them, and renames
 are cheap until a second projection ships.
 
 The v0.5.0 GitHub Project v2 projection declares two
-capabilities:
+capabilities. Each capability entry in the projection's reference
+file follows this shape:
 
+```yaml
+setup_capabilities:
+  - id: ensure-labels
+    name: "Ensure canonical labels exist"
+    applicable_when:
+      backend: github-project-v2
+    dispatch_form: A   # Form A = bash CLI (gh)
+  - id: validate-status-field
+    name: "Validate Status field has six canonical options"
+    applicable_when:
+      backend: github-project-v2
+    dispatch_form: A
 ```
-ensure-labels             # canonical type:* / size:* labels
-                          # exist on this repo
-validate-status-field     # the kanban's Status field has all
-                          # six canonical option values, in
-                          # the legal transition order
+
+Field semantics:
+
+- `id` — registry-internal identifier, lowercase-kebab-case;
+  matched by the bootstrap stage's
+  `applicable_when: {kanban_projection_capability: <id>}` predicate.
+- `name` — short human-readable label surfaced when a setup stage
+  routes through this capability.
+- `applicable_when` — the projection-side predicate (typically
+  `{backend: <projection-id>}`); the predicate evaluator reads
+  this against the active projection from `settings.yml § modules.m10_kanban`.
+- `dispatch_form` — `A` (bash CLI), `B` (plugin-shipped MCP), or
+  `C` (REST/GraphQL); per § "Implementation surface (backend
+  projections)" below. The bootstrap stage executor reads this to
+  dispatch correctly.
+
+A future Linear projection's `claim_card` capability would look
+like (illustrative; lands when Linear projection ships):
+
+```yaml
+setup_capabilities:
+  - id: provision-mcp-credentials
+    name: "Provision Linear MCP credentials"
+    applicable_when:
+      backend: linear
+    dispatch_form: B   # Form B = plugin-shipped MCP server
 ```
 
 Future Linear / Jira projections add their own capability

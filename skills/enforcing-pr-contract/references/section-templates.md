@@ -2,6 +2,19 @@
 
 Concrete examples per card type. Parent `SKILL.md` shows the canonical templates; this file shows how they bend for different shapes of work.
 
+## Per-kanban WIP-limit callout
+
+If this card's claim crossed the per-kanban `wip_limit` (e.g., the `wip_limit: 2` cap on the `default` kanban from `<repo>/.board-superpowers/settings.yml § modules.m5_wip.kanbans.<kanban-id>.wip_limit`), note that under `## Automated Verification` for Manager review-queue visibility:
+
+```markdown
+## Automated Verification
+
+- [x] WIP cap crossed: `default` kanban (`wip_limit: 2`) at 2/2 with this claim — flagged for review-queue visibility.
+- [...other verification rows...]
+```
+
+If the claim did NOT cross a `wip_limit` boundary, omit the line.
+
 ## Pure docs change
 
 ```markdown

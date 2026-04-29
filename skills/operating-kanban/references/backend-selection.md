@@ -82,14 +82,16 @@ The fallback is removed once the M10 stage lands on main and the `migrating-repo
 
 ## Failure modes — caller-visible behavior
 
+Every failure surface MUST include the fix path so the operator can act without re-reading the spec. Bare "configuration is bad" is anti-pattern.
+
 | Symptom | Caller-visible behavior |
 |---------|-------------------------|
-| Settings file missing entirely. | Surface "kanban not yet configured on this repo; route to bootstrapping flow"; do NOT invent a projection. |
-| `modules.m10_kanban.kanbans` empty list or absent on a fully-migrated repo. | Same as above — bootstrapping flow surfaces. |
-| `kanbans` length > 1 on v0.5.0. | Refuse with "v1.0 carve-out violated"; the schema reservation is parser-tolerant but the runtime is not. |
-| Projection identifier names a projection not present in `references/`. | Refuse with "unknown projection <id>; check plugin version or projection registry"; do NOT silently fall back. |
-| Caller passes a `kanban_id` not present in the registry. | Refuse with "unknown kanban <id> on this repo". |
-| Caller passes a `claim_branch` whose kanban-id segment fails to parse. | Refuse with "malformed claim branch — expected `claim/<kanban-id>-<key>-<slug>`". |
+| Settings file missing entirely. | Surface: "kanban not yet configured on this repo. Run the `bootstrapping-repo` SKILL on this repo (the architect can say 'set up board-superpowers' / 'first time on this repo') to create `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`. See ADR-0026 § Schema for the kanban entry shape." Do NOT invent a projection. |
+| `modules.m10_kanban.kanbans` empty list or absent on a fully-migrated repo. | Surface: "Configuration is empty: add at least one entry to `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.kanbans` — see ADR-0026 § Schema for the kanban entry shape (id / projection / project_ref / role). Run `bootstrapping-repo` to populate." |
+| `kanbans` length > 1 on v0.5.0. | Refuse with: "v1.0 carve-out violated: `kanbans` length=<N> but v0.5.0 supports length=1 only. Multi-kanban runtime is v1.x roadmap; for now keep `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.kanbans` to a single entry. Schema reservation is parser-tolerant but the runtime is not." |
+| Projection identifier names a projection not present in `references/`. | Refuse with: "unknown projection `<id>`. The plugin's shipped projections live in `skills/operating-kanban/references/<projection-id>.md`. Check (a) plugin version (the projection may have shipped in a later version), (b) the `projection:` field in the kanban entry of `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.kanbans`, (c) the projection registry in ADR-0026 § Projection identifiers. Do NOT silently fall back." |
+| Caller passes a `kanban_id` not present in the registry. | Refuse with: "unknown kanban `<id>` on this repo. Registered kanban ids: <list of `kanbans[*].id`>. To register a new kanban, edit `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.kanbans` (per ADR-0026 § Schema) and re-run `bootstrapping-repo`." |
+| Caller passes a `claim_branch` whose kanban-id segment fails to parse. | Refuse with: "malformed claim branch `<branch>` — expected shape `claim/<kanban-id>-<key>-<slug>`. The kanban-id segment must match a registered kanban id in `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.kanbans`. See `skills/board-canon/references/branch-naming.md` § Disambiguation invariants for the parser's allowlist rules." |
 
 Detailed surfacing tiers (silent / log-only / audit-row / surface-immediately) live in `failure-mode-dispatch.md`. This file documents the resolver itself; surfacing convention is one layer up.
 
