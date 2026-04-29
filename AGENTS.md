@@ -79,9 +79,10 @@ doc when its scope is touched.
 | [`PLUGIN_DEVELOPMENT.md`](./PLUGIN_DEVELOPMENT.md) (~440 lines) | hook scripts, bash tooling, plugin manifest, dual-platform (CC + Codex CLI) contracts. |
 | [`MULTI_AGENT_DEVELOPMENT.md`](./MULTI_AGENT_DEVELOPMENT.md) (~700 lines) | subagent / agent-team / orchestration design, `Agent` tool / `SendMessage` / fan-out-fan-in. |
 | [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md) (~1290 lines) | skill authoring — frontmatter, body skeletons, anti-patterns, testing, `.skill-meta.yaml` schema. |
+| [`SETUP_STAGES_DEVELOPMENT.md`](./SETUP_STAGES_DEVELOPMENT.md) (~700 lines) | setup-stages system — `scripts/stages-registry.yml`, `scripts/stages_lib/`, `scripts/stages-registry.schema.json`, `hooks/session-start.sh` lifecycle diff, `skills/bootstrapping-repo/`, the four partitioned `settings.yml` files. Read before adding/editing/removing a stage, before changing the 5-callable contract, before introducing a new `applicable_when` form, or before any spec change touching § 1.5 (Bootstrap surface redesign). The legacy filename `BOOTSTRAP_STAGES_DEVELOPMENT.md` is a one-line shim that redirects here. |
 
 **Do not "fix" these references back to `@`-prefix** — that
-change would force-load all three docs into every session and
+change would force-load all four docs into every session and
 is exactly the anti-pattern they themselves warn against.
 
 ### Doctrine

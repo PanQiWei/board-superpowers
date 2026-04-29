@@ -10,8 +10,9 @@
 > 2. If your change makes a contract in any of
 >    [`../../PLUGIN_DEVELOPMENT.md`](../../PLUGIN_DEVELOPMENT.md),
 >    [`../../MULTI_AGENT_DEVELOPMENT.md`](../../MULTI_AGENT_DEVELOPMENT.md),
+>    [`../../SKILL_DEVELOPMENT.md`](../../SKILL_DEVELOPMENT.md),
 >    or
->    [`../../SKILL_DEVELOPMENT.md`](../../SKILL_DEVELOPMENT.md)
+>    [`../../SETUP_STAGES_DEVELOPMENT.md`](../../SETUP_STAGES_DEVELOPMENT.md)
 >    stale, fix the companion in the **same PR** — not a
 >    follow-up. Doc lag is the primary failure mode that makes
 >    this pattern decay over time.
@@ -65,6 +66,7 @@ preparation:
 | ADR-0007 plugin-runtime constraint set (C-PLUGIN-1/-2/-3) | Every Producer / Consumer feature with verbs like *monitor*, *detect*, *trigger automatically*. The preflight-piggyback idiom citation. |
 | ADR-0008 plugin-to-plugin SKILL invocation | `0005-contracts/04-skill-contracts.md` (sibling-skill classification table); `consuming-card` skill spec (F-C4 fallback rule). |
 | `0002-product-features-and-flows/05-bootstrap-surface.md` (state file path / schema) | `0003-domain-model/02-bounded-contexts.md` § 3.2.3; `0003-domain-model/03-aggregates-and-entities.md` § RepoBootstrap / HostBootstrap; `0005-contracts/03-config-schemas.md` + `07-path-conventions.md`; `bootstrapping-repo` + `migrating-repo-version` skill specs. |
+| `0002-product-features-and-flows/05-bootstrap-surface-redesign.md` (any section — three axes, stages registry, trigger model, lifecycle, settings layering, repo identity, architect UX) OR any of ADR-0012..ADR-0024 (the setup-stages ADR family) | **`../../SETUP_STAGES_DEVELOPMENT.md`** in the SAME PR — the navigation guide cites these sections as authority and goes stale on every edit. Plus: `../../scripts/stages-registry.yml` + `../../scripts/stages_lib/**` + `../../scripts/stages-registry.schema.json` (the runtime registry); `../../skills/bootstrapping-repo/SKILL.md` (the SKILL that consumes the registry); the four `settings.yml` templates if their layout changes; `../../SKILLS.md` if the SKILL's role description shifts. |
 | `0002-product-features-and-flows/08-pr-contract.md` (three-section shape) | `consuming-card` skill spec (F-C12); `enforcing-pr-contract` skill spec; `managing-board` Review Queue routine spec (F-02 violation flagging). |
 | Skill catalog (add / rename / split / merge any of the 10 v1 skills) | **`../../SKILLS.md` FIRST** (per its Source-of-truth contract — do not touch `../../skills/` until SKILLS.md is updated); then `0004-component-architecture.md` Decision 2 (capability → slot table); `0005-contracts/04-skill-contracts.md` (sibling-skill classification; v1 catalog table); the trigger row above; `../../README.md` and `../../README.zh-CN.md` if user-facing trigger phrases change. |
 | Hook intent-injection marker grammar (`INVOKE:` / `REASON:`) | `0004-component-architecture.md` § "Hook intent injection pattern"; `0005-contracts/02-hook-contracts.md` § "Intent-injection markers"; `using-board-superpowers` entry-skill spec. |
@@ -90,3 +92,7 @@ changes → re-read every `skills/*/SKILL.md` frontmatter").
   [`../../SKILL_DEVELOPMENT.md`](../../SKILL_DEVELOPMENT.md).
 - Skill catalog / call graph / topology →
   [`../../SKILLS.md`](../../SKILLS.md).
+- Setup-stages development (registry, 5-callable contract,
+  agentic config-item protocol, partitioned settings layering,
+  anti-patterns) →
+  [`../../SETUP_STAGES_DEVELOPMENT.md`](../../SETUP_STAGES_DEVELOPMENT.md).

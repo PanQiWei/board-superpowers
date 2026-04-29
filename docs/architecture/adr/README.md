@@ -78,5 +78,18 @@ Omit if no such notes apply.
 | [0009](./0009-allow-sqlite-as-byo-audit-db.md) | Allow SQLite as a BYO audit DB scheme (supersedes ADR-0006 §5 partial) | accepted |
 | [0010](./0010-re-anchor-deadlines-ai-cadence.md) | Re-anchor ADR-0005 Consequences deadlines to v1 GA + project-wide AI cadence 100x convention (supersedes ADR-0005 § Consequences partial) | accepted |
 | [0011](./0011-defer-producer-routines-to-v1x.md) | Defer Producer routines F-03..F-07 + F-10..F-15 to v1.x pending demand pull | accepted |
+| [0012](./0012-unified-check-script-trigger-model.md) | Unified check-script trigger model (absorbs `migrating-repo-version` skill) | proposed |
+| [0013](./0013-declarative-state-schema-and-lifecycle.md) | Declarative state schema + 5-state lifecycle + K8s-style three-layer fingerprint | proposed |
+| [0014](./0014-stage-registry-contract.md) | Stage registry contract — YAML metadata + Python helpers + JSON Schema validation | proposed |
+| [0015](./0015-m4-audit-per-repo-locality.md) | M4 audit module per-repo locality (replaces host-shared `credentials.yml`) | proposed |
+| [0016](./0016-cross-platform-parity-contract.md) | Cross-platform parity contract via the `platforms` field on every stage | proposed |
+| [0017](./0017-i13-invariant-revision-cross-clone-state-sharing.md) | I-13 invariant revision — cross-clone state sharing via GitHub-based identity (revises I-13 in `07-cross-cutting-invariants.md`) | proposed |
+| [0018](./0018-m7-multi-stage-routing-block-protocol.md) | M7 multi-stage per-block routing protocol with form-detect prerequisite + Codex 32 KiB AGENTS.md budget | proposed |
+| [0019](./0019-zero-config-sqlite-default-audit-backend.md) | Zero-config SQLite as default per-repo audit backend (extends ADR-0009) | proposed |
+| [0020](./0020-stage-applicability-and-not-applicable-state.md) | Stage applicability — `applicable_when` predicate + `not-applicable` 5th lifecycle state | proposed |
+| [0021](./0021-settings-modular-layering.md) | Settings modular layering — two-section split + per-module `schema_version` | proposed |
+| [0022](./0022-boardadapter-capability-dispatch.md) | BoardAdapter capability dispatch + M10 BoardAdapter-selection module | proposed |
+| [0023](./0023-architect-ux-and-config-item-protocol.md) | Architect UX — sequential per-stage flow + 5-element config item protocol | proposed |
+| [0024](./0024-settings-rename-and-config-item-stages.md) | settings.yml rename + new config-item stages (`m5.repo.set-wip-limit`, `m10.repo.choose-kanban-backend`) | proposed |
 | [0025](./0025-kanban-protocol-as-top-contract.md) | Kanban Protocol as top-level contract; ADR-0005 rescoped to v1 GitHubProjectAdapter projection | accepted |
 | [0026](./0026-multi-kanban-lifecycle-and-flat-card-hierarchy.md) | Multi-kanban support + lifecycle states + flat-Card hierarchy stance | accepted |
