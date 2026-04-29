@@ -187,7 +187,7 @@ values as columns.
 ### J1–J5 distribution observation (requirement-layer)
 
 The mother protocol defines J1–J5 dimensions and value
-enums; this surface declares how Producer's 21 journey
+enums; this surface declares how Producer's 26 journey
 nodes (the Stage 1 enumeration per
 [`../../../FEATURE_DESIGN_METHODOLOGY.md`](../../../FEATURE_DESIGN_METHODOLOGY.md)
 § "Stage 1 — User-journey node enumeration", pending
@@ -195,16 +195,16 @@ explicit catalog) distribute across the J values:
 
 | Axis | Producer distribution |
 |------|-----------------------|
-| **J1** Trigger actor | 13 `agent-self` (A1–A3, D2, E1–E3, F1, G1–G5) / 9 `architect` (A4, A5, B1–B4, C1, D1, F2) / 4 `nested-within-routine` (C2–C5, all nested in C1 review-queue routine). |
-| **J2** Trigger carrier | mixed; `cron-job` heavy on cadence-driven nodes (E1–E3 retro / weekly / hygiene; A1–A3 compute side via compute-present split); `session-hook` for K-budget present-only nodes; `in-process-reflex` for G1–G5; `explicit-prompt` for architect-driven B / C / D / F nodes (sub-mode: prompter = architect, except F-07 dispatch where prompter = Producer-agent in Mode-2). |
-| **J3** Autonomy class | A-class for governance reflex (G1–G5), label cleanup, batch dispatch (F-07); R-class for SoT-modifying actions (B4 re-split, F2 harness landing); N-class reserved (zero entries at v1). |
+| **J1** Trigger actor | 8 `agent-self` (A1, A2, A3, D2, E1, E2, E3, F1) / 10 `architect` (A4, A5, B1, B2, B3, B4, C1, C4, D1, F2) / 8 `nested-within-routine` (C2, C3, C5, G1–G5). Total 26. |
+| **J2** Trigger carrier | mixed; `cron-job` heavy on cadence-driven nodes (E1–E3 retro / weekly / hygiene; A1–A3 compute side via compute-present split); `session-hook` for K-budget present-only nodes; `in-process-reflex` for G1–G5; `explicit-prompt` for architect-driven B / C / D / F nodes (sub-mode: prompter = architect, except D1 dispatch where prompter = Producer-agent in Mode-2). |
+| **J3** Autonomy class | A-class for governance reflex (G1, G3), label cleanup, batch dispatch (D1); R-class for SoT-modifying actions (B4 re-split, F2 harness landing, C2 status flip, C5 stale-claim cancel, G2 propose-await); N-class reserved (zero entries at v1). |
 | **J4** D-META-1 strength | wide spread — `low` (G1–G5 governance, A1–A3 mechanism); `medium` (B2 INVEST framing, E1 retro Derby & Larsen template); `high` (B1 design conversation, F2 harness setup). |
-| **J5** Result destination | `inject-session` for briefing nodes (A1–A3); `persist-state` heavy (board mutations, audit rows, claim states); `emit-external` for PR comments and dispatched artifacts; `inline-return` exclusive to the 4 nested nodes (C2–C5). |
+| **J5** Result destination | `inject-session` for briefing nodes (A1–A3); `persist-state` heavy (board mutations, audit rows, claim states); `emit-external` for PR comments and dispatched artifacts; `inline-return` appears in nested helper nodes (C3 and partial C2, G4, G5). |
 
 Per-node J 5-tuple positioning lives in § "Producer feature
 catalog (table)" below.
 
-> **Note**: the 21 Producer journey nodes (A1–G5) are
+> **Note**: the 26 Producer journey nodes (A1–G5) are
 > enumerated in § "Producer journey nodes (Stage 1
 > enumeration)" below; per-node J 5-tuple positioning is
 > in § "Producer feature catalog (table)" further below.
@@ -457,8 +457,9 @@ complementary lists** (human-initiated +
 agent-self-initiated) plus their cross-product
 (cross-cutting governance).
 
-Producer enumeration produces **21 journey nodes** in seven
-groups. The numbering scheme (A1–G5) is internal to this
+Producer enumeration produces **26 journey nodes** in seven
+groups (A–F human-initiated 21 nodes + G cross-product 5
+nodes). The numbering scheme (A1–G5) is internal to this
 enumeration and orthogonal to the F-01..F-15 numbering in
 the currently-shipped 03 surface (which is feature-grouped,
 not journey-grouped). Both numbering schemes coexist during
@@ -585,23 +586,29 @@ concerns surface as their own node group."
 ### Two-list provenance summary
 
 A–F come from the **human-initiated list** (what the
-architect explicitly wants to do). G1–G5 come from the
-**cross-product** with the agent-self-initiated list (what
-the system must do for every mutating action). Both lists
-are mandatory per methodology Stage 1 anti-pattern A1
-("single-list enumeration"). The 5+4+5+2+3+2 / 5 shape is
-project-specific — other surfaces (Consumer in 04,
-Bootstrap in 05) produce different totals; the two-list
-discipline is invariant.
+architect explicitly wants to do; 21 nodes). G1–G5 come
+from the **cross-product** with the agent-self-initiated
+list (what the system must do for every mutating action;
+5 nodes). Both lists are mandatory per methodology Stage 1
+anti-pattern A1 ("single-list enumeration"). The
+5+4+5+2+3+2+5 = 26 shape is project-specific — other
+surfaces (Consumer in 04, Bootstrap in 05) produce
+different totals; the two-list discipline is invariant.
 
 ## Producer feature catalog (table)
 
-The Stage 2 + Stage 3 output: each of the 21 journey nodes
+The Stage 2 + Stage 3 output: each of the 26 journey nodes
 positioned on J1–J5 (requirement-layer) plus A1–A2
-(SKILL-layer; A3 and A4 omitted because all 21 nodes
-empirically resolve to A3=`workflow` × A4=`molecular`, per
-the empirical observations in § "Axis 3 — Skill nature"
-and § "Axis 4 — Skill layer" above).
+(SKILL-layer). A3 and A4 are omitted from per-row columns
+because the 21 human-initiated nodes (A–F) empirically
+resolve to A3=`workflow` × A4=`molecular`, per the
+empirical observations in § "Axis 3 — Skill nature" and
+§ "Axis 4 — Skill layer" above. The 5 cross-cutting
+governance nodes (G1–G5) resolve to A4=`atomic` (G1, G2)
+or to non-SKILL adjuncts (G3 fold into G2, G4 fold into
+intaking-requirement, G5 script-only) — their SKILL-layer
+position is recorded in the per-row "Archetype + SKILL
+home" column rather than as a separate axis column.
 
 Per-node ROI archetype (A / B / C) is shown in the last
 column with its candidate SKILL home.
@@ -627,32 +634,32 @@ column with its candidate SKILL home.
 
 | ID | Name | J1 | J2 | J3 | J4 | J5 | A1 phases | A2 workflow | Archetype + SKILL home |
 |----|------|-----|-----|-----|-----|-----|-----------|-------------|------------------------|
-| **A1** | Board overview | agent-self | cron+hook (split) | N/A | low | inject-session + persist-state | orient → reflect → conclude | daily | C → fold into daily-briefing routine |
-| **A2** | Ordered PR queue | agent-self | cron+hook (split) | N/A | low | inject-session + persist-state | orient → reflect → conclude | daily / review-queue | C → fold into daily-briefing routine |
-| **A3** | "What's blocking me" | agent-self | cron+hook (split) | N/A | low | inject-session | orient → reflect | daily | C → fold into daily-briefing routine |
-| **A4** | Context-switch reload | architect | explicit-prompt | N/A | low | inject-session | receive → orient → reflect → conclude | ad-hoc | B → thin context-reload SKILL |
-| **A5** | Today's dispatch recommendation | architect | explicit-prompt | N/A | medium | inject-session | receive → orient → plan → conclude | daily | B → thin recommendation SKILL or fold into managing-board daily |
-| **B1** | Design conversation routing | architect | explicit-prompt | N/A (routing) | high | inject-session + emit-external (sibling output) | receive → plan → act (delegate) | intake | B → thin router SKILL |
+| **A1** | Board overview | agent-self | cron+hook (split) | N/A | low | inject-session + persist-state | orient → reflect → conclude | daily | A (merge into routine SKILL) → `briefing-daily` |
+| **A2** | Ordered PR queue | agent-self | cron+hook (split) | N/A | low | inject-session + persist-state | orient → reflect → conclude | daily / review-queue | A (merge into routine SKILL) → `briefing-daily` |
+| **A3** | "What's blocking me" | agent-self | cron+hook (split) | N/A | low | inject-session | orient → reflect | daily | A (merge into routine SKILL) → `briefing-daily` |
+| **A4** | Context-switch reload | architect | explicit-prompt | N/A | low | inject-session | receive → orient → reflect → conclude | ad-hoc | C → fold into `briefing-daily` (re-entry branch) |
+| **A5** | Today's dispatch recommendation | architect | explicit-prompt | N/A | medium | inject-session | receive → orient → plan → conclude | daily | C → fold into `briefing-daily` (post-overview phase) |
+| **B1** | Design conversation routing | architect | explicit-prompt | N/A (routing) | high | inject-session + emit-external (sibling output) | receive → plan → act (delegate) | intake | C → fold into `intaking-requirement` (uses `composing-siblings` atomic) |
 | **B2** | INVEST decomposition | architect | explicit-prompt | A initial / R resplit (handled by B4) | medium | persist-state + inject-session | receive → orient → plan → act → verify → conclude | decompose-handoff | A → MUST own SKILL: `decomposing-into-milestones` (shipped v0.4.0) |
-| **B3** | Single-card fast-path | architect | explicit-prompt | A | low | persist-state | receive → plan → act | intake | C → fold into intake routine |
-| **B4** | Resplit existing card | architect | explicit-prompt | R (per ADR-0006 row 3) | medium | persist-state + inject-session | receive → orient → plan → act → verify | intake (re-entry) / triage | B → thin resplit SKILL or fold into B2 SKILL |
-| **C1** | Review PR | architect | explicit-prompt | mixed (A approve / R rework via C2) | medium | persist-state + emit-external | receive → orient → reflect → conclude | review-queue | A → MUST own SKILL: review-queue routine |
-| **C2** | Return to In Progress (nested in C1) | nested | in-process-reflex | R (Status flip on in-flight claim) | low | persist-state + emit-external + inline-return | reflect → act (within C1) | review-queue | C → fold into C1 SKILL |
-| **C3** | Lookup card event stream (nested) | nested | in-process-reflex | N/A (read-only) | low | inline-return | orient (helper) | review-queue / retro / hygiene / context-reload | C → fold into hosting SKILLs (multi-call shared helper) |
-| **C4** | Unblock blocked card (5-step ladder) | architect or nested in E3 | explicit-prompt or in-process-reflex | mixed (A unblock + refine; R split + reassign + kill) | medium | persist-state + emit-external + inject-session | receive → orient → plan → act | triage | A → MUST own SKILL: triage routine |
-| **C5** | Cancel stale claim | nested in E3 / architect | in-process-reflex (nested) or explicit-prompt | R (per ADR-0006 row 8) | low | persist-state + emit-external | reflect → plan → act | hygiene / triage | C → fold into hygiene / triage SKILLs |
-| **D1** | Overnight batch dispatch | architect | explicit-prompt | A (per ADR-0006 row 13) | medium | persist-state + inject-session | receive → plan → act → observe → conclude | overnight-dispatch | B → thin dispatch SKILL (Mode-2 spawn + cron-coordinated) |
-| **D2** | Batch result aggregation | agent-self | cron-job | N/A | low | persist-state + inject-session (next-day) | orient → reflect → conclude | overnight-dispatch / daily | C → fold into daily-briefing routine or D1 SKILL |
-| **E1** | Retro on cadence trigger | agent-self (cadence) / architect (manual) | cron-job (cadence) or explicit-prompt | mixed (A cadence-log row 14; R proposed amendments row 4) | medium | emit-external (retro report) + inject-session (proposals) | orient → reflect → conclude → surface (proposals) | retro | B → thin retro SKILL |
-| **E2** | Weekly aggregated report | agent-self | cron-job | A (per ADR-0006 row 14) | low | emit-external (commit / email / state.yml) | orient → reflect → conclude | weekly-report | C → fold into a cadence-driven multi-routine SKILL or atomic data-summary helper |
-| **E3** | Kanban hygiene sweep | agent-self (cadence) / architect | cron-job or explicit-prompt | mixed (label cleanup A row 11; orphan claim cancel R row 8) | low | persist-state + emit-external + inject-session (R proposals) | orient → reflect → plan → act | kanban-hygiene | B → thin hygiene SKILL |
+| **B3** | Single-card fast-path | architect | explicit-prompt | A | low | persist-state | receive → plan → act | intake | C → fold into `intaking-requirement` |
+| **B4** | Resplit existing card | architect | explicit-prompt | R (per ADR-0006 row 3) | medium | persist-state + inject-session | receive → orient → plan → act → verify | intake (re-entry) / triage | C → fold into `decomposing-into-milestones` (re-entry branch of B2) |
+| **C1** | Review PR | architect | explicit-prompt | mixed (A approve / R rework via C2) | medium | persist-state + emit-external | receive → orient → reflect → conclude | review-queue | A → MUST own SKILL: `reviewing-pr-queue` |
+| **C2** | Return to In Progress (nested in C1) | nested | in-process-reflex | R (Status flip on in-flight claim) | low | persist-state + emit-external + inline-return | reflect → act (within C1) | review-queue | C → fold into `reviewing-pr-queue` |
+| **C3** | Lookup card event stream (nested) | nested | in-process-reflex | N/A (read-only) | low | inline-return | orient (helper) | review-queue / retro / hygiene / context-reload | C → script-only: `scripts/lookup-card-events.sh` (multi-caller deterministic mechanism, NOT a SKILL) |
+| **C4** | Unblock blocked card (5-step ladder) | architect or nested in E3 | explicit-prompt or in-process-reflex | mixed (A unblock + refine; R split + reassign + kill) | medium | persist-state + emit-external + inject-session | receive → orient → plan → act | triage | A → MUST own SKILL: `triaging-board` |
+| **C5** | Cancel stale claim | nested in E3 / architect | in-process-reflex (nested) or explicit-prompt | R (per ADR-0006 row 8) | low | persist-state + emit-external | reflect → plan → act | hygiene / triage | C → fold into `triaging-board` |
+| **D1** | Overnight batch dispatch | architect | explicit-prompt | A (per ADR-0006 row 13) | medium | persist-state + inject-session | receive → plan → act → observe → conclude | overnight-dispatch | v1.x defer (B candidate when shipped) |
+| **D2** | Batch result aggregation | agent-self | cron-job | N/A | low | persist-state + inject-session (next-day) | orient → reflect → conclude | overnight-dispatch / daily | v1.x defer (C, fold into briefing-daily or D1 SKILL when shipped) |
+| **E1** | Retro on cadence trigger | agent-self (cadence) / architect (manual) | cron-job (cadence) or explicit-prompt | mixed (A cadence-log row 14; R proposed amendments row 4) | medium | emit-external (retro report) + inject-session (proposals) | orient → reflect → conclude → surface (proposals) | retro | v1.x defer (B candidate when shipped) |
+| **E2** | Weekly aggregated report | agent-self | cron-job | A (per ADR-0006 row 14) | low | emit-external (commit / email / state.yml) | orient → reflect → conclude | weekly-report | v1.x defer (C candidate when shipped) |
+| **E3** | Kanban hygiene sweep | agent-self (cadence) / architect | cron-job or explicit-prompt | mixed (label cleanup A row 11; orphan claim cancel R row 8) | low | persist-state + emit-external + inject-session (R proposals) | orient → reflect → plan → act | kanban-hygiene | v1.x defer (B candidate when shipped) |
 | **F1** | Bootstrap repo | agent-self (state.yml absence detection) | session-hook (`INVOKE` injection) | mixed (mostly A; R for SoT-modifying like routing-block injection) | low (Setup-Stages registry mechanism) | persist-state | receive → orient → plan → act → verify → conclude | bootstrap | A → MUST own SKILL: `bootstrapping-repo` (shipped v0.2.0) |
-| **F2** | Harness setup / evolution | architect | explicit-prompt | R (per ADR-0006 rows 4 / 10) | high | persist-state + inject-session (proposals) | receive → plan → act (delegate) → verify | harness-setup | B → thin router SKILL |
+| **F2** | Harness setup / evolution | architect | explicit-prompt | R (per ADR-0006 rows 4 / 10) | high | persist-state + inject-session (proposals) | receive → plan → act (delegate) → verify | harness-setup | v1.x defer (B candidate when shipped) |
 | **G1** | Audit row on every mutating action | nested | in-process-reflex | N/A (record, not action) | low (schema) | persist-state (audit DB) | act (record reflex) | N/A (cross-cutting) | A → MUST own atomic SKILL: `auditing-actions` (shipped v0.3.0) |
-| **G2** | R-class propose-await | nested | in-process-reflex | R (governs R class) | low | inject-session (proposal) + persist-state (proposal audit row) | reflect → surface | N/A | A → folded into atomic SKILL: `classifying-actions` (shipped v0.3.0; G2 + G3 share the classifier) |
-| **G3** | A-class no-interrupt gate | nested | in-process-reflex | A (governs A class) | low | persist-state (audit) | reflect | N/A | A → folded into `classifying-actions` (same atomic SKILL as G2) |
-| **G4** | Design discipline (intake → decompose) | nested (within F-08 → F-09 串接) | in-process-reflex | N/A (refusal of fast-path is meta-rule) | low (rule) | inject-session (refusal message) + inline-return (gating) | reflect (gate) | intake | C → fold into intake routine SKILL |
-| **G5** | Cross-platform parity | nested (every cross-platform-sensitive action) | in-process-reflex | N/A | low (path / hook resolution) | inline-return | act (helper) | N/A | C → folded into `scripts/lib/common.sh` (`bsp_plugin_root()` etc.), not a SKILL |
+| **G2** | R-class propose-await | nested | in-process-reflex | R (governs R class) | low | inject-session (proposal) + persist-state (proposal audit row) | reflect → surface | N/A | A → MUST own atomic SKILL: `classifying-actions` (shipped v0.3.0) |
+| **G3** | A-class no-interrupt gate | nested | in-process-reflex | A (governs A class) | low | persist-state (audit) | reflect | N/A | C → fold into `classifying-actions` (G2 + G3 share the classifier reflex) |
+| **G4** | Design discipline (intake → decompose) | nested (within intake → decompose 串接) | in-process-reflex | N/A (refusal of fast-path is meta-rule) | low (rule) | inject-session (refusal message) + inline-return (gating) | reflect (gate) | intake | C → fold into `intaking-requirement` |
+| **G5** | Cross-platform parity | nested (every cross-platform-sensitive action) | in-process-reflex | N/A | low (path / hook resolution) | inline-return | act (helper) | N/A | C → script-only: `scripts/lib/common.sh` (`bsp_plugin_root()` etc.), NOT a SKILL |
 
 ### Cross-references to F-01..F-15 (currently-shipped surface)
 
@@ -703,145 +710,213 @@ Two structural findings from the cross-reference:
    (G1–G5). Recovering these as explicit nodes is a
    primary methodology dividend.
 
-## Producer SKILL set candidate (Stage 3 ROI synthesis)
+## Producer SKILL set decision (Stage 3 ROI synthesis)
 
 Applying the ROI function (per
 [`../../../FEATURE_DESIGN_METHODOLOGY.md`](../../../FEATURE_DESIGN_METHODOLOGY.md)
-§ "Stage 3 — Derivation function (ROI)") to each of the 21
-nodes yields an archetype distribution:
+§ "Stage 3 — Derivation function (ROI)") to each of the 26
+nodes yields the archetype distribution below. Strict
+re-evaluation under v1-complete scope (architect intake
+2026-04-29, post-methodology) **promoted four routine nodes
+to archetype-A merge-into-routine** because their host
+routines themselves consume private board-superpowers
+ontology + private contract + private discipline (gap=high
+on the routine, not just on the constituent steps). The
+four routines emerge as molecular SKILLs.
 
-- **Archetype A** (must own SKILL) — 6 distinct outcomes:
-  B2 → `decomposing-into-milestones`; C1 → review-queue
-  routine; C4 → triage routine; F1 → `bootstrapping-repo`;
-  G1 → `auditing-actions`; G2 + G3 → `classifying-actions`.
-- **Archetype B** (thin router SKILL) — 8 nodes: A4, A5,
-  B1, B4, D1, E1, E3, F2.
-- **Archetype C** (fold into other) — 12 nodes: A1, A2,
-  A3, B3, C2, C3, C5, D2, E2, G3 (folded into G2's
-  atomic), G4, G5.
+### Archetype distribution (v1-complete scope)
 
-The SKILL set shape decision is **Open** (deferred to
-architect ratification per § "Open design choices" →
-"SKILL decomposition granularity"). Two candidate shapes
-are compared below; both honor the same Stage 2 + Stage 3
-positioning.
+| Archetype | Count | Nodes |
+|-----------|-------|-------|
+| **A — MUST own SKILL** (independent molecular or atomic) | 7 | B2 → `decomposing-into-milestones` (shipped); F1 → `bootstrapping-repo` (shipped); G1 → `auditing-actions` (shipped); G2 → `classifying-actions` (shipped); C1 → `reviewing-pr-queue` (NEW molecular); C4 → `triaging-board` (NEW molecular); B1+B3 host → `intaking-requirement` (NEW molecular); A1+A2+A3 host → `briefing-daily` (NEW molecular). Note: archetype-A counts the *SKILLs* (7), not the nodes (multiple nodes per routine SKILL). |
+| **C — fold into other** | 14 | A4, A5 → fold into `briefing-daily`; B3, B1, G4 → fold into `intaking-requirement`; B4 → fold into `decomposing-into-milestones`; C2 → fold into `reviewing-pr-queue`; C5 → fold into `triaging-board`; G3 → fold into `classifying-actions`; C3 → script-only (`scripts/lookup-card-events.sh`, deterministic mechanism); G5 → script-only (`scripts/lib/common.sh`); plus the four merge-into-routine nodes A1/A2/A3/C1/C4 counted above as part of their routine's archetype-A SKILL home. |
+| **v1.x defer** | 6 | D1, D2, E1, E2, E3, F2 — out of v1-complete scope per ADR-0011; revisit when demand pulls. |
 
-### Shape X — Multi-routine `managing-board` (current v0.4.0 shape)
+**Archetype-B count is 0** at v1-complete scope. Every node
+that the original Stage 3 draft tagged as archetype-B
+either (a) merges into an archetype-A routine because the
+routine host already carries D-META-1 routing as part of
+its body (B1 into `intaking-requirement`), or (b) defers
+to v1.x (D1, E1, E3, F2). Archetype-B "thin router SKILL"
+remains a valid form for future v1.x landings, but no v1
+SKILL ships in that shape.
 
-```
-managing-board                  (molecular, multi-routine)
-├── daily routine               (A1, A2, A3, A5, D2)
-├── intake routine              (B1, B3, G4)
-├── review-queue routine        (C1, C2)
-├── triage routine              (C4, C5)
-└── (uses C3 helper internally)
-
-decomposing-into-milestones     (molecular, shipped v0.4.0)
-└── B2, B4
-
-bootstrapping-repo              (molecular, shipped v0.2.0)
-└── F1
-
-board-canon                     (atomic, shipped — mental-model SPOT)
-└── consumed by all mutating molecular SKILLs
-
-classifying-actions             (atomic, shipped v0.3.0)
-└── G2, G3
-
-auditing-actions                (atomic, shipped v0.3.0)
-└── G1
-
-enforcing-pr-contract           (atomic, shipped — used by C1)
-
-[v1.x deferred — archetype B thin SKILLs]
-recalling-context               (A4)
-overnight-dispatching           (D1)
-running-retro                   (E1)
-maintaining-kanban-hygiene      (E3)
-setting-harness                 (F2)
-weekly-reporting                (E2 — could also fold into managing-board cadence)
-```
-
-Estimated SKILL count at v1-complete (Producer side):
-
-- v1-minimum molecular: 3 (`managing-board`,
-  `decomposing-into-milestones`, `bootstrapping-repo`).
-- v1.x molecular: 5–6 (thin SKILLs for archetype B nodes).
-- atomic: 4 (`board-canon`, `classifying-actions`,
-  `auditing-actions`, `enforcing-pr-contract`).
-- **Producer-side total: 12–13 SKILLs.**
-
-### Shape Y — Per-routine sub-molecular SKILLs
+### Final SKILL set (v1-complete Producer-side)
 
 ```
-briefing-daily                  (molecular)
-└── A1, A2, A3, A5, D2
+Entry layer (1 SKILL)
+─────────────────────────────────────────────
+using-board-superpowers              shipped — routing table updated
+                                     for the 4-way molecular fan-out
 
-intaking-requirement            (molecular)
-└── B1, B3, G4
+Molecular layer (6 SKILLs — 4 NEW + 2 shipped)
+─────────────────────────────────────────────
+briefing-daily              NEW    A1 + A2 + A3 + A4 + A5
+intaking-requirement        NEW    B1 + B3 + G4
+reviewing-pr-queue          NEW    C1 + C2
+triaging-board              NEW    C4 + C5
+decomposing-into-milestones shipped v0.4.0   B2 + B4
+bootstrapping-repo          shipped v0.2.0   F1
 
-reviewing-pr-queue              (molecular)
-└── C1, C2
+Atomic layer (5 SKILLs — 4 shipped + 1 NEW)
+─────────────────────────────────────────────
+board-canon                 shipped   schema + state machine + WIP formula
+enforcing-pr-contract       shipped   Contract A + B
+classifying-actions         shipped   D-AUTONOMY-1 matrix; G2 + G3
+auditing-actions            shipped   audit schema + degradation; G1
+composing-siblings          NEW       cross-plugin routing SPOT (see below)
 
-triaging-board                  (molecular)
-└── C4, C5
-
-decomposing-into-milestones     (molecular, shipped)
-└── B2, B4
-
-bootstrapping-repo              (molecular, shipped)
-└── F1
-
-[plus the v1.x archetype-B thin SKILLs as in Shape X]
-
-[plus the 4 atomic SKILLs same as Shape X]
+Producer-side total: 12 SKILLs (1 + 6 + 5).
 ```
 
-Estimated SKILL count at v1-complete:
+The `managing-board` mega-SKILL (current v0.4.0 shape;
+multi-routine) is **retired** in favor of the four
+per-routine sub-molecular SKILLs. The decomposition
+rationale is recorded under § "Decided" → "SKILL
+decomposition granularity".
 
-- v1-minimum molecular: 6 (split from `managing-board`
-  into 4 per-routine + 2 single-purpose existing).
-- v1.x molecular: 5 (same as Shape X minus
-  weekly-reporting which folds back as a cron-fired thin
-  SKILL).
-- atomic: 4 (same as Shape X).
-- **Producer-side total: 15 SKILLs.**
+### Why per-routine split (Shape Y) wins over the multi-routine `managing-board` shape
 
-### Shape comparison
+| Dimension | Multi-routine `managing-board` (Shape X) | Per-routine split (Shape Y, **chosen**) |
+|-----------|-----------------------------------------|------------------------------------------|
+| SKILL count | 12 | 12 (same — adding 4 new molecular but retiring `managing-board` = net +3, while atomic `composing-siblings` +1 and the existing 4 atomics unchanged) |
+| Trigger description granularity | 1 multi-keyword description (`managing-board` covering daily / intake / review-queue / triage simultaneously) | 4 single-semantic descriptions (one per routine SKILL); trigger phrases for the 4 routines do not overlap |
+| Body-length budget | High pressure — body covers 4 routines, approaching 450-line molecular ceiling at v1-complete scope; future v1.x routine additions force re-deciding "merge into managing-board vs new SKILL" each time | Comfortable — each per-routine SKILL settles in the 200–300 line range; future v1.x molecular additions follow the established "one routine, one SKILL" pattern uniformly |
+| Routing complexity | Low SKILL count, but post-routing intra-SKILL dispatch needed (architect prompt → `managing-board` → which routine?) | Higher SKILL count, but routing collapses on first match because trigger phrases are disjoint |
+| Routine-boundary clarity | Implicit — routines are body sections within one SKILL | Explicit — routines are SKILLs with their own frontmatter, references/, and `.skill-meta.yaml` |
+| Cross-routine sharing | Body-sharing trivial (same SKILL) | Goes through atomic SKILLs (`board-canon`, `composing-siblings`) and `scripts/` helpers — already the structural mechanism for shared knowledge anyway |
+| Evolution discipline | "Mega-SKILL grows over time" failure mode (v1-complete + v1.x → Triager / Lint-runner / Refiner specific roles squeezing in) | "One specific role, one SKILL, one description" pattern stable across v1-complete and v1.x |
 
-| Dimension | Shape X (multi-routine) | Shape Y (per-routine split) |
-|-----------|-------------------------|------------------------------|
-| SKILL count | 12–13 | 15 |
-| Trigger description granularity | 1 multi-keyword description (`managing-board` with daily / intake / review-queue / triage trigger groups) | 4 single-keyword descriptions (one per routine SKILL) |
-| Body-length budget pressure | High — `managing-board` body covers 4 routines, approaches 450-line molecular budget at v1-complete scope | Low — each per-routine SKILL fits comfortably in 200–300 lines |
-| Entry-point routing complexity | Low — fewer SKILLs to disambiguate among | Higher — entry-point matches one of 4 routine descriptions |
-| Routine-boundary clarity | Implicit (routines are body sections of one SKILL) | Explicit (routines are SKILLs) |
-| Cross-routine sharing | Easy (same body) | Requires shared atomic helpers or cross-SKILL invocation |
+The three decisive dimensions (body-length budget,
+trigger description precision, evolution discipline) all
+favor Shape Y; the one Shape X advantage (cross-routine
+body sharing) is absorbed by the atomic layer where it
+already structurally belonged. Methodology-neutral: the
+ROI function does not mandate the shape; the choice
+follows from the *body-length-budget × evolution
+discipline* product favoring Shape Y at v1-complete scope
+and beyond.
 
-**Methodology-neutral note**: the ROI function does not
-mandate either shape. Both pass the falsification test
-("could base model substitute?") because the SKILL bodies
-either way encode the same private knowledge. The choice
-is a *body-length-budget vs trigger-granularity*
-trade-off that the architect ratifies via Open list.
+### New atomic SKILL: `composing-siblings`
 
-### Same-PR cleanup obligations (regardless of shape)
+The Stage 3 SPOT census surfaced one additional atomic
+candidate beyond the four already shipped: the cross-plugin
+routing decision framework (when to invoke
+`gstack:/office-hours` vs `/plan-eng-review` vs
+`superpowers:brainstorming` vs `superpowers:writing-plans`,
+plus ADR-0008 in-process-vs-procedural compatibility
+dispatch).
+
+**SPOT consolidation**: this routing knowledge is currently
+duplicated across three places — top-level `AGENTS.md`
+"How to compose gstack and superpowers" section,
+`skills/managing-board/references/skill-routing.md`, and
+inline mentions in each routine's body within the (now
+retired) `managing-board` mega-SKILL. With the Shape Y
+split, four molecular SKILLs (`intaking-requirement`,
+`reviewing-pr-queue`, `triaging-board`,
+`decomposing-into-milestones`) all need this routing
+table. Continuing to inline = quadrupled drift risk.
+
+**ROI**: gap=medium (private D-META-1 framework — base
+model knowledge of sibling skill descriptions is shallow,
+and ADR-0008 procedural-vs-in-process boundaries are
+plugin-private) × frequency=medium-high (every routine
+that delegates to a sibling consults this) × failure=medium
+(wrong sibling wastes one round, recoverable but expensive)
+÷ maintenance=low (sibling set is stable) + routing=low
+(atomic, never contends for entry-point trigger phrases) =
+**archetype A atomic**.
+
+**Knock-on cleanups when this atomic ships**: AGENTS.md
+"How to compose gstack and superpowers" section becomes a
+1-line pointer to `composing-siblings`;
+`managing-board/references/skill-routing.md` is
+deleted (the SKILL retires); inline references in the four
+new molecular SKILLs reduce to a `composes_atomic:
+composing-siblings` declaration. The Spec change-impact
+matrix row "AGENTS.md compose section ↔ skill-routing.md
+/ scope-shape-judgment.md" simplifies because the
+synchronization target collapses to one file.
+
+### D-META-1 conversation framework — v1.x roadmap (NOT shipped at v1-complete)
+
+A second atomic SPOT candidate was evaluated and
+**deliberately deferred** to v1.x: the meta-framework for
+running D-META-1 conversations (per
+[`../0001-positioning.md`](../0001-positioning.md) § P7)
+that elicit architect-private taste rather than ship
+defaults.
+
+**Why deferred despite ≥2 callers at v1-complete**:
+`intaking-requirement` (B1 design conversation routing,
+**dispatch-style**) and `decomposing-into-milestones` (B2
++ B4 INVEST + vertical slicing, **deliberation-style**)
+both run D-META-1 conversations, but their rhythmic
+shapes differ structurally. Dispatch-style runs short
+turns (sub-30-second routing decision); deliberation-style
+runs long turns (5–10-minute boundary debates). Forcing
+both under one atomic at v1-complete produces either an
+overly-abstract framework (just "ask open-ended questions,
+avoid defaults, persist taste to spec") or an
+overly-specific framework (two parallel sub-templates with
+shared overhead). Both lose ROI to the inline status quo.
+
+**v1.x lift trigger**: when caller count reaches ≥4
+molecular SKILLs (intake + decompose +
+`harness-setup` (F2) + `running-retro` (E1)) AND at least
+3 of the 4 share a structurally same conversation
+rhythm (i.e., dispatch / deliberation / design / review
+collapse into 3 or fewer modes), then the atomic
+`framing-d-meta-1-conversation` (or
+`eliciting-architect-taste`) becomes worth lifting.
+Threshold rationale: 3 callers under one mode meets the
+SPOT density floor for a non-mechanism atomic.
+
+**Until v1.x lifts it**: each molecular SKILL keeps a
+private D-META-1 mode reference at
+`skills/<routine>/references/<routine>-d-meta-1-mode.md`
+(≤80 lines), describing that routine's specific
+conversation rhythm. Multiple unshared mode files are
+strictly worse than one over-generalized atomic, but
+strictly better than no documented rhythm — they preserve
+the specific rhythms until SPOT structure crystallizes.
+
+### Same-PR cleanup obligations (Shape Y)
 
 When this redesign moves from draft to shipped:
 
-- **Demote F-01 + F-11** from feature catalog to script
-  adjuncts. The currently-shipped 03 surface's F-01 and
-  F-11 sections become "see § script adjuncts" pointers.
+- **Retire `managing-board` mega-SKILL** — `git rm -r
+  skills/managing-board/`, plus update `SKILLS.md` catalog
+  entry, update `using-board-superpowers` routing table,
+  remove the change-impact-matrix row referencing
+  `managing-board/references/skill-routing.md`.
+- **Author 4 new molecular SKILLs** —
+  `skills/briefing-daily/`, `skills/intaking-requirement/`,
+  `skills/reviewing-pr-queue/`, `skills/triaging-board/`.
+  Each gets `SKILL.md`, `references/`,
+  `.skill-meta.yaml`, plus per-routine D-META-1 mode
+  reference (where applicable).
+- **Author 1 new atomic SKILL** — `skills/composing-siblings/`
+  with `SKILL.md` + `references/{routing-table,adr-0008-compatibility,sibling-skill-catalog}.md`.
+- **Demote F-01 + F-11** from currently-shipped 03 surface
+  to script adjuncts (they are mechanisms, not journey
+  nodes — see § "Why a redesign" point 3).
 - **Add B3, C2, C3, D2, G1–G5** as explicit catalog rows
-  (currently absent or implicit in F-01..F-15).
-- **F-08 ↔ F-09 boundary**: G4 (design discipline) is
-  enforced at the boundary; explicit catalog row for G4.
-- **F1 lives in 05**: cross-surface reference adjusted in
+  (currently absent or implicit in F-01..F-15 numbering).
+- **G4 (design discipline gate)** — enforced at the
+  intake → decompose boundary inside `intaking-requirement`
+  body; no separate SKILL.
+- **F1 lives in 05** — cross-surface reference adjusted in
   catalog notes.
-
-These cleanups are independent of the SKILL set shape
-decision and land regardless of whether Shape X or Shape Y
-is chosen.
+- **Update `AGENTS.md`** — the "How to compose gstack and
+  superpowers" section collapses to a 1-line pointer to
+  `composing-siblings` atomic SKILL.
+- **Cross-impact propagation** — Spec change-impact matrix
+  in [`../AGENTS.md`](../AGENTS.md) walked top-to-bottom:
+  every row mentioning `managing-board` updates to
+  reference the corresponding new routine SKILL or the
+  new atomic.
 
 ## Trigger model
 
@@ -907,13 +982,6 @@ Phase 1.]
   PR). Per the new skill-as-primary doctrine, this is an
   *adjunct ownership repair* operation, not a generic
   refactor.
-- **SKILL decomposition granularity.** Whether to split a
-  current multi-routine molecular SKILL into per-routine
-  sub-molecular skills, or keep the single-skill multi-routine
-  shape. The decision affects Axis 4 value cardinality and
-  skill-trigger granularity. Applies to any current molecular
-  SKILL whose body covers multiple workflows or lifecycle
-  stages.
 - **Codex Mode-2 dispatch source.** v1 ships Producer as
   Mode-1-only (architect-prompt-driven). Whether the redesign
   reserves Codex Mode-2 dispatch as a future axis value, or
@@ -969,25 +1037,70 @@ Phase 1.]
   differ). 5-of-5 sharedness exceeds the original 3-of-4
   threshold that defaulted to candidate B. Mother protocol
   pins J1–J5; this surface declares Producer-specific
-  distribution and 21-node catalog without redefining J1–J5.
+  distribution and 26-node catalog without redefining J1–J5.
 - **Methodology Stage 1 / 2 / 3 applied to Producer surface
   (2026-04-29).** Per
   [`../../../FEATURE_DESIGN_METHODOLOGY.md`](../../../FEATURE_DESIGN_METHODOLOGY.md):
-  Stage 1 enumerates 21 journey nodes A1–G5 in § "Producer
+  Stage 1 enumerates 26 journey nodes A1–G5 in § "Producer
   journey nodes (Stage 1 enumeration)"; Stage 2 positions
   each node on J1–J5 + A1–A2 in § "Producer feature catalog
   (table)"; Stage 3 yields three SKILL-form archetypes
-  A/B/C and a SKILL set candidate (Shape X vs Shape Y) in
-  § "Producer SKILL set candidate (Stage 3 ROI synthesis)".
-  Two structural findings landed: (i) F-01 and F-11 are
-  demoted from feature catalog to script adjuncts (they
-  were mechanisms, not journey nodes); (ii) eight new
-  explicit nodes (B3, C2, C3, D2, F1, G1–G5) recovered from
-  methodology cross-product. The currently-shipped
-  F-01..F-15 numbering remains valid as a parallel index
-  in the shipped 03 surface; the redesign adds the
-  journey-based A1–G5 numbering as the canonical Stage 1
-  / 2 / 3 frame.
+  A/B/C and the final SKILL set in § "Producer SKILL set
+  decision (Stage 3 ROI synthesis)". Two structural findings
+  landed: (i) F-01 and F-11 are demoted from feature
+  catalog to script adjuncts (they were mechanisms, not
+  journey nodes); (ii) eight new explicit nodes (B3, C2,
+  C3, D2, F1, G1–G5) recovered from methodology
+  cross-product. The currently-shipped F-01..F-15 numbering
+  remains valid as a parallel index in the shipped 03
+  surface; the redesign adds the journey-based A1–G5
+  numbering as the canonical Stage 1 / 2 / 3 frame.
+- **SKILL decomposition granularity — Shape Y chosen
+  (2026-04-29).** Per § "Producer SKILL set decision
+  (Stage 3 ROI synthesis)" → "Why per-routine split
+  (Shape Y) wins". The current `managing-board` mega-SKILL
+  (multi-routine; v0.4.0) **retires** in favor of four
+  per-routine sub-molecular SKILLs:
+  `briefing-daily` (A1+A2+A3+A4+A5),
+  `intaking-requirement` (B1+B3+G4),
+  `reviewing-pr-queue` (C1+C2),
+  `triaging-board` (C4+C5).
+  Decisive dimensions: body-length-budget (450-line ceiling
+  pressure on `managing-board` at v1-complete scope),
+  trigger description precision (4 disjoint single-semantic
+  descriptions vs 1 multi-keyword), and evolution discipline
+  (one-routine-one-SKILL pattern stable across v1-complete
+  + v1.x). Cross-routine body sharing is absorbed by the
+  atomic layer where it structurally belongs.
+- **New atomic SKILL `composing-siblings` (2026-04-29).**
+  Per § "Producer SKILL set decision" → "New atomic SKILL:
+  `composing-siblings`". SPOT consolidates the cross-plugin
+  routing decision framework currently triplicated across
+  `AGENTS.md`,
+  `managing-board/references/skill-routing.md`, and inline
+  routine bodies. Quadruples in importance under Shape Y
+  because all four new molecular SKILLs consume it.
+  Authoring checklist: `SKILL.md` + `references/`
+  (routing-table, ADR-0008-compatibility, sibling-skill-
+  catalog), `.skill-meta.yaml` (`layer: atomic`,
+  `nature: mental-model`, `user-invocable: false`).
+- **D-META-1 conversation framework atomic — deferred to
+  v1.x (2026-04-29).** Per § "Producer SKILL set decision"
+  → "D-META-1 conversation framework — v1.x roadmap".
+  At v1-complete scope only 2 callers
+  (`intaking-requirement` dispatch-style;
+  `decomposing-into-milestones` deliberation-style); the
+  two conversation rhythms differ structurally and abstract
+  unification at v1-complete loses ROI. Each molecular
+  SKILL keeps a private
+  `references/<routine>-d-meta-1-mode.md` until v1.x lifts
+  the SPOT (trigger: ≥4 callers AND ≥3 share one rhythm).
+- **Final v1-complete Producer SKILL set: 12 SKILLs
+  (2026-04-29).** Entry layer 1 (`using-board-superpowers`,
+  routing table updated for the 4-way fan-out); molecular
+  layer 6 (4 new + 2 shipped); atomic layer 5 (4 shipped +
+  1 new `composing-siblings`). Authoritative listing in
+  § "Producer SKILL set decision" → "Final SKILL set".
 
 ## Replacement plan (when this draft is approved)
 
