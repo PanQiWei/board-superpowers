@@ -84,7 +84,7 @@ then jump back via term-registry links.
 | [`03-aggregates-and-entities.md`](./03-aggregates-and-entities.md) | Aggregates with root + members + value objects + invariants + physical-storage location. The meat. |
 | [`04-domain-events.md`](./04-domain-events.md) | State-changing events that cross aggregate boundaries — emitter, trigger, payload shape, observers. |
 | [`05-relationships.md`](./05-relationships.md) | Mermaid ER diagram + state diagrams for Card / ConsumerLogical / PR + a Mode-2 suspend-and-wake-up sequence diagram. |
-| [`06-context-map.md`](./06-context-map.md) | How the bounded contexts communicate. Mostly Customer-Supplier through GitHub artifacts; a small Anti-Corruption Layer at the Kanban Protocol projection seam (per ADR-0012; the v1 GitHubProjectAdapter is the first projection). |
+| [`06-context-map.md`](./06-context-map.md) | How the bounded contexts communicate. Mostly Customer-Supplier through GitHub artifacts; a small Anti-Corruption Layer at the Kanban Protocol projection seam (per ADR-0025; the v1 GitHubProjectAdapter is the first projection). |
 
 ---
 
@@ -118,7 +118,7 @@ Three reading conventions to keep 0003 consistent with 0002:
 - `0004-component-architecture.md` (stub) — runtime topology that
   realizes these entities.
 - `0005-contracts/` — finalizes the Kanban Protocol top-level
-  contract (`00-kanban-protocol.md`, anchored by ADR-0012;
+  contract (`00-kanban-protocol.md`, anchored by ADR-0025;
   rescopes ADR-0005's BoardAdapter to the v1 projection),
   the `autonomy_overrides:` schema, and the
   `BOARD_SP_AUDIT_DB_URL` mechanism (all touched here at
@@ -127,7 +127,7 @@ Three reading conventions to keep 0003 consistent with 0002:
   terms (e.g., "ghost claim" = ClaimMarker without ConsumerProcess).
 - `adr/` — architectural decisions; 0003 entities track them
   one-for-one (ADR-0001/0005 → BoardAdapter, now rescoped per
-  ADR-0012 to v1 GitHubProjectAdapter projection; ADR-0012 →
+  ADR-0025 to v1 GitHubProjectAdapter projection; ADR-0025 →
   Kanban Protocol top-level contract + Card.key + branch
   naming; ADR-0002 → ClaimBranch + ClaimMarker; ADR-0003 →
   Worktree; ADR-0006 → AuditEntry + AutonomyOverride;

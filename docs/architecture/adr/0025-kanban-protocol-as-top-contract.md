@@ -127,7 +127,7 @@ shape fits their transport.
 
 ADR-0005's Status field is amended to: `accepted; § Consequences
 amended by ADR-0010; § Decision and § Type definitions amended by
-ADR-0012`. The Decision and Type-definitions sections themselves
+ADR-0025`. The Decision and Type-definitions sections themselves
 remain (they document the GitHubProjectAdapter projection's shape);
 the supersession is one of **scope re-interpretation**, not text
 deletion.
@@ -246,7 +246,7 @@ ships only one projection).
   artifact, this ADR is the Decision's record.
 - ADR-0005's amended Status field reads: `accepted; § Consequences
   amended by ADR-0010; § Decision and § Type definitions amended
-  by ADR-0012`. The original Decision text is preserved (rescoped
+  by ADR-0025`. The original Decision text is preserved (rescoped
   in interpretation, not redacted) so historical readers see what
   ADR-0005 originally committed to and how that interpretation
   shifted.

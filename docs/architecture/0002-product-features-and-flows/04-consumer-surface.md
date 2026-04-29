@@ -82,7 +82,7 @@ single end-to-end delivery.
   `$HOME/.config/superpowers/worktrees/<project>/claim/<key-slug>-<title-slug>`
   per the Kanban Protocol branch-naming rule;
   v0.4.x's `claim/<N>-<slug>` was generalized in v0.5.0 per
-  ADR-0012, and the GitHub projection's `<key-slug>` of
+  ADR-0025, and the GitHub projection's `<key-slug>` of
   issue number `42` slugifies to `42` so existing branches
   remain valid). N parallel Consumers therefore never share
   HEAD. The worktree persists across Mode-2 terminate-and-
@@ -159,7 +159,7 @@ isolated."
 
 - **Capability**: claim a Ready card atomically by pushing a
   remote `claim/<key-slug>-<title-slug>` branch (Kanban
-  Protocol branch-naming rule per ADR-0012; under the v1
+  Protocol branch-naming rule per ADR-0025; under the v1
   GitHub projection `<key-slug>` is the slugified
   `Card.key` which equals the issue number, so the branch
   shape is byte-identical to the historical

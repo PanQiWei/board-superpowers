@@ -12,7 +12,7 @@ feature, all are listed.
 
 | Feature | Implementing surface |
 |---------|---------------------|
-| F-01 Atomic kanban query primitive | `skills/managing-board/SKILL.md` (composes `gh project item-list` / `gh issue list`); Kanban Protocol `read_board` action ([`0005-contracts/00-kanban-protocol.md`](../0005-contracts/00-kanban-protocol.md)); v1 GitHubProjectAdapter projection per ADR-0005 (rescoped by ADR-0012) |
+| F-01 Atomic kanban query primitive | `skills/managing-board/SKILL.md` (composes `gh project item-list` / `gh issue list`); Kanban Protocol `read_board` action ([`0005-contracts/00-kanban-protocol.md`](../0005-contracts/00-kanban-protocol.md)); v1 GitHubProjectAdapter projection per ADR-0005 (rescoped by ADR-0025) |
 | F-02 Pending PR queue with ordering | `skills/managing-board/references/review-queue.md`; `skills/managing-board/SKILL.md` |
 | F-03 Blocked sessions inspection | `skills/managing-board/references/daily-routine.md` (Step 2); session-id reachback via `~/.claude/projects/.../<sid>.jsonl` |
 | F-04 Today's dispatch recommendation | `skills/managing-board/references/daily-routine.md` (Steps 4–5) |
@@ -76,8 +76,8 @@ take is what the ADR is about.
 
 | Feature | Constraining ADR(s) |
 |---------|---------------------|
-| F-01 | ADR-0001, ADR-0012 (Kanban Protocol `read_board`); ADR-0005 (v1 GitHubProjectAdapter projection's read shape) |
-| F-02 | ADR-0012 (Kanban Protocol — the protocol fixes Card / PR Link semantics); ADR-0005 (v1 GitHub projection's PR-data shape) |
+| F-01 | ADR-0001, ADR-0025 (Kanban Protocol `read_board`); ADR-0005 (v1 GitHubProjectAdapter projection's read shape) |
+| F-02 | ADR-0025 (Kanban Protocol — the protocol fixes Card / PR Link semantics); ADR-0005 (v1 GitHub projection's PR-data shape) |
 | F-03 | ADR-0007 (C-PLUGIN-1 workaround (b) — session-id reachback) |
 | F-04 | ADR-0006 (matrix row 13 precondition); ADR-0007 (C-PLUGIN-3 — concurrency awareness) |
 | F-05 | ADR-0007 (C-PLUGIN-2 — health snapshot via preflight piggyback, not daemon) |
@@ -93,8 +93,8 @@ take is what the ADR is about.
 | F-15 | ADR-0006 (rows 8, 11) |
 | F-C0 | (no specific ADR — bootstrap-of-Consumer step) |
 | F-C1 | ADR-0002 (claim via push); ADR-0003 (worktree per Consumer) |
-| F-C2 | ADR-0001 (card body comes from the board substrate); ADR-0012 (Kanban Protocol `read_card`); ADR-0006 (row 5 precondition — Producer's Ready gate guarantees spec exists) |
-| F-C3 | ADR-0003 (worktree per Consumer); ADR-0012 (Kanban Protocol `transition_card` action); ADR-0005 (v1 GitHub projection's status-transition shape) |
+| F-C2 | ADR-0001 (card body comes from the board substrate); ADR-0025 (Kanban Protocol `read_card`); ADR-0006 (row 5 precondition — Producer's Ready gate guarantees spec exists) |
+| F-C3 | ADR-0003 (worktree per Consumer); ADR-0025 (Kanban Protocol `transition_card` action); ADR-0005 (v1 GitHub projection's status-transition shape) |
 | F-C4 | ADR-0004 (composition over reimpl); MULTI_AGENT_DEVELOPMENT.md (`max_depth=1`) |
 | F-C5 | (no specific ADR — TDD-skip is the default+override pattern) |
 | F-C6 | ADR-0006 (row 4 / row 8 analog — cross-card structural change) |
@@ -113,7 +113,7 @@ take is what the ADR is about.
 | F-B4 | ADR-0006 (row 4 — routing-block re-injection modifies SoT; auto-update path is A only when block_hash matches); ADR-0007 (lazy-on-read migration via preflight piggyback) |
 | 1.6.1 | (no specific ADR — INVEST is canonical, applied as gate) |
 | 1.6.2 | (no specific ADR — vertical slicing is canonical) |
-| 1.6.3 | ADR-0001 (card lives on the v1 GitHub Project v2 substrate); ADR-0012 (Kanban Protocol Card ontology); ADR-0005 (v1 GitHub projection's card-body shape) |
+| 1.6.3 | ADR-0001 (card lives on the v1 GitHub Project v2 substrate); ADR-0025 (Kanban Protocol Card ontology); ADR-0005 (v1 GitHub projection's card-body shape) |
 | 1.6.4 | (no specific ADR — size labels per P7 — taste captured per project, schema fixed) |
 | 1.7 I-1..I-13 | I-2 → ADR-0006 row 12; I-4 → ADR-0006 (whole matrix); I-5 → ADR-0007; I-6 → ADR-0006 row 9; I-7 → ADR-0003; I-8 → ADR-0006 §5; I-9 → ADR-0006 row 5 + ADR-0001; I-10 → ADR-0007; I-11 → ADR-0006 row 4 (plugin-vs-user split governance); I-12 → ADR-0007 (lazy-on-read migration); I-13 → ADR-0002 (claim marker force-commit-to-claim-branch contract) |
 | 1.8.1 | ADR-0004 (verification chain composes) |

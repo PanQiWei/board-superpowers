@@ -313,7 +313,7 @@ Story points were calibrated to sprint commitment ("how much can the team finish
 
 > If a software-development concept assumes implementation throughput is the bottleneck, AI-native R&D probably makes it degenerate. **Architect attention is the new bottleneck**; everything we kept and everything we built optimizes for that.
 
-Spec-level rationale: [`docs/architecture/0001-positioning.md`](./docs/architecture/0001-positioning.md) (premises P1, P2b, P3) and [`docs/architecture/adr/0012-kanban-protocol-as-top-contract.md`](./docs/architecture/adr/0012-kanban-protocol-as-top-contract.md) (the protocol-shape decision that lets the projection layer absorb backend native sub-issues without elevating them).
+Spec-level rationale: [`docs/architecture/0001-positioning.md`](./docs/architecture/0001-positioning.md) (premises P1, P2b, P3) and [`docs/architecture/adr/0025-kanban-protocol-as-top-contract.md`](./docs/architecture/adr/0025-kanban-protocol-as-top-contract.md) (the protocol-shape decision that lets the projection layer absorb backend native sub-issues without elevating them).
 
 ## Two design principles you should know about
 

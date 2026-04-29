@@ -41,7 +41,7 @@ expressed via a SKILL reference file, a plugin-shipped MCP server,
 a CLI wrapper, or any combination thereof. The agent speaks
 protocol; the projection translates to backend.
 
-ADR-0012 supersedes ADR-0005 § Decision and § Type definitions in
+ADR-0025 supersedes ADR-0005 § Decision and § Type definitions in
 that light: ADR-0005's contract surface is no longer "the contract
 every adapter must implement." It is now **the v1
 GitHubProjectAdapter implementation projection** — one specific
@@ -310,6 +310,91 @@ GitHub `<key-slug>` of `42` is `42`.
 
 ---
 
+## Multi-kanban semantics
+
+A single repo MAY bind multiple kanbans (e.g., one for primary
+feature work, one for compliance, one for ops). The protocol
+treats this as a first-class scenario; v1.0 ships single-kanban
+runtime support, with the schema reserved for v1.x runtime
+expansion.
+
+Detailed lifecycle states, schema, and migration semantics live
+in [ADR-0026](../adr/0026-multi-kanban-lifecycle-and-flat-card-hierarchy.md).
+This section is the protocol-level contract.
+
+### Identity is always the composite key `(kanban_id, Card.key)`
+
+Whether the repo has 1 kanban or N, internal Card identity is
+ALWAYS `(kanban_id, Card.key)`. Single-kanban repos are a
+degenerate case where every reference shares one `kanban_id`; the
+protocol does not gain a new shape under multi-kanban — only the
+identifying tuple gains mandatory disambiguation.
+
+### Disambiguation in user-facing references
+
+| Reference shape | Resolution rule |
+|-----------------|-----------------|
+| `[board-card:#42]` (no qualifier) | Resolves only when active kanban count = 1. With multi-kanban, the unqualified form is a hard error: *"multiple active kanbans; qualify as `[board-card:<kanban-id>:#42]`"*. |
+| `[board-card:legal:#42]` (qualified) | Routes to the named kanban regardless of count. |
+
+Single-kanban v1.0 repos behave identically to v0.4.x — the
+unqualified form continues to work because the disambiguation
+rule degenerates to the single available kanban.
+
+### Branch naming uniformity
+
+Per the abstracted form (above § Branch naming):
+
+```
+v0.5.0+ canonical:  claim/<kanban-id>-<key-slug>-<title-slug>
+v0.4.x legacy:      claim/<key-slug>-<title-slug>
+```
+
+Legacy v0.4.x branches remain valid via a parser fallback in
+operating-kanban; physical rename is NOT performed during
+migration. `migrating-repo-version` registers the legacy
+branches against the migrated repo's `primary` kanban via
+on-disk state, preserving the binding without rewriting git
+refs.
+
+### WIP semantics — per-actor cross-kanban total
+
+Default WIP cap is **per-actor, cross-kanban total**. Architect
+attention is a single budget that does not partition across
+kanbans; a Consumer holding 3 cards in `primary` and 2 cards in
+`legal` has WIP=5, not WIP=3 + WIP=2 separately.
+
+Optional override: `kanbans[].wip_limit_local: N` adds a
+per-kanban cap (the kanban-local count must not exceed BOTH the
+global cap AND the local cap).
+
+### Cross-kanban moves are forbidden
+
+A Card belongs to one kanban for its entire lifetime. There is
+no protocol-level operation that re-homes a Card to a different
+kanban. "Moving" a misfiled Card is two operations:
+
+1. Retire the Card on the source kanban (`transition_card → Done`
+   with a `reason: misfiled` note, OR delete via backend UI).
+2. Create a fresh Card on the destination kanban with the same
+   body content.
+
+Both operations are independently audited. Cross-kanban
+sequencing dependencies (`Card A depends on Card B` where they
+live on different kanbans) are protocol-allowed; the
+`depends-on` reference in B's identity must qualify with
+`<kanban-id>:` per the disambiguation rule above.
+
+### Compliance level applies per kanban
+
+Each kanban entry advertises its own `compliance: L0..L3` level
+(see [Compliance levels](#compliance-levels) below). Operations
+on a kanban are gated by THAT kanban's level; agents must check
+the active kanban's compliance before dispatching an action that
+requires a higher level than the kanban supports.
+
+---
+
 ## State machine
 
 The six canonical states + legal transitions are SPOT'd in
@@ -422,6 +507,82 @@ bottom marker pair (`<!-- board-superpowers:audit-trail -->` and
 `<!-- board-superpowers:creator-trace -->`) are protocol-level
 contract: every backend projection MUST preserve them. board-canon
 is the source of truth for their exact structure.
+
+---
+
+## Card hierarchy
+
+The Kanban Protocol's `Card` ontology is **flat**. Cards relate
+to each other through `depends-on` / `depended-on-by` (sequencing
+dependency, NOT containment). There is no parent-child
+relationship at protocol level.
+
+This is a deliberate decision grounded in **AI-native concept
+hygiene** — see
+[`../0001-positioning.md`](../0001-positioning.md)
+§ "AI-native concept hygiene" and ADR-0026 § "3. Card hierarchy"
+for the full rationale. In short: sub-issue / sub-task is a
+human-cadence agile artifact whose six historical purposes either
+die outright in AI-cadence software R&D or shift one level up
+into Thread / Milestone. Adopting parent-child at protocol level
+would buy nothing that Thread + sibling Cards + dependencies
+don't already provide, while costing protocol purity (parent
+Cards would be non-claimable, would violate the *one Card = one
+Consumer session = one PR* invariant, and would introduce a
+status-derivation rule that doesn't even agree across backends).
+
+### Display-only metadata fields
+
+When a backend has native sub-issue / sub-task / parent
+relationships (GitHub Sub-issue, Linear sub-issue, Jira
+Sub-task), the projection surfaces three **display-only** fields
+on the protocol-flat Card:
+
+```
+Card schema additions (display-only; agent-readable for context
+but NOT protocol-significant — transitions / claims / WIP do
+not consume these):
+
+  display_parent: <key>?                 # backend's parent Card.key
+  display_children_count: int?           # backend's child count
+  display_hierarchy_path: [<key>...]     # root-to-this Card path
+```
+
+These fields are **read-projected** from backend native nesting
+on each `read_card` / `read_board`. They are **never written by
+board-superpowers** to backend native sub-issue APIs.
+`decomposing-into-milestones` continues to emit siblings +
+dependencies; it never invokes backend native sub-issue creation.
+
+### Multi-tier backend hierarchy mapping
+
+Backends with multi-tier hierarchies map to board-superpowers'
+existing work hierarchy (per
+[`../0002-product-features-and-flows/01-work-hierarchy.md`](../0002-product-features-and-flows/01-work-hierarchy.md)):
+
+| Backend tier | board-superpowers concept |
+|--------------|---------------------------|
+| Initiative (Linear / Jira Premium) | **Thread** (named work mainline) |
+| Project (Linear) / Epic (Jira) | **Milestone** (deliverable bucket) |
+| Issue (GitHub / Linear / Jira) | **Card** (leaf work item) |
+| Sub-issue / Sub-task | **Card** (sibling) + `display_parent` metadata |
+
+The leaf-most level is always the claimable `Card`. Upper tiers
+are organizational context, surfaced through Thread / Milestone
+aggregation in `managing-board` routines.
+
+### What is explicitly NOT done
+
+- ❌ A `Card.parent` field at protocol level.
+- ❌ Auto-created `depends-on` edges from native hierarchy
+  (sequencing ≠ containment).
+- ❌ Parent status auto-derivation from children
+  (cross-backend semantics disagree).
+- ❌ A `Card.kind: feature | story | task` enum.
+- ❌ Markdown-body `## Parent` section convention.
+- ❌ `parent:#42` labels as protocol-level mechanism.
+
+Each is rejected for reasons in ADR-0026.
 
 ---
 
@@ -800,7 +961,7 @@ five read+write methods (`list_cards`, `get_card`,
 contract semantics (idempotency, partial-result tolerance, label
 lifecycle, etc.).
 
-After ADR-0012, ADR-0005 is **rescoped**:
+After ADR-0025, ADR-0005 is **rescoped**:
 
 - **Was**: "the contract every adapter must implement" (universal).
 - **Is now**: "the v1 GitHubProjectAdapter implementation
@@ -815,7 +976,7 @@ descriptions; Form C's REST response handling).
 
 ADR-0005's amended Status field reads: `accepted; § Consequences
 amended by ADR-0010; § Decision and § Type definitions amended by
-ADR-0012`.
+ADR-0025`.
 
 ---
 
@@ -913,12 +1074,12 @@ broken commitment.
 - ADR-0002 — Atomic claim via remote branch push; the git-layer
   primitive for `claim_card`.
 - ADR-0005 — v1 BoardAdapter contract surface; rescoped by
-  ADR-0012 to "v1 GitHubProjectAdapter implementation
+  ADR-0025 to "v1 GitHubProjectAdapter implementation
   projection."
 - ADR-0010 — AI-cadence convention + ADR-0005 Consequences
   re-anchor; affects this protocol via the falsification check
   on substrate pluggability.
-- ADR-0012 — Kanban Protocol as top-level contract (the ADR
+- ADR-0025 — Kanban Protocol as top-level contract (the ADR
   promoting this document to spec authority).
 - [`board-canon`](../../../skills/board-canon/SKILL.md) — schema
   rules SPOT (state machine details, Card body schema, branch

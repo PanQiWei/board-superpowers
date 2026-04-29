@@ -8,7 +8,7 @@
 > Promotes ADR-0006 §5 draft to canonical and resolves TBD-3, TBD-4,
 > TBD-5 from 0003 § 3.3.8.
 >
-> **Kanban Protocol layering (per ADR-0012).** Audit log emission
+> **Kanban Protocol layering (per ADR-0025).** Audit log emission
 > is a **board-superpowers plugin invariant**, NOT a Kanban Protocol
 > postcondition or compliance requirement. Every mutating skill
 > writes audit rows regardless of which backend projection is

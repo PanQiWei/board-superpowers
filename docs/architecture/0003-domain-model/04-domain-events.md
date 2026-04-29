@@ -18,7 +18,7 @@ on-disk transcripts (workaround b). Domain events here are the
 **logical** notion; the channels say how an observer actually
 notices.
 
-**Naming convention** (per ADR-0012 + the Kanban Protocol
+**Naming convention** (per ADR-0025 + the Kanban Protocol
 identity rules): payload field `card_key` is the protocol-
 level opaque identifier, the canonical name across all
 projections; `card_number` (where it still appears below)

@@ -6,7 +6,7 @@ ubiquitous language, with sharp boundaries on what belongs
 inside and what does not. Contexts talk to each other through
 **well-defined seams** — usually GitHub artifacts or the
 Kanban Protocol projection (the v1 GitHubProjectAdapter at
-ADR-0005, anchored by ADR-0012) — never through shared
+ADR-0005, anchored by ADR-0025) — never through shared
 in-memory state (C-PLUGIN-1).
 
 Why five and not three or seven: each context corresponds to a
@@ -17,7 +17,7 @@ would obscure which storage layer owns the data.
 
 | # | Context | Physical substrate | Owned aggregates |
 |---|---------|--------------------|-----------------|
-| 1 | Board | Kanban Protocol over a backend substrate (v1: GitHub Project v2 + Issues + git refs; future: Linear / Jira via their own projections per ADR-0012) | Card · PR |
+| 1 | Board | Kanban Protocol over a backend substrate (v1: GitHub Project v2 + Issues + git refs; future: Linear / Jira via their own projections per ADR-0025) | Card · PR |
 | 2 | Session | OS processes + filesystem worktrees | ProducerSession · ConsumerLogical |
 | 3 | Bootstrap | Plugin-managed YAML files (`manifest.yml`, `state.yml`) + user-owned `config.yml` | HostBootstrap · RepoBootstrap · RepoConfig |
 | 4 | Audit | BYO RDBMS (Postgres / MySQL / SQLite per ADR-0009) | AuditTrail |
@@ -27,7 +27,7 @@ The boundaries are drawn so that each context can in principle
 be **replaced by a different substrate** without touching the
 others — Board context already has a contract (the **Kanban
 Protocol** at `0005-contracts/00-kanban-protocol.md`, anchored
-by ADR-0012; v1 GitHubProjectAdapter at ADR-0005 is the first
+by ADR-0025; v1 GitHubProjectAdapter at ADR-0005 is the first
 projection of that protocol) that makes this concrete; Audit
 context's BYO-RDBMS choice has the same shape (Postgres OR
 MySQL OR SQLite per ADR-0009 OR future contributor target).
@@ -55,10 +55,10 @@ state (P4a) — this context owns that state's logical shape.
 
 **Physical substrate.** Accessed through the **Kanban
 Protocol** (`0005-contracts/00-kanban-protocol.md`, anchored
-by ADR-0012); the active backend projection translates
+by ADR-0025); the active backend projection translates
 protocol actions to the backend's native shape. Under v1's
 GitHubProjectAdapter projection (Form A: bash + `gh` CLI;
-ADR-0005 — now rescoped per ADR-0012 to "the v1
+ADR-0005 — now rescoped per ADR-0025 to "the v1
 GitHubProjectAdapter implementation projection") that
 resolves to GitHub Project v2 (the Status field + the
 project-item linkage), GitHub Issues (Card body + thread),

@@ -1,13 +1,13 @@
 # ADR 0002: Atomic claim via remote branch push
 
-**Status:** accepted; branch-naming convention generalized by ADR-0012
+**Status:** accepted; branch-naming convention generalized by ADR-0025
 **Date:** 2026-04-26
 **Deciders:** PanQiWei (maintainer)
 
 > **Reading note (2026-04-28).** This ADR's claim primitive (`git
-> push --force-with-lease=<ref>:`) is unchanged by ADR-0012; the
+> push --force-with-lease=<ref>:`) is unchanged by ADR-0025; the
 > claim is git-layer, board-agnostic, and the atomicity argument
-> still holds across GitHub / GitLab / Bitbucket. What ADR-0012
+> still holds across GitHub / GitLab / Bitbucket. What ADR-0025
 > generalized is the **branch-name format**: `claim/<N>-<slug>` →
 > `claim/<key-slug>-<title-slug>` where `<key-slug>` =
 > `slugify(Card.key)`. For GitHub Project v2, `Card.key` is the
@@ -52,7 +52,7 @@ The Consumer claim primitive is implemented as:
 git push --force-with-lease=<ref>: origin <ref>
 ```
 
-where `<ref>` is `claim/<key-slug>-<title-slug>` (per ADR-0012's
+where `<ref>` is `claim/<key-slug>-<title-slug>` (per ADR-0025's
 branch-naming abstraction; was `claim/<N>-<slug>` before
 2026-04-28). `<key-slug>` is `slugify(Card.key)` — for GitHub
 Project v2, `Card.key` is the issue number string and slugifies

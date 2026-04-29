@@ -105,7 +105,7 @@ at v1, grouped into 5 thematic clusters for readability.
   `gh project item-list` / `gh issue list` / `gh pr list`
   (direct GitHub API), wrapped per the v1
   GitHubProjectAdapter projection shape (ADR-0005, rescoped
-  by ADR-0012 from "universal adapter contract" to "v1 GitHub
+  by ADR-0025 from "universal adapter contract" to "v1 GitHub
   projection's bash implementation shape").
 - **Maps to (canonical)**: Anderson 2010 *Kanban*, ch. 4 — the
   minimal "visualize work" read surface.

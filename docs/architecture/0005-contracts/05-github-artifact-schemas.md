@@ -8,7 +8,7 @@
 > (`card-schema.md`, `pr-template.md`, `agentsmd-routing.md`), 0005
 > surfaces only the parsing contract and links.
 >
-> **Kanban Protocol scope (per ADR-0012).** This file is the v1
+> **Kanban Protocol scope (per ADR-0025).** This file is the v1
 > **GitHubProjectAdapter projection's** artifact contract — every
 > shape pinned here (Card body sections, ClaimMarker, PR sections,
 > routing markers, Project v2 Status enum, standard labels, branch
@@ -396,7 +396,7 @@ GitHub stores.
   is the canonical type **for this projection**; protocol-level
   six-state semantics live in
   [`00-kanban-protocol.md`](./00-kanban-protocol.md).
-- ADR-0012 — protocol-vs-projection layering.
+- ADR-0025 — protocol-vs-projection layering.
 
 ---
 
@@ -483,7 +483,7 @@ This branch is three things at once (per `board-canon/SKILL.md`
   naming convention" — protocol-level form.
 - `board-canon/SKILL.md` "Branch naming" — in-session SPOT.
 - ADR-0002 (atomicity-via-git-push).
-- ADR-0012 — protocol promotion + `<N>` → `<key-slug>` rename
+- ADR-0025 — protocol promotion + `<N>` → `<key-slug>` rename
   rationale.
 - §1.4.1 F-C1.
 - 0003 § 3.3.3 ConsumerLogical aggregate (ClaimBranch member
@@ -495,7 +495,7 @@ This branch is three things at once (per `board-canon/SKILL.md`
 
 - [`00-kanban-protocol.md`](./00-kanban-protocol.md) — top-level
   Kanban Protocol; this file is the v1 GitHubProjectAdapter
-  projection's artifact contract (per ADR-0012).
+  projection's artifact contract (per ADR-0025).
 - [`01-script-contracts.md`](./01-script-contracts.md) — the scripts
   that write these artifacts (`claim-card.sh`, `create-card.sh`,
   `transition-card.sh`, `bootstrap-project.sh`); they are the v1
@@ -511,7 +511,7 @@ This branch is three things at once (per `board-canon/SKILL.md`
 - ADR-0001 (substrate commitment), ADR-0002 (claim via branch
   push), ADR-0003 (worktree info-leak), ADR-0005 (v1
   GitHubProjectAdapter projection Status enum, scoped per
-  ADR-0012), ADR-0006 (PR contract gating), ADR-0012
+  ADR-0025), ADR-0006 (PR contract gating), ADR-0025
   (Kanban Protocol promotion).
 - §1.6 decomposition surface, §1.8 PR contract, I-9 / I-10 / I-11.
 - 0003 § 3.3.1 / 3.3.2 / 3.3.3 (Card / PR / ConsumerLogical

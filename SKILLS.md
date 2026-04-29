@@ -101,7 +101,7 @@ related rules and operations could co-exist in one skill." That
 would couple a backend-agnostic SPOT (which rarely changes) to a
 backend-specific SPOT (which changes per projection landing),
 forcing every projection landing to re-review the stable
-ontology. See ADR-0012 § Decision for the protocol-vs-SDK
+ontology. See ADR-0025 § Decision for the protocol-vs-SDK
 rationale that motivates the split.
 
 ## v1 minimum vs v1 complete

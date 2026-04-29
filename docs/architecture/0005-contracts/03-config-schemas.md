@@ -206,7 +206,7 @@ project: "OWNER/NUMBER"
 #   default_execution_skill: superpowers:subagent-driven-development
 ```
 
-> **Note (Kanban Protocol layering, per ADR-0012).** The top-level
+> **Note (Kanban Protocol layering, per ADR-0025).** The top-level
 > `project:` field is the v1 GitHubProjectAdapter projection's
 > shape — it carries a GitHub-specific `OWNER/NUMBER` string. v0.5.0
 > introduces a forward-looking `kanban:` block (see "v0.5.0 planned
@@ -275,7 +275,7 @@ beyond the initial `bootstrap-project.sh` write.
 
 > **Status:** forward-looking. Not yet shipped. The block lands in
 > `bootstrap-project.sh` once the `operating-kanban` atomic skill
-> ships in v0.5.0 (per ADR-0012 + [`00-kanban-protocol.md`](./00-kanban-protocol.md)).
+> ships in v0.5.0 (per ADR-0025 + [`00-kanban-protocol.md`](./00-kanban-protocol.md)).
 > Documented here so consuming code authored against v0.5.0 has a
 > single canonical schema reference; pre-v0.5.0 plugin builds MUST
 > ignore an unknown `kanban:` block silently rather than fail.
@@ -322,7 +322,7 @@ ADR.
 
 #### Multi-kanban open question (v1.x roadmap)
 
-The schema above assumes one kanban per repo. ADR-0012 § "Multi-
+The schema above assumes one kanban per repo. ADR-0025 § "Multi-
 kanban support is v1.x roadmap" notes that one repo MAY have
 multiple kanbans (e.g., a feature board + a security-issue board).
 Whether v0.5.0 ships `kanban:` (singular block) or `kanbans:` (list
@@ -342,7 +342,7 @@ in the consuming `operating-kanban` skill body.
 - I-11, I-13.
 - ADR-0005 — v1 GitHubProjectAdapter projection (round-trip
   stability of `project:` / `project_ref:` for the GitHub backend).
-- ADR-0012 + [`00-kanban-protocol.md`](./00-kanban-protocol.md) —
+- ADR-0025 + [`00-kanban-protocol.md`](./00-kanban-protocol.md) —
   Kanban Protocol top-level contract; rationale for the `kanban:`
   block's backend / project_ref / compliance shape.
 - 0003 § 3.3.7 RepoConfig aggregate — entity home.

@@ -87,19 +87,19 @@ ADR-0006 row 6). Source: ADR-0005 (Status type), `board-protocol`
 `03-aggregates-and-entities.md` § Card and
 `05-relationships.md`.
 
-**BoardAdapter** *(rescoped per ADR-0012)*. The five-method
+**BoardAdapter** *(rescoped per ADR-0025)*. The five-method
 surface (`list_cards`, `get_card`, `get_status_options`,
 `create_card`, `set_card_status` + `parse` / `serialize` for
 `ProjectRef`) defining **the v1 GitHubProjectAdapter
 implementation projection** (Form A: bash + `gh` CLI). Was
 originally framed as "the contract every adapter must
-implement"; ADR-0012 rescopes it to one specific
+implement"; ADR-0025 rescopes it to one specific
 realization of the Kanban Protocol on the GitHub Project v2
 backend. Other backends realize the same protocol via their
 own projections (Form B MCP server, Form C REST/GraphQL),
 which are NOT bound to ADR-0005's signature. See
 **Kanban Protocol** for the universal contract. Source:
-ADR-0005 (rescoped); ADR-0012; `0005-contracts/00-kanban-
+ADR-0005 (rescoped); ADR-0025; `0005-contracts/00-kanban-
 protocol.md`. Expanded in: `02-bounded-contexts.md` (Board
 context boundary) and `06-context-map.md` § 3.6.3 (the
 Anti-Corruption Layer = Kanban Protocol projection seam).
@@ -107,7 +107,7 @@ Anti-Corruption Layer = Kanban Protocol projection seam).
 **Board context.** The bounded context owning Card / Status /
 Project / Label / ClaimMarker (logical layer). Talks to every
 other context via the Kanban Protocol projection (the v1
-GitHubProjectAdapter at ADR-0005, anchored by ADR-0012) or
+GitHubProjectAdapter at ADR-0005, anchored by ADR-0025) or
 via backend artifacts directly. Source: this directory.
 Expanded in: `02-bounded-contexts.md`.
 
@@ -164,7 +164,7 @@ Backend-specific shapes:
 Under v1 the `Card.key` value backs `CardNumber` (the GitHub-
 shape integer); the protocol-layer abstraction is the
 opaque-string shape. VO of the Card aggregate. Source:
-`0005-contracts/00-kanban-protocol.md` § Identity, ADR-0012.
+`0005-contracts/00-kanban-protocol.md` § Identity, ADR-0025.
 
 **CardNumber.** The integer identifier `N` GitHub assigns to
 the Issue at creation. Backs `Card.key` under the v1
@@ -339,7 +339,7 @@ Specifically NOT inheriting Sprint or velocity tracking
 
 **Kanban Protocol.** The top-level semantic / mental-model
 contract every board-superpowers skill reasons in
-(`0005-contracts/00-kanban-protocol.md`, anchored by ADR-0012).
+(`0005-contracts/00-kanban-protocol.md`, anchored by ADR-0025).
 NOT an SDK — eight named action contracts (`read_board`,
 `read_card`, `create_card`, `transition_card`, `claim_card`,
 `release_claim`, `link_pr_to_card`, `comment_on_card`), six
@@ -352,7 +352,7 @@ Claim / PR Link / Label / Comment), identity rules
 backend exposes the protocol via a **projection** (Form A bash
 CLI / Form B plugin-shipped MCP server / Form C REST/GraphQL);
 the v1 GitHubProjectAdapter is one Form A projection. Source:
-`0005-contracts/00-kanban-protocol.md`, ADR-0012. Expanded in:
+`0005-contracts/00-kanban-protocol.md`, ADR-0025. Expanded in:
 `02-bounded-contexts.md` (Board context), `06-context-map.md`
 § 3.6.3 (projection-as-ACL).
 
@@ -362,14 +362,14 @@ Anti-Corruption Layer between board-superpowers' canonical
 vocabulary and one backend's native API. Three recognized
 forms at v1: Form A (bash CLI; v1 GitHubProjectAdapter),
 Form B (plugin-shipped MCP server; future Linear / Jira),
-Form C (REST/GraphQL wrapper; reserved). Per ADR-0012, the
+Form C (REST/GraphQL wrapper; reserved). Per ADR-0025, the
 projection MUST surface the protocol's full ontology and
 action contracts at its declared compliance level; it MUST
 fold backend-native richness (Linear cycles, Jira custom
 workflows, GitHub draft items) into protocol terms — never
 leaking it to the agent. Source:
 `0005-contracts/00-kanban-protocol.md` § Implementation
-surface, ADR-0012. Expanded in: `06-context-map.md` § 3.6.3.
+surface, ADR-0025. Expanded in: `06-context-map.md` § 3.6.3.
 
 ### L
 
@@ -488,22 +488,22 @@ active per project at v1 (informal cardinality). Source:
 
 **Project.** A single repo / single board scope (§1.1). At
 v1 one-to-one with one Kanban Protocol board (per ADR-0001 +
-ADR-0012); the v1 GitHubProjectAdapter projection materializes
+ADR-0025); the v1 GitHubProjectAdapter projection materializes
 this as a GitHub Project v2 instance identified by
 `OWNER/NUMBER`. **Multi-kanban support** (one repo : N boards)
-is a v1.x roadmap item flagged in ADR-0012; if it lands the
+is a v1.x roadmap item flagged in ADR-0025; if it lands the
 Project aggregate's cardinality with RepoState / RepoConfig
 becomes 1:N. Source: §1.1, ADR-0001, ADR-0005 (rescoped by
-ADR-0012), ADR-0012.
+ADR-0025), ADR-0025.
 
 **ProjectRef.** Projection-internal handle parsed from a
 user-facing identifier. `OWNER/NUMBER` under the v1
 GitHubProjectAdapter projection (per ADR-0005 type
-definitions, now rescoped by ADR-0012); `WORKSPACE/TEAM` for
+definitions, now rescoped by ADR-0025); `WORKSPACE/TEAM` for
 the hypothetical Linear projection; per-backend rule for
 others. Round-trip stable
 (`serialize(parse(s).value) == s`) is a per-projection
-contract. Source: ADR-0005 (rescoped); ADR-0012;
+contract. Source: ADR-0005 (rescoped); ADR-0025;
 `0005-contracts/00-kanban-protocol.md` § Implementation
 surface.
 
@@ -621,7 +621,7 @@ the Kanban Protocol branch-naming convention
 Lowercase, alphanumeric + hyphens. GitHub: `42 → 42`; Linear:
 `ENG-42 → eng-42`; Jira: `PROJ-42 → proj-42`. VO of the
 ConsumerLogical aggregate. Source:
-`0005-contracts/00-kanban-protocol.md` § Identity, ADR-0012.
+`0005-contracts/00-kanban-protocol.md` § Identity, ADR-0025.
 
 **Spec context.** The bounded context owning the spec / plan
 / design artifacts referenced from a Card body via
@@ -655,9 +655,9 @@ ADR-0005 (v1 projection), `0005-contracts/00-kanban-protocol.md`
 existing board as truth source and refuses to own state
 itself. Architectural form is the **Kanban Protocol** + per-
 backend projection (`0005-contracts/00-kanban-protocol.md`,
-ADR-0012); the v1 GitHubProjectAdapter (ADR-0005, now rescoped)
+ADR-0025); the v1 GitHubProjectAdapter (ADR-0005, now rescoped)
 is the first projection to ship. Source: `0001-positioning.md`
-P2a, ADR-0001, ADR-0012.
+P2a, ADR-0001, ADR-0025.
 
 **superpowers.** External plugin providing TDD /
 subagent-driven-development / executing-plans / writing-skills /

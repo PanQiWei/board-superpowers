@@ -7,7 +7,7 @@
 >
 > Rationale lives in the cited ADR / feature spec. Shape lives here.
 >
-> **Kanban Protocol layering (per ADR-0012).** The board-mutating
+> **Kanban Protocol layering (per ADR-0025).** The board-mutating
 > scripts here (`bootstrap-project.sh`, `claim-card.sh`,
 > `transition-card.sh`, `create-card.sh`) are the v1
 > **GitHubProjectAdapter projection's** Form A (bash CLI)
@@ -447,7 +447,7 @@ injection vector (H1/L3) is closed.
   [`00-kanban-protocol.md`](./00-kanban-protocol.md)).
 - ADR-0006 (every transition is an audit-logged action; rows 5/6/7
   governance).
-- ADR-0012 — this script is part of the v1 GitHubProjectAdapter
+- ADR-0025 — this script is part of the v1 GitHubProjectAdapter
   projection (Form A bash CLI).
 
 ---

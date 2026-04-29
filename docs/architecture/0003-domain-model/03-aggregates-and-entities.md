@@ -559,7 +559,7 @@ the supported mutation path (versus plugin-rewrite).
   own `parse` / `serialize` rules. Roundtrip-stable per
   ADR-0005's type definitions (now rescoped to "the v1
   GitHubProjectAdapter implementation projection" by
-  ADR-0012). Stored under the
+  ADR-0025). Stored under the
   `<repo>/.board-superpowers/config.yml § kanban:` block per
   `0005-contracts/03-config-schemas.md`.
 - **WipLimit** — positive integer; default `5`. Bound to the
@@ -737,7 +737,7 @@ Detailed diagrams in `05-relationships.md`.
 | **ProducerSession** ↔ **Project** | At most 1 active ProducerSession per Project (informal; §1.3.1) |
 | **ProducerSession** ↔ **PreflightSnapshot** | 1 ↔ 0..N over time, exactly 1 alive at any given prompt boundary |
 | **HostManifest** ↔ machine | 1 ↔ 1 |
-| **RepoState** ↔ Project | 1 ↔ 1 (multi-kanban — 1 repo : N boards — is a v1.x roadmap item per ADR-0012; if it lands, RepoState gains a per-board sub-key but the aggregate boundary stays). |
+| **RepoState** ↔ Project | 1 ↔ 1 (multi-kanban — 1 repo : N boards — is a v1.x roadmap item per ADR-0025; if it lands, RepoState gains a per-board sub-key but the aggregate boundary stays). |
 | **RepoConfig** ↔ Project | 1 ↔ 1 (same multi-kanban caveat). |
 | **AuditTrail** ↔ AuditEntry | 1 ↔ 0..N (append-only) |
 | **AuditTrail** ↔ Project | 1 ↔ 1 (or 1 ↔ N globally — precise scoping TBD-5) |

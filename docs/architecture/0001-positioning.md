@@ -78,10 +78,10 @@ This commitment has two reinforcing layers:
 *Honest scope of "present commitment" (2026-04-28 reframe):* the
 **Kanban Protocol** is committed in writing today
 ([`0005-contracts/00-kanban-protocol.md`](./0005-contracts/00-kanban-protocol.md),
-ADR-0012 accepted) at agent-readable + second-projection-
+ADR-0025 accepted) at agent-readable + second-projection-
 implementable detail. v1.0 ships **one projection** —
 GitHubProjectAdapter (Form A: bash + `gh` CLI) — whose shape is
-documented in ADR-0005 (rescoped by ADR-0012 to "the v1
+documented in ADR-0005 (rescoped by ADR-0025 to "the v1
 GitHubProjectAdapter implementation projection," not "the
 universal contract"). The current `gh`-bound scripts
 (`claim-card.sh`, `create-card.sh`, `transition-card.sh`) ARE
@@ -320,6 +320,67 @@ being entertained.
   plugins" extending routines is permanently out — versioning debt
   + chicken-and-egg costs do not fit the side-project framing.
 
+## AI-native concept hygiene
+
+Most agile process artifacts assume a fixed implementation
+throughput — roughly: human-developer-days. When that assumption
+holds, time-boxing (sprint), per-day decomposition (sub-task /
+sub-issue), and scale-aware estimation (story points) all earn
+their keep. In AI-orchestrated software R&D, implementation
+throughput moves 10×–100× (per ADR-0010's AI-cadence convention)
+while architect attention does not (per P1 + P3). The agile
+process surface that humans built around the implementation
+bottleneck loses its load-bearing purpose, and quietly becomes
+ceremony.
+
+board-superpowers walked through this surface concept by concept.
+Each removed or transformed artifact was tested against one
+question: *what does this do that something else doesn't already
+do better in an AI-cadence world?*
+
+| Removed concept | Human-cadence purpose | AI-native replacement |
+|-----------------|----------------------|----------------------|
+| **Sprint** | Time-boxed batch + retro + demo unit | Continuous flow + per-PR demo (Human Verification TODO) + Retro from PR Notes (signal aggregation, not ceremony) |
+| **Sub-issue / sub-task** | Decompose Story into person-day chunks for sprint; multi-human coordination point; stakeholder visibility; estimation aggregation; sprint-internal sequencing; mental chunking | INVEST sibling slicing + `depends-on` (decomposition); atomic claim primitive at git-push layer (coordination); Thread / Milestone (visibility, chunking); XS/S/M/L sizing (estimation); continuous flow (sequencing) |
+| **Story points** | Scale-aware sprint estimation | XS/S/M/L only — coarse enough to be quick, granular enough to flag *too big, slice further* |
+| **Burndown chart** | Visualize sprint progress | WIP + Done count read directly by Daily routine |
+| **Stand-up meeting** | Sync across humans | Agents don't need sync; architect already reads PRs |
+| **Epic** | Multi-sprint feature container | Replaced by Thread (theme grouping) or Milestone (deliverable bucket); same role, no multi-sprint container assumption |
+
+The pattern in one sentence:
+
+> If a software-development concept assumes implementation
+> throughput is the bottleneck, AI-native R&D probably makes it
+> degenerate. **Architect attention is the new bottleneck**;
+> everything board-superpowers kept and everything it built
+> optimizes for that.
+
+These are not oversights. Each was evaluated and rejected
+because its load-bearing purpose evaporates when implementation
+throughput scales 100× while architect attention does not.
+
+**Falsification test for new concept additions.** When a future
+contributor proposes adding feature X (e.g., "let's add story
+points back," "let's add sub-tasks under cards," "let's add a
+sprint-like cycle"), the test is: *can X carry load that
+existing AI-native mechanisms (continuous flow + INVEST siblings
++ Thread / Milestone + atomic claim + XS/S/M/L) cannot? If not,
+X is degenerate by the same reasoning that removed sprint.*
+Adding such a feature requires an ADR documenting which AI-
+native mechanism is insufficient and why.
+
+**Companion artifacts:**
+
+- [`../README.md`](../../README.md) § "Why there's no sprint, no
+  sub-issue, no story points" — community-facing version of this
+  argument. Same content, less spec jargon.
+- [`adr/0026-multi-kanban-lifecycle-and-flat-card-hierarchy.md`](./adr/0026-multi-kanban-lifecycle-and-flat-card-hierarchy.md)
+  § "3. Card hierarchy" — the protocol-level decision (Card
+  stays flat) that this concept-hygiene argument anchors.
+- [`0005-contracts/00-kanban-protocol.md`](./0005-contracts/00-kanban-protocol.md)
+  § "Card hierarchy" — protocol semantic-level encoding of the
+  flat-Card decision and display-only metadata fields.
+
 ## Glossary
 
 Terms used throughout this doc and downstream architecture docs.
@@ -338,13 +399,13 @@ back here when a phrase confuses them.
   `claim/<key-slug>-<title-slug>`), eight action contracts,
   compliance levels, and three implementation projection forms
   (bash CLI, plugin-shipped MCP server, REST). Lives in
-  `0005-contracts/00-kanban-protocol.md`. ADR-0012 promotes this
+  `0005-contracts/00-kanban-protocol.md`. ADR-0025 promotes this
   protocol to spec authority.
 - **Backend projection.** A concrete realization of the Kanban
   Protocol on one backend through one transport. v1 ships one
   projection: **GitHubProjectAdapter** (Form A — bash + `gh` CLI),
   whose implementation shape is documented in ADR-0005 (rescoped
-  to projection-only by ADR-0012, not the universal contract).
+  to projection-only by ADR-0025, not the universal contract).
   v1.x roadmap: Linear / Jira projections, expected to be Form B
   (plugin-shipped MCP server wrapping the official Linear /
   Atlassian Remote MCP server).
@@ -358,7 +419,7 @@ back here when a phrase confuses them.
 - **Claim primitive.** The atomic operation that gives a Consumer
   Session exclusive ownership of a Card. Today: `git push
   --force-with-lease=<ref>:` of a `claim/<key-slug>-<title-slug>`
-  branch (per ADR-0012's branch-naming abstraction; for GitHub
+  branch (per ADR-0025's branch-naming abstraction; for GitHub
   `<key-slug>` slugifies to the issue number, so existing
   `claim/<N>-<slug>` branches remain valid). This is **git-layer**,
   not board-layer — git platform (GitHub/GitLab/Bitbucket)
@@ -408,7 +469,7 @@ the prior era — but enforced by code, not by ceremony. 100
 architects across an org speak the same agile dialect; retros
 aggregate cross-team patterns; hiring conversation includes "we
 work in board-superpowers." The Kanban Protocol
-(`0005-contracts/00-kanban-protocol.md`, ADR-0012) is what makes
+(`0005-contracts/00-kanban-protocol.md`, ADR-0025) is what makes
 this reachable for non-GitHub teams — agents speak protocol;
 per-backend projections (the GitHubProjectAdapter projection
 ships at v1.0; Linear / Jira projections in v1.x) realize it on

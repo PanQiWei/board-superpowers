@@ -52,7 +52,7 @@ This file pins both as tables. Anything more elaborate belongs in
 | Manager daily/intake/review/retro routines | skill (`managing-board`) | one reference per routine | Model-driven workflows reading the board via `gh` and recommending action. |
 | Consumer implementation lifecycle | skill (`consuming-card`) | superpowers/gstack skill chain | Delegates the actual work via skill invocation; the body is glue + protocol enforcement. |
 | Shared state machine + card schema | skill (`board-canon`) | — | Loaded into every Manager and Consumer session as common context. No execution — pure shared contract. The schema's protocol-level semantics live in [`0005-contracts/00-kanban-protocol.md`](./0005-contracts/00-kanban-protocol.md); this skill is the in-session SPOT that surfaces them to agents. |
-| Kanban backend dispatch (action invocation per active projection) | skill (`operating-kanban`, ships v0.5.0) | per-backend reference files (`references/<backend>.md`) | Atomic SPOT for "given the active `kanban.backend`, how does the agent perform action X". v1 (pre-v0.5.0) lacks this skill — every Producer / Consumer skill inlines GitHub-specific `gh` invocations directly against the v1 GitHubProjectAdapter projection (per ADR-0012). |
+| Kanban backend dispatch (action invocation per active projection) | skill (`operating-kanban`, ships v0.5.0) | per-backend reference files (`references/<backend>.md`) | Atomic SPOT for "given the active `kanban.backend`, how does the agent perform action X". v1 (pre-v0.5.0) lacks this skill — every Producer / Consumer skill inlines GitHub-specific `gh` invocations directly against the v1 GitHubProjectAdapter projection (per ADR-0025). |
 | Audit-log writes (per ADR-0006) | script (TBD; wraps `psql` / `mysql`) | called from Manager and Consumer skills | RDBMS connection + transaction handling needs a script wrapper. Skills cannot hold a DB session. |
 | Routing-block injection into `CLAUDE.md` / `AGENTS.md` | script (`bootstrap-project.sh`) | — | Filesystem mutation with idempotency + marker-pair check — script semantics. |
 | Host-local `state.yml` read/update | helper in `scripts/lib/common.sh` | called from any script that needs it | Shared helper across scripts; not a top-level capability. Path resolution per 0005-contracts/07. |
@@ -194,7 +194,7 @@ a daemon by another name and violate ADR-0007 C-PLUGIN-2.
   projection. Generalized to "skill reads via the active
   projection's transport, writes via the same transport" once
   `operating-kanban` ships.
-- **ADR-0012** — Kanban Protocol promotion. Rescopes ADR-0005
+- **ADR-0025** — Kanban Protocol promotion. Rescopes ADR-0005
   from "universal BoardAdapter contract" to "v1
   GitHubProjectAdapter projection"; introduces backend
   projection forms (Form A bash CLI / Form B plugin-shipped MCP

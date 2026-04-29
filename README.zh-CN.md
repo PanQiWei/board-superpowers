@@ -313,7 +313,7 @@ Story points 当年校准的是 sprint 承诺（"两周内团队能干完多少"
 
 > 如果某个研发概念假设了"实施是瓶颈"，到了 AI-native 研发场景它八成会退化为冗余。**架构师注意力才是新的瓶颈**；我们保留下来的、新建出来的所有东西，都在为这一点优化。
 
-Spec 层级的论证：[`docs/architecture/0001-positioning.md`](./docs/architecture/0001-positioning.md)（premise P1 / P2b / P3）和 [`docs/architecture/adr/0012-kanban-protocol-as-top-contract.md`](./docs/architecture/adr/0012-kanban-protocol-as-top-contract.md)（让 projection 层能容纳 backend 原生 sub-issue 而不把它们升格的 protocol-shape 决策）。
+Spec 层级的论证：[`docs/architecture/0001-positioning.md`](./docs/architecture/0001-positioning.md)（premise P1 / P2b / P3）和 [`docs/architecture/adr/0025-kanban-protocol-as-top-contract.md`](./docs/architecture/adr/0025-kanban-protocol-as-top-contract.md)（让 projection 层能容纳 backend 原生 sub-issue 而不把它们升格的 protocol-shape 决策）。
 
 ## 你应该知道的两条设计原则
 
