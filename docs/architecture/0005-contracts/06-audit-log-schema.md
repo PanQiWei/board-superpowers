@@ -7,6 +7,18 @@
 >
 > Promotes ADR-0006 §5 draft to canonical and resolves TBD-3, TBD-4,
 > TBD-5 from 0003 § 3.3.8.
+>
+> **Kanban Protocol layering (per ADR-0025).** Audit log emission
+> is a **board-superpowers plugin invariant**, NOT a Kanban Protocol
+> postcondition or compliance requirement. Every mutating skill
+> writes audit rows regardless of which backend projection is
+> active; the schema below applies cross-backend. The `project`
+> column's content is backend-shaped (see column note); column
+> name / width / required-ness are protocol-stable. Per
+> [`00-kanban-protocol.md`](./00-kanban-protocol.md) "the Kanban
+> Protocol is NOT a test contract / compliance gate" — audit log is
+> board-superpowers' own observability surface, layered on top of
+> the protocol.
 
 ---
 
@@ -18,7 +30,7 @@ no UPDATE / DELETE supported in the contract.
 | Column | Type (Postgres) | Type (MySQL equiv) | Required? | Notes |
 |--------|-----------------|--------------------|-----------|-------|
 | `timestamp` | `TIMESTAMPTZ` | `DATETIME(3)` | yes | Wall-clock time the entry was written. Always UTC. |
-| `project` | `TEXT` | `VARCHAR(255)` | yes | `OWNER/NUMBER` string identifying the GitHub Project (round-trip stable per ADR-0005). |
+| `project` | `TEXT` | `VARCHAR(255)` | yes | Backend-shaped opaque project identifier — for the v1 GitHubProjectAdapter projection it is the `OWNER/NUMBER` GitHub Project string (round-trip stable per ADR-0005's projection). Future backends write whatever their `project_ref` shape is per the active `kanban.backend` (see [`03-config-schemas.md`](./03-config-schemas.md) `kanban:` block). The column name and width are protocol-stable; the field's content is projection-specific. |
 | `session_id` | `TEXT` | `VARCHAR(64)` | yes | The originating CC or Codex session id (UUID-shaped at v1). |
 | `actor_role` | `TEXT` (CHECK in `('producer','consumer')`) | `ENUM('producer','consumer')` | yes | Lowercase per §1.4 cross-cutting note + 0003 § 3.3.8. |
 | `action_id` | `SMALLINT` | `SMALLINT` | yes | Matrix row id; see "action_id catalog" below. |
@@ -882,9 +894,14 @@ until restored. Approve dispatch of Card #42?"
 
 ## Cross-references
 
+- [`00-kanban-protocol.md`](./00-kanban-protocol.md) — top-level
+  Kanban Protocol; audit log emission is a plugin invariant
+  layered on top of the protocol, not a protocol postcondition.
 - [`03-config-schemas.md`](./03-config-schemas.md) —
   `~/.board-superpowers/credentials.yml` schema; env-vs-file
-  resolution priority for `audit_db_url`.
+  resolution priority for `audit_db_url`. Also: the v0.5.0
+  `kanban:` block's `project_ref` shape is what populates this
+  audit log's `project` column on a per-backend basis.
 - [`08-environment-variables.md`](./08-environment-variables.md) —
   `BOARD_SP_AUDIT_DB_URL` definition.
 - [`07-path-conventions.md`](./07-path-conventions.md) —

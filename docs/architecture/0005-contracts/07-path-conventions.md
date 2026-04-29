@@ -74,9 +74,14 @@ resolves to:
 <WORKTREE_DIR>/<BRANCH>
 ```
 
-Where `<BRANCH>` is the claim branch name `claim/<N>-<slug>` (per
+Where `<BRANCH>` is the claim branch name. Protocol-level form is
+`claim/<key-slug>-<title-slug>` (per
+[`00-kanban-protocol.md`](./00-kanban-protocol.md) § "Branch naming
+convention"). The v1 GitHubProjectAdapter projection preserves the
+`claim/<N>-<slug>` byte form (`<key-slug>` of an integer GitHub
+Issue number is the integer rendered as decimal). Per
 [`05-github-artifact-schemas.md`](./05-github-artifact-schemas.md)
-"Claim branch naming"). Example, using priority 3:
+"Branch naming". Example, using priority 3:
 
 ```
 $HOME/.config/superpowers/worktrees/board-superpowers/claim/15-fix-claim-card-force-add
@@ -258,7 +263,7 @@ state.
 | `<repo>/.board-superpowers/config.yml` | **yes** | RepoConfig | User-editable team-shared project config (per [`03-config-schemas.md`](./03-config-schemas.md) § "config.yml") |
 | `<repo>/.board-superpowers/config.local.yml` | **no** (gitignored via `*.local.*` pattern) | RepoConfig (per-user layer) | Per-user override of team-shared config — `wip_limit`, `autonomy_overrides`, etc. (per [`03-config-schemas.md`](./03-config-schemas.md) § "config.local.yml") |
 | `<repo>/.board-superpowers/claims/` | **no** (gitignored locally) | ConsumerLogical | Per-session claim markers; force-committed to claim branch only |
-| `<repo>/.board-superpowers/claims/<N>.claim` | gitignored locally; **force-added on the claim branch** | ConsumerLogical | One marker per claimed card; YAML payload per [`05-github-artifact-schemas.md`](./05-github-artifact-schemas.md) |
+| `<repo>/.board-superpowers/claims/<key>.claim` | gitignored locally; **force-added on the claim branch** | ConsumerLogical | One marker per claimed card; `<key>` = `Card.key` per [`00-kanban-protocol.md`](./00-kanban-protocol.md) (v1 GitHub form: the Issue number); YAML payload per [`05-github-artifact-schemas.md`](./05-github-artifact-schemas.md) |
 | `<repo>/.board-superpowers/pyproject.toml` | **yes** (plugin-managed) | RepoConfig | Copied by `bootstrap-project.sh` F-B2 sub-cap 6 from plugin template; declares per-repo Python venv deps (`pyyaml + pymysql`). Committed for reproducibility — each repo pins its own deps version |
 | `<repo>/.board-superpowers/uv.lock` | **yes** (plugin-managed) | RepoConfig | uv lockfile; committed alongside `pyproject.toml` for reproducible `uv sync` runs. Updated by `bootstrap-project.sh` on re-run if the plugin ships a newer lockfile |
 | `<repo>/.board-superpowers/.venv/` | **no** (gitignored; uv-managed) | AuditTrail | Per-repo Python venv created by `uv sync` during F-B2 sub-cap 6. Recreated automatically by `bsp_ensure_venv` if absent or corrupt |
@@ -530,6 +535,9 @@ project. Out-of-scope per P3.
 
 ## Cross-references
 
+- [`00-kanban-protocol.md`](./00-kanban-protocol.md) — top-level
+  Kanban Protocol; the claim-marker path uses `Card.key` per the
+  protocol's identity rule.
 - [`01-script-contracts.md`](./01-script-contracts.md) — every
   script that writes one of these paths (`bootstrap-project.sh`
   for `.gitignore` + `<repo>/.board-superpowers/`; `claim-card.sh`

@@ -259,6 +259,62 @@ None — card body is complete.
 - **不做方法论扩展集市。** 第三方"纪律 plugin"扩展 routine 永久排除——稳定 plugin 契约的版本债太重，鸡生蛋蛋生鸡的生态风险真实存在，都不符合本项目的定位。
 - **v1 不做跨团队 / fleet 视图。** 那是明确的 10x 路径（见下面 Vision），不是 v1。
 
+## 为什么没有 sprint，没有 sub-issue，也没有 story point
+
+绝大多数敏捷流程构件都默认了一个固定的实施吞吐量——大致就是人类开发者按天/周计的产出节奏。这条假设成立时，时间盒（sprint）、按人日切割任务（sub-task / sub-issue）、基于规模的估算（story points）才各司其职。
+
+在 AI 编排的软件研发场景下，实施吞吐量提升 10 至 100 倍，**架构师的注意力却没有**。围绕"实施是瓶颈"建起来的那一整层敏捷流程表面就失去了承重作用，悄然变成仪式。
+
+board-superpowers 把这一层概念逐一过了一遍。每一个被移除的构件都用同一把尺子量过：*它做的事，AI cadence 下别的机制是不是已经做得更好？*
+
+### Sprint——已移除
+
+时间盒假设吞吐量恒定：你 commit 一批工作、在边界做 demo。当卡片以小时为单位落地、而不是以天，commit-batch-demo-retro 这个循环就没什么可装进时间盒了。替代方案：
+
+- **持续流（continuous flow）**——卡片好了就 land。
+- **逐 PR demo**——每个 PR 都带 Human Verification TODO；架构师亲自验证就完成了 demo。
+- **从 PR Notes 里聚合 retro**——这是信号汇集，不是仪式。
+
+### Sub-issue / sub-task——退化为冗余
+
+Sub-issue 在人类节奏的敏捷里承担过六项职能：
+
+1. 把 feature 切到人日级别（拆解）。
+2. 跨多人协调工作（协调）。
+3. 给利益相关者展示 feature 级进度（可见性）。
+4. 把任务级估算汇总到 feature 级（估算累加）。
+5. 在 sprint 内排序 sub-task（排序）。
+6. 帮人脑导航复杂工作（心智分块）。
+
+到了 AI cadence 软件研发，四项直接消亡：
+
+- **（1）拆解**——被 **INVEST 兄弟切片** 加 `depends-on` 依赖边替代。卡片本身已经压到小时级，下面再没有还有意义的 atomic 单位可切。
+- **（2）协调**——被 **原子 claim 原语** 替代。N 个 Consumer 会话在 git push 层抢同一个 ref，谁赢谁拥有这张卡，没有 parent 当协调点的位置。
+- **（4）估算累加**——XS/S/M/L 四档加上"绝对量级在小时"后，把任务级数字加起来给 feature 级再无意义。
+- **（5）sprint 内排序**——sprint 没了，自然不存在。
+
+剩下两项——**（3）利益相关者可见性** 和 **（6）心智分块**——粒度上移一层。架构师不再"feature vs sub-task"地想问题，转而以 **Thread**（命名工作主线）和 **Milestone**（可交付目标桶）为单位推理。这两个概念本来就在 board-superpowers 的工作层级里。
+
+结论：parent card 下挂 N 张 sub-card 这种结构，能提供的东西 Thread + 兄弟 Card + 依赖边都已经覆盖；代价却是污染协议纯净度。Parent card 不可被 claim、违反"一卡 = 一个 Consumer 会话 = 一个 PR"不变量、还要引入跨 backend 各家不一的 parent 状态推导规则（GitHub / Linear / Jira 各自对"parent 是否随 child 自动更新"的判定都不同）。
+
+我们尊重用户已经在 GitHub / Linear / Jira 上创建过的 native sub-issue——它们以仅供展示的 metadata 形态附在协议层扁平的 Card 上。但不把它们升格为协议语义。
+
+### Story points——已移除
+
+Story points 当年校准的是 sprint 承诺（"两周内团队能干完多少"）。Sprint 没了、卡片在小时级了，校准的标尺也没了。我们用 **XS / S / M / L** 做粗粒度 sizing——粗到下手快，又细到能在卡片*太大、该再切*时报警。
+
+### Burndown chart、stand-up、Epic——也消亡或转生
+
+- **Burndown chart** 可视化的是 sprint 进度；没有 sprint，每日例行直接读 WIP + Done 计数即可。
+- **Stand-up** 是人类团队同步；agent 不需要同步，架构师本来就在读 PR。
+- **Epic** 被 **Thread**（主题分组）或 **Milestone**（可交付桶）替代——同样的角色、更贴近敏捷正统的命名、没有多 sprint 容器的预设。
+
+### 用一句话讲完
+
+> 如果某个研发概念假设了"实施是瓶颈"，到了 AI-native 研发场景它八成会退化为冗余。**架构师注意力才是新的瓶颈**；我们保留下来的、新建出来的所有东西，都在为这一点优化。
+
+Spec 层级的论证：[`docs/architecture/0001-positioning.md`](./docs/architecture/0001-positioning.md)（premise P1 / P2b / P3）和 [`docs/architecture/adr/0025-kanban-protocol-as-top-contract.md`](./docs/architecture/adr/0025-kanban-protocol-as-top-contract.md)（让 projection 层能容纳 backend 原生 sub-issue 而不把它们升格的 protocol-shape 决策）。
+
 ## 你应该知道的两条设计原则
 
 ### Meta-methodology，而不是带观点的预设配置

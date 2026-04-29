@@ -18,12 +18,22 @@ on-disk transcripts (workaround b). Domain events here are the
 **logical** notion; the channels say how an observer actually
 notices.
 
+**Naming convention** (per ADR-0025 + the Kanban Protocol
+identity rules): payload field `card_key` is the protocol-
+level opaque identifier, the canonical name across all
+projections; `card_number` (where it still appears below)
+specifically denotes the GitHub-projection-shape integer
+backing `card_key` under v1 (i.e., the GitHub Issue number).
+Channel descriptions name the protocol action (`create_card`,
+`transition_card`, `claim_card`, …) and the v1 GitHub-
+projection realization in parentheses where relevant.
+
 | # | Event | Emitter | Channel |
 |---|-------|---------|---------|
-| 3.4.1 | `Card.Created` | Card aggregate | GitHub Issue create + Project v2 add |
-| 3.4.2 | `Card.Ready` | Card aggregate | Status field transition |
-| 3.4.3 | `Card.Status.Transitioned` | Card aggregate | Status field transition |
-| 3.4.4 | `Card.Claimed` | Card aggregate (write site: ConsumerLogical) | ClaimBranch creation on origin |
+| 3.4.1 | `Card.Created` | Card aggregate | Kanban Protocol `create_card` (v1 GH projection: Issue create + Project v2 add) |
+| 3.4.2 | `Card.Ready` | Card aggregate | Kanban Protocol `transition_card` Backlog→Ready |
+| 3.4.3 | `Card.Status.Transitioned` | Card aggregate | Kanban Protocol `transition_card` (any legal transition) |
+| 3.4.4 | `Card.Claimed` | Card aggregate (write site: ConsumerLogical) | Kanban Protocol `claim_card` — ClaimBranch creation on origin |
 | 3.4.5 | `Consumer.Spawned` | ConsumerLogical | Card-thread comment (first comment) |
 | 3.4.6 | `Consumer.Suspended` | ConsumerLogical | Card-thread comment (surface message) |
 | 3.4.7 | `Consumer.WokeUp` | ConsumerLogical | New ConsumerProcess starts; card comment optional |
@@ -41,20 +51,25 @@ notices.
 ### 3.4.1 `Card.Created`
 
 - **Emitter.** Card aggregate.
-- **Trigger.** Producer F-09 calls
-  `BoardAdapter.create_card(...)` after passing INVEST gate
-  (§1.6.1) and vertical-slicing gate (§1.6.2). ADR-0006 row
-  1 (Create cards = A).
-- **Payload (sketch).** `{project_ref, card_number,
+- **Trigger.** Producer F-09 invokes the Kanban Protocol
+  `create_card` action (under v1's GitHub projection this
+  resolves to `BoardAdapter.create_card(...)`) after passing
+  INVEST gate (§1.6.1) and vertical-slicing gate (§1.6.2).
+  ADR-0006 row 1 (Create cards = A).
+- **Payload (sketch).** `{project_ref, card_key,
   initial_status: "Backlog", title, body, labels, milestone?,
-  threads?}`.
+  threads?}`. Under v1's GitHub projection `card_key` carries
+  the issue number string; future projections carry the
+  backend-native key shape per
+  `0005-contracts/00-kanban-protocol.md` § Identity.
 - **Observers.** AuditTrail (writes `AuditEntry` with
   `action_id=1`). Manager's next preflight piggyback (F-04)
   may surface the new card's effect on dispatch
   recommendation.
-- **Channel.** GitHub Issue create event + Project v2 item
-  add. Observable via `gh issue list` /
-  `BoardAdapter.list_cards(status_filter=["Backlog"])`.
+- **Channel.** Kanban Protocol `create_card` action — under
+  v1's GitHub projection a GitHub Issue create event +
+  Project v2 item add (observable via `gh issue list` /
+  `BoardAdapter.list_cards(status_filter=["Backlog"])`).
 
 ### 3.4.2 `Card.Ready`
 
@@ -71,8 +86,9 @@ notices.
   candidate query) and F-04 (today's dispatch
   recommendation) only consider Ready cards.
   AuditTrail writes an entry with `action_id=5`.
-- **Channel.** Project v2 Status field write via
-  `BoardAdapter.set_card_status`.
+- **Channel.** Kanban Protocol `transition_card` action —
+  under v1's GitHub projection a Project v2 Status field
+  write via `BoardAdapter.set_card_status`.
 
 ### 3.4.3 `Card.Status.Transitioned`
 
@@ -86,9 +102,12 @@ notices.
 - **Observers.** Same as `Card.Ready` plus Manager's F-02
   (PR queue ordering uses In Review status as the trigger to
   surface a PR for verification).
-- **Channel.** `BoardAdapter.set_card_status`. Generalized
-  case of `Card.Ready` (3.4.2 is one specific transition;
-  this is the catch-all).
+- **Channel.** Kanban Protocol `transition_card` action
+  (`0005-contracts/00-kanban-protocol.md` § Action contracts);
+  under v1's GitHub projection realized as
+  `BoardAdapter.set_card_status`. Generalized case of
+  `Card.Ready` (3.4.2 is one specific transition; this is
+  the catch-all).
 
 ### 3.4.4 `Card.Claimed`
 
@@ -107,10 +126,16 @@ notices.
   (TBD-3 in `03-aggregates-and-entities.md`). Manager's
   preflight piggyback notices via `git ls-remote | grep
   claim/` and via the Status transition.
-- **Channel.** ClaimBranch creation visible on origin
-  (`refs/heads/claim/<N>-<slug>`) + ClaimMarker file
-  visible at `.board-superpowers/claims/<N>.claim` on that
-  branch + (next step) Status field write.
+- **Channel.** Kanban Protocol `claim_card` action — under
+  v1's GitHub projection ClaimBranch creation visible on
+  origin (`refs/heads/claim/<key-slug>-<title-slug>`, which
+  reduces to `refs/heads/claim/<N>-<slug>` when
+  `slugify(Card.key) == Card.key` for GitHub-shape integers)
+  + ClaimMarker file visible at
+  `.board-superpowers/claims/<key>.claim` on that branch
+  (`<key>` = `Card.key`; under v1 the path resolves to
+  `.board-superpowers/claims/<N>.claim`) + (next step)
+  protocol `transition_card` Ready→In Progress.
 
 ### 3.4.5 `Consumer.Spawned`
 
@@ -266,9 +291,14 @@ notices.
   merges the PR via GitHub UI / `gh pr merge`.
 - **Payload (sketch).** `{project_ref, card_number, pr_number,
   merged_at, merged_by (GitHub user), merge_commit_sha}`.
-- **Observers.** Card aggregate StatusBinding auto-transitions
-  to Done via GitHub's `Closes #<N>` mechanism (emits
-  3.4.3). ConsumerLogical's F-C14 success path triggers
+- **Observers.** Card aggregate StatusBinding transitions to
+  Done via the Kanban Protocol `link_pr_to_card` merge-trigger
+  mechanism (`0005-contracts/00-kanban-protocol.md`); under
+  v1's GitHub projection this fires through GitHub's auto-
+  close-on-merge for issues referenced via `Closes #<N>`
+  (future projections may rely on Linear's git-integration or
+  Jira's smart-commit syntax) and emits 3.4.3.
+  ConsumerLogical's F-C14 success path triggers
   (post-merge retro-note supplement, self-delete worktree,
   process exits). AuditTrail does NOT typically write here
   (the merge is performed outside the plugin's session
@@ -399,7 +429,7 @@ of these (no in-memory IPC under C-PLUGIN-1).
 |---------|----------------|
 | GitHub Issue (body, thread comments) | 3.4.1, 3.4.2, 3.4.3, 3.4.5, 3.4.6, 3.4.7, 3.4.8 (failure path), 3.4.13 (target file update) |
 | GitHub PR (body, thread comments, merge event) | 3.4.9, 3.4.10, 3.4.11 |
-| GitHub Project v2 Status field | 3.4.2, 3.4.3 (everything routing through `set_card_status`) |
+| Backend status field via Kanban Protocol `transition_card` (v1 GH projection: Project v2 Status field write through `set_card_status`) | 3.4.2, 3.4.3 |
 | ClaimBranch on origin (creation, deletion) | 3.4.4, 3.4.8 (success path branch deletion) |
 | ClaimMarker file on the ClaimBranch | 3.4.4 (existence proves claim) |
 | Local filesystem (worktrees, plan briefs) | 3.4.8 (success path worktree self-delete; failure path worktree preserved) |

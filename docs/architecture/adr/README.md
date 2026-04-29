@@ -71,7 +71,7 @@ Omit if no such notes apply.
 | [0002](./0002-claim-via-branch-push.md) | Atomic claim via remote branch push | accepted |
 | [0003](./0003-worktree-per-consumer.md) | One worktree per Consumer session | accepted |
 | [0004](./0004-composition-over-reimplementation.md) | Composition over reimplementation of TDD/QA | accepted |
-| [0005](./0005-board-adapter-contract.md) | v1 BoardAdapter contract surface | accepted; § Consequences amended by ADR-0010 |
+| [0005](./0005-board-adapter-contract.md) | v1 BoardAdapter contract surface | accepted; § Consequences amended by ADR-0010; § Decision and § Type definitions amended by ADR-0025 (rescoped to v1 GitHubProjectAdapter projection) |
 | [0006](./0006-producer-autonomy-boundary.md) | Producer autonomy boundary — autonomous-with-transparency, with explicit permission matrix | accepted |
 | [0007](./0007-plugin-runtime-derived-constraints.md) | Plugin-runtime-derived constraints — three constraints arising from CC / Codex plugin physics | proposed |
 | [0008](./0008-plugin-to-plugin-skill-invocation.md) | Plugin-to-plugin composition via SKILL invocation (vs subagent spawn / MCP / direct import) | accepted |
@@ -91,3 +91,5 @@ Omit if no such notes apply.
 | [0022](./0022-boardadapter-capability-dispatch.md) | BoardAdapter capability dispatch + M10 BoardAdapter-selection module | proposed |
 | [0023](./0023-architect-ux-and-config-item-protocol.md) | Architect UX — sequential per-stage flow + 5-element config item protocol | proposed |
 | [0024](./0024-settings-rename-and-config-item-stages.md) | settings.yml rename + new config-item stages (`m5.repo.set-wip-limit`, `m10.repo.choose-kanban-backend`) | proposed |
+| [0025](./0025-kanban-protocol-as-top-contract.md) | Kanban Protocol as top-level contract; ADR-0005 rescoped to v1 GitHubProjectAdapter projection | accepted |
+| [0026](./0026-multi-kanban-lifecycle-and-flat-card-hierarchy.md) | Multi-kanban support + lifecycle states + flat-Card hierarchy stance | accepted |

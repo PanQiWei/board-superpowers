@@ -6,6 +6,18 @@
 > shape, exit-code map, and side effects.
 >
 > Rationale lives in the cited ADR / feature spec. Shape lives here.
+>
+> **Kanban Protocol layering (per ADR-0025).** The board-mutating
+> scripts here (`bootstrap-project.sh`, `claim-card.sh`,
+> `transition-card.sh`, `create-card.sh`) are the v1
+> **GitHubProjectAdapter projection's** Form A (bash CLI)
+> implementation — they call the GitHub-specific `gh` CLI directly.
+> Their contracts (stdin / stdout / exit codes / `gh` side effects)
+> are authoritative for v1.0 and any future repo configured with
+> `kanban.backend: github-project-v2`. Future backend projections
+> (Linear, Jira) ship their own Form A scripts (or skip Form A in
+> favor of Form B / Form C); the protocol-level semantics live in
+> [`00-kanban-protocol.md`](./00-kanban-protocol.md).
 
 ---
 
@@ -430,9 +442,13 @@ injection vector (H1/L3) is closed.
 
 ### Cited rationale
 
-- `board-protocol/SKILL.md` state machine (the allowed transitions).
+- `board-canon/SKILL.md` state machine (the allowed transitions
+  surfaced as the in-session SPOT; protocol-level semantics live in
+  [`00-kanban-protocol.md`](./00-kanban-protocol.md)).
 - ADR-0006 (every transition is an audit-logged action; rows 5/6/7
   governance).
+- ADR-0025 — this script is part of the v1 GitHubProjectAdapter
+  projection (Form A bash CLI).
 
 ---
 
@@ -490,6 +506,9 @@ Per `scripts/AGENTS.md`:
 
 ## Cross-references
 
+- [`00-kanban-protocol.md`](./00-kanban-protocol.md) — top-level
+  Kanban Protocol; the board-mutating scripts above are the v1
+  GitHubProjectAdapter projection's Form A bash CLI implementation.
 - [`02-hook-contracts.md`](./02-hook-contracts.md) — `hooks/session-start.sh`
   consumes `check-deps.sh --machine` output; the key names in this
   doc must match.

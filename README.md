@@ -259,6 +259,62 @@ These are commitments to *not* do things. Future feature requests of the shape "
 - **No methodology-extension marketplace.** Third-party "discipline plugins" extending routines are permanently out — versioning debt and chicken-and-egg costs do not fit the project framing.
 - **No cross-team / fleet view at v1.** That is the explicit 10x (see Vision below), not v1.
 
+## Why there's no sprint, no sub-issue, no story points
+
+Most agile process artifacts assume a fixed implementation throughput — roughly: human-developer-days. When that assumption holds, time-boxing (sprint), per-day decomposition (sub-task / sub-issue), and scale-aware estimation (story points) all earn their keep.
+
+In AI-orchestrated software development, implementation throughput moves 10×–100×; **architect attention does not**. The agile process surface that humans built around the implementation bottleneck loses its load-bearing purpose and quietly becomes ceremony.
+
+board-superpowers walked through this surface concept by concept. Each removed artifact was tested against one question: *what does this do that something else doesn't already do better in an AI-cadence world?*
+
+### Sprint — gone
+
+Time-boxing assumed throughput was fixed; you committed a batch and demoed at the boundary. With cards landing in hours, not days, the commit-batch-demo-retro cycle has nothing to time-box. Replaced by:
+
+- **Continuous flow** — cards land when ready.
+- **Per-PR demo** — every PR carries a Human Verification TODO; the architect verifies, which IS the demo.
+- **Retro from PR Notes** — signal aggregation, not ceremony.
+
+### Sub-issue / sub-task — degenerate
+
+Sub-issue had six historical purposes in human-cadence agile:
+
+1. Decompose features into person-day chunks (decomposition).
+2. Coordinate work across multiple humans (coordination).
+3. Show stakeholders feature-level progress (visibility).
+4. Aggregate per-task estimates into feature-level numbers (estimation aggregation).
+5. Order sub-tasks within a sprint (sequencing).
+6. Help the human brain navigate complex work (chunking).
+
+In AI-cadence software R&D, four die outright:
+
+- **(1) Decomposition** is replaced by **INVEST sibling slicing** plus `depends-on` dependency edges. Cards are already hours-scale; there's no atomic unit underneath them that's still meaningful.
+- **(2) Coordination** is replaced by the **atomic claim primitive** — N parallel Consumer sessions race at the git-push layer; whoever wins owns the card. No coordinating "parent" needed.
+- **(4) Estimation aggregation** loses meaning when sizing is XS/S/M/L and the absolute scale is hours.
+- **(5) Sprint-internal sequencing** disappears when sprint disappears.
+
+The remaining two — **(3) stakeholder visibility** and **(6) mental chunking** — shift one level up. The architect now reasons in terms of **Thread** (named work mainline) and **Milestone** (deliverable bucket), not feature-vs-sub-task. Both already exist in board-superpowers' work hierarchy.
+
+So: a parent card with N sub-cards underneath would buy nothing that Thread + sibling Cards + dependencies don't already provide, while costing protocol purity. Parent cards would be non-claimable, would violate the *one Card = one Consumer session = one PR* invariant, and would introduce a status-derivation rule that doesn't even agree across backends (GitHub, Linear, Jira each have different rules for whether parent state auto-updates from children).
+
+We honor backend-native sub-issues that users have created in GitHub / Linear / Jira — they appear as display-only metadata on the protocol-flat Card. We just don't elevate them to protocol semantic.
+
+### Story points — gone
+
+Story points were calibrated to sprint commitment ("how much can the team finish in two weeks"). With sprint gone and cards in hours, the calibrated unit is gone. We use **XS / S / M / L** for rough sizing — coarse enough to be quick, granular enough to flag *this card is too big, slice further*.
+
+### Burndown chart, stand-up, epic — also gone or transformed
+
+- **Burndown chart** visualizes sprint progress; without sprint, the daily routine reads WIP + Done counts directly.
+- **Stand-up** is human-team synchronization; agents don't need to sync, and the architect already reads PRs.
+- **Epic** is replaced by **Thread** (theme grouping) or **Milestone** (deliverable bucket) — same role, more agile-orthodox vocabulary, no multi-sprint container assumption.
+
+### The pattern in one sentence
+
+> If a software-development concept assumes implementation throughput is the bottleneck, AI-native R&D probably makes it degenerate. **Architect attention is the new bottleneck**; everything we kept and everything we built optimizes for that.
+
+Spec-level rationale: [`docs/architecture/0001-positioning.md`](./docs/architecture/0001-positioning.md) (premises P1, P2b, P3) and [`docs/architecture/adr/0025-kanban-protocol-as-top-contract.md`](./docs/architecture/adr/0025-kanban-protocol-as-top-contract.md) (the protocol-shape decision that lets the projection layer absorb backend native sub-issues without elevating them).
+
 ## Two design principles you should know about
 
 ### Meta-methodology, not opinionated configuration

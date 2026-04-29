@@ -1,8 +1,19 @@
 # ADR 0005: v1 BoardAdapter contract surface
 
-**Status:** accepted; § Consequences amended by ADR-0010
+**Status:** accepted; § Consequences amended by ADR-0010; § Decision and § Type definitions amended by ADR-0025 (rescoped to v1 GitHubProjectAdapter projection)
 **Date:** 2026-04-25
 **Deciders:** PanQiWei (maintainer)
+
+> **Reading note (2026-04-28).** After ADR-0025, this ADR is no
+> longer "the contract every adapter must implement" — it is **the
+> v1 GitHubProjectAdapter implementation projection** (one specific
+> shape Form A takes when the transport is bash + `gh` CLI). The
+> universal contract now lives in
+> [`../0005-contracts/00-kanban-protocol.md`](../0005-contracts/00-kanban-protocol.md)
+> as the Kanban Protocol. Read this ADR's `Decision` and `Type
+> definitions` sections as describing how the GitHubProjectAdapter
+> projection realizes the protocol; do NOT read them as constraining
+> future Linear / Jira / other projections.
 
 ## Context
 
@@ -14,6 +25,15 @@ to be specified at second-adapter-implementable detail today —
 otherwise ADR-0001 is "we'll figure out the contract later," and
 the substrate commitment in `0001-positioning.md` P2a collapses to
 unfalsifiable.
+
+> **2026-04-28 update.** The premise that "the contract every
+> adapter must implement" is the right shape for board-
+> superpowers' contract surface was reversed by ADR-0025. SDK
+> shape (function table caller dispatches through) does not
+> match an agentic runtime where callers are agents reading SKILL
+> bodies. The contract surface defined here remains valid AS the
+> v1 GitHubProjectAdapter projection's shape; it is no longer
+> universal. See ADR-0025 § Context for the full rationale.
 
 The contract has to be small enough that one author can implement
 a second adapter (Linear, Jira, etc.) in a weekend, and complete

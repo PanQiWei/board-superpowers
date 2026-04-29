@@ -84,7 +84,7 @@ then jump back via term-registry links.
 | [`03-aggregates-and-entities.md`](./03-aggregates-and-entities.md) | Aggregates with root + members + value objects + invariants + physical-storage location. The meat. |
 | [`04-domain-events.md`](./04-domain-events.md) | State-changing events that cross aggregate boundaries — emitter, trigger, payload shape, observers. |
 | [`05-relationships.md`](./05-relationships.md) | Mermaid ER diagram + state diagrams for Card / ConsumerLogical / PR + a Mode-2 suspend-and-wake-up sequence diagram. |
-| [`06-context-map.md`](./06-context-map.md) | How the bounded contexts communicate. Mostly Customer-Supplier through GitHub artifacts; a small Anti-Corruption Layer at the BoardAdapter seam. |
+| [`06-context-map.md`](./06-context-map.md) | How the bounded contexts communicate. Mostly Customer-Supplier through GitHub artifacts; a small Anti-Corruption Layer at the Kanban Protocol projection seam (per ADR-0025; the v1 GitHubProjectAdapter is the first projection). |
 
 ---
 
@@ -117,16 +117,22 @@ Three reading conventions to keep 0003 consistent with 0002:
   operate on the entities here.
 - `0004-component-architecture.md` (stub) — runtime topology that
   realizes these entities.
-- `0005-contracts.md` (stub) — when filled, finalizes the
-  `BoardAdapter` contract surface, the `autonomy_overrides:` schema,
-  and the `BOARD_SP_AUDIT_DB_URL` mechanism (all touched here at
+- `0005-contracts/` — finalizes the Kanban Protocol top-level
+  contract (`00-kanban-protocol.md`, anchored by ADR-0025;
+  rescopes ADR-0005's BoardAdapter to the v1 projection),
+  the `autonomy_overrides:` schema, and the
+  `BOARD_SP_AUDIT_DB_URL` mechanism (all touched here at
   entity granularity).
 - `0006-failure-modes.md` (stub) — failure modes named in entity
   terms (e.g., "ghost claim" = ClaimMarker without ConsumerProcess).
 - `adr/` — architectural decisions; 0003 entities track them
-  one-for-one (ADR-0001/0005 → BoardAdapter; ADR-0002 → ClaimBranch +
-  ClaimMarker; ADR-0003 → Worktree; ADR-0006 → AuditEntry +
-  AutonomyOverride; ADR-0007 → PreflightSnapshot).
+  one-for-one (ADR-0001/0005 → BoardAdapter, now rescoped per
+  ADR-0025 to v1 GitHubProjectAdapter projection; ADR-0025 →
+  Kanban Protocol top-level contract + Card.key + branch
+  naming; ADR-0002 → ClaimBranch + ClaimMarker; ADR-0003 →
+  Worktree; ADR-0006 → AuditEntry + AutonomyOverride;
+  ADR-0007 → PreflightSnapshot; ADR-0009 → Audit substrate
+  SQLite allowance).
 - `PLUGIN_DEVELOPMENT.md` — which entities are platform-given vs
   plugin-owned (e.g., session transcripts are platform-owned;
   routing blocks are plugin-owned-within-marker-pair).

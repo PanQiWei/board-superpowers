@@ -529,6 +529,9 @@ recommended convention; see [`08-environment-variables.md`](./08-environment-var
 
 ## Cross-references
 
+- [`00-kanban-protocol.md`](./00-kanban-protocol.md) — top-level
+  Kanban Protocol; hooks here are protocol-agnostic (they fire
+  before any backend dispatch happens).
 - [`01-script-contracts.md`](./01-script-contracts.md) —
   `check-deps.sh` `--machine` mode keys (`MISSING`,
   `ROUTING_INJECTED`, `PROJECT`) — the parser side of this hook.

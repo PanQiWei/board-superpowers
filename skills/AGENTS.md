@@ -223,6 +223,48 @@ Same-PR contract: any SKILL change that makes
 [`../SETUP_STAGES_DEVELOPMENT.md`](../SETUP_STAGES_DEVELOPMENT.md)
 or [`../SKILLS.md`](../SKILLS.md) stale fixes both in this PR.
 
+## Board-touching SKILLs — additional read
+
+If your work edits **`skills/board-canon/`**, **`skills/operating-kanban/`**
+(planned v0.5.0), or any SKILL whose body invokes the Kanban
+Protocol's eight actions (`read_board`, `read_card`,
+`create_card`, `transition_card`, `claim_card`, `release_claim`,
+`link_pr_to_card`, `comment_on_card`) per
+[ADR-0025](../docs/architecture/adr/0025-kanban-protocol-as-top-contract.md)
+and [ADR-0026](../docs/architecture/adr/0026-multi-kanban-lifecycle-and-flat-card-hierarchy.md),
+**also Read [`../BOARD_DEVELOPMENT.md`](../BOARD_DEVELOPMENT.md)**
+end-to-end before the first edit. The Process gate above
+(skill-creator + SKILL_DEVELOPMENT.md) covers SKILL-authoring
+discipline; the board-development guide covers the system the
+SKILL operates against (the eight protocol actions, six canonical
+statuses, multi-kanban schema, flat-Card hierarchy + display-only
+metadata, the bridge to setup-stages M10). Skill-authoring
+discipline + board-layer discipline are independent concerns —
+both reads are required when the SKILL touches the board layer.
+
+Concrete trigger conditions (any one suffices):
+
+- The SKILL body invokes any of the eight Kanban Protocol
+  actions (or their projection-specific bash equivalent —
+  `claim-card.sh`, the planned `operating-kanban` dispatch, etc.).
+- The SKILL writes to `<repo>/.board-superpowers/settings.yml`
+  under `modules.m10_kanban`.
+- The SKILL touches the claim primitive, branch-naming
+  convention, or Card schema (thin-pointer / 5 mandatory sections
+  / bottom marker).
+- The SKILL adds a new `action_id` that classifies a board
+  operation through `classifying-actions` / `auditing-actions`.
+- The SKILL changes the relationship between a Producer / Consumer
+  routine and the protocol's eight actions.
+- The SKILL adds or modifies a backend projection's reference
+  file under `skills/operating-kanban/references/<backend>.md`.
+
+Same-PR contract: any SKILL change that makes
+[`../BOARD_DEVELOPMENT.md`](../BOARD_DEVELOPMENT.md),
+[`../docs/architecture/0005-contracts/00-kanban-protocol.md`](../docs/architecture/0005-contracts/00-kanban-protocol.md),
+or [`../SKILLS.md`](../SKILLS.md) stale fixes all stale ones in
+this PR.
+
 ## Where the long-form rules live
 
 This file is intentionally the per-directory checklist, not
@@ -241,3 +283,7 @@ the manual. For:
   stages — registry, 5-callable contract, agentic config-item
   protocol, partitioned settings layering) →
   [`../SETUP_STAGES_DEVELOPMENT.md`](../SETUP_STAGES_DEVELOPMENT.md).
+- Board / card / Kanban Protocol layer (when the SKILL invokes
+  protocol actions, touches multi-kanban schema, or acts on
+  cards / branches / claim) →
+  [`../BOARD_DEVELOPMENT.md`](../BOARD_DEVELOPMENT.md).

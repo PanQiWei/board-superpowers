@@ -80,9 +80,10 @@ doc when its scope is touched.
 | [`MULTI_AGENT_DEVELOPMENT.md`](./MULTI_AGENT_DEVELOPMENT.md) (~700 lines) | subagent / agent-team / orchestration design, `Agent` tool / `SendMessage` / fan-out-fan-in. |
 | [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md) (~1290 lines) | skill authoring — frontmatter, body skeletons, anti-patterns, testing, `.skill-meta.yaml` schema. |
 | [`SETUP_STAGES_DEVELOPMENT.md`](./SETUP_STAGES_DEVELOPMENT.md) (~700 lines) | setup-stages system — `scripts/stages-registry.yml`, `scripts/stages_lib/`, `scripts/stages-registry.schema.json`, `hooks/session-start.sh` lifecycle diff, `skills/bootstrapping-repo/`, the four partitioned `settings.yml` files. Read before adding/editing/removing a stage, before changing the 5-callable contract, before introducing a new `applicable_when` form, or before any spec change touching § 1.5 (Bootstrap surface redesign). The legacy filename `BOOTSTRAP_STAGES_DEVELOPMENT.md` is a one-line shim that redirects here. |
+| [`BOARD_DEVELOPMENT.md`](./BOARD_DEVELOPMENT.md) (~600 lines) | board / card / Kanban Protocol layer — `docs/architecture/0005-contracts/00-kanban-protocol.md`, ADR-0025 + ADR-0026, `skills/board-canon/`, the planned `skills/operating-kanban/`, `scripts/claim-card.sh`, the eight protocol actions, six canonical statuses, multi-kanban semantics, flat-Card hierarchy + display-only metadata, AI-native concept hygiene anchors. Read before editing the Kanban Protocol document, before authoring/changing `board-canon` or `operating-kanban`, before adding a new backend projection (Linear / Jira / others), or before touching multi-kanban schema / kanban lifecycle / branch naming / claim primitive. § 7 "Setup-stages bridge" documents how the board layer meets `SETUP_STAGES_DEVELOPMENT.md`'s M10 module. |
 
 **Do not "fix" these references back to `@`-prefix** — that
-change would force-load all four docs into every session and
+change would force-load all five docs into every session and
 is exactly the anti-pattern they themselves warn against.
 
 ### Doctrine
