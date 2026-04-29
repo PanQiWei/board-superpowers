@@ -1,0 +1,25 @@
+{
+  "skill_name": "operating-kanban",
+  "schema_version": "skill-creator-v1",
+  "notes": "Test prompts only; assertions + benchmark runs land in a follow-up PR. Skill is an output-shaped atomic dispatcher — it routes Kanban Protocol actions to the active backend projection (resolved from <repo>/.board-superpowers/config.yml § kanban). The expected_output describes the dispatch behavior the agent should exhibit, not the literal command output.",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Read the current state of the kanban board for this repo and group cards by status.",
+      "expected_output": "Agent invokes the read_board protocol action through operating-kanban dispatch. The dispatch resolves the active projection from settings.yml § modules.m10_kanban (or config.yml § kanban), loads the projection's reference file, and executes the per-Form invocation. Output is a list (or grouped structure) of cards keyed by their canonical statuses (Backlog / Ready / In Progress / In Review / Done / Blocked) per board-canon.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Move card #42 to In Review.",
+      "expected_output": "Agent invokes the transition_card protocol action with card #42 and target status In Review. Dispatch routes through operating-kanban → active projection's reference file. Pre-transition validation enforces state-machine legality per board-canon (the from→to edge must exist). Audit row is recorded via auditing-actions hand-off after classifying-actions assigns the action_id.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Claim card #100 so I can start working on it.",
+      "expected_output": "Agent invokes the claim_card protocol action through operating-kanban. The active projection's reference file specifies the four-step transaction (Status flip Ready → In Progress + worktree create + branch create + branch push) with first-push-wins semantics. Output includes the claim branch name (claim/100-<slug> per board-canon branch-naming) and the worktree path. Composite key (kanban_id, Card.key) is used for cross-kanban identity.",
+      "files": []
+    }
+  ]
+}
