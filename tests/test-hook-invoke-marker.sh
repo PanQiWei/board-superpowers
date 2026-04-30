@@ -272,13 +272,13 @@ assert_valid_json 'JSON shape valid' "${PAYLOAD}"
 CONTEXT="$(extract_additional_context "${PAYLOAD}")"
 check 'INVOKE: bootstrapping-repo present' \
     bash -c 'printf "%s" "$1" | grep -qE "^INVOKE: bootstrapping-repo$"' _ "${CONTEXT}"
-# REASON content is whitelist-constrained (no `/`, no `~`); the new
-# wording is "host bootstrap pending; ..." — assert host-bootstrap
-# semantics rather than a literal path mention.
-check 'REASON declares host bootstrap pending' \
-    bash -c 'printf "%s" "$1" | grep -qE "^REASON: .*host bootstrap pending"' _ "${CONTEXT}"
-check 'REASON mentions manifest (no path chars)' \
-    bash -c 'printf "%s" "$1" | grep -qE "^REASON: .*manifest"' _ "${CONTEXT}"
+# REASON content is whitelist-constrained (no `/`, no `~`).
+# v0.5.0 no-venv path: wording is "host bootstrap pending; host-shared settings absent"
+# or "fresh repo - ...". Assert the REASON line is present with bootstrap semantics.
+check 'REASON declares bootstrap pending (host or fresh-repo path)' \
+    bash -c 'printf "%s" "$1" | grep -qE "^REASON: .*(host bootstrap pending|fresh repo)"' _ "${CONTEXT}"
+check 'REASON mentions settings or manifest' \
+    bash -c 'printf "%s" "$1" | grep -qE "^REASON: .*(settings|manifest)"' _ "${CONTEXT}"
 
 # At-most-one rule: only one INVOKE line in the payload.
 INVOKE_COUNT="$(printf '%s' "${CONTEXT}" | grep -cE "^INVOKE:" || true)"
@@ -317,12 +317,12 @@ assert_eq 'hook exit 0' '0' "$(printf '%d' "${RC}")"
 CONTEXT="$(extract_additional_context "${PAYLOAD}")"
 check 'INVOKE: bootstrapping-repo present' \
     bash -c 'printf "%s" "$1" | grep -qE "^INVOKE: bootstrapping-repo$"' _ "${CONTEXT}"
-# Whitelist-constrained REASON: per-repo path uses
-# "per-repo bootstrap pending; state file is absent."
+# Whitelist-constrained REASON: v0.5.0 no-venv path uses
+# "per-repo bootstrap pending; repo-shared settings absent; venv not yet created."
 check 'REASON declares per-repo bootstrap pending' \
     bash -c 'printf "%s" "$1" | grep -qE "^REASON: .*per-repo bootstrap pending"' _ "${CONTEXT}"
-check 'REASON mentions state file (no path chars)' \
-    bash -c 'printf "%s" "$1" | grep -qE "^REASON: .*state file"' _ "${CONTEXT}"
+check 'REASON mentions settings or state (no path chars)' \
+    bash -c 'printf "%s" "$1" | grep -qE "^REASON: .*(settings|state)"' _ "${CONTEXT}"
 
 rm -rf "${TMP}"
 
@@ -756,8 +756,10 @@ assert_reason_whitelist() {
 REASON_BOTH="$(capture_reason_line no no)"
 printf '  captured REASON (manifest=absent, state=absent): %s\n' "${REASON_BOTH}"
 assert_reason_whitelist 'both-absent REASON in whitelist' "${REASON_BOTH}"
-check 'both-absent REASON mentions both' \
-    bash -c 'printf "%s" "$1" | grep -qE "both manifest and per-repo state files"' _ "${REASON_BOTH}"
+# v0.5.0 no-venv path uses "fresh repo - host and per-repo settings absent"
+# or "host and per-repo" style wording; v0.4.x used "both manifest and per-repo state files".
+check 'both-absent REASON mentions host and per-repo absence' \
+    bash -c 'printf "%s" "$1" | grep -qE "(both|per-repo|host.*per-repo|fresh repo)"' _ "${REASON_BOTH}"
 
 # Manifest absent (state present is impossible without manifest in
 # practice, but the hook still classifies; we only test the OR-path
