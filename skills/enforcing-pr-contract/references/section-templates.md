@@ -12,7 +12,7 @@ Concrete examples per card type. Parent `SKILL.md` shows the canonical templates
 
 ## Retro Notes
 
-- The cross-link between `SKILL_DEVELOPMENT.md` and `SKILLS.md` was easy to miss when adding the new metadata convention; the next time we add a project-wide concept, search both docs upfront.
+- The cross-link between two governing source-of-truth docs was easy to miss when adding the new metadata convention; the next time we add a project-wide concept, search both docs upfront.
 ```
 
 (Human Verification TODO omitted — no UI surface)
@@ -33,8 +33,24 @@ Concrete examples per card type. Parent `SKILL.md` shows the canonical templates
 
 ## Retro Notes
 
-- The skill's `description` had to be made significantly more "pushy" than initial draft to avoid undertriggering — the empirical pattern in `SKILL_DEVELOPMENT.md` § "description = WHEN, not WHAT" was load-bearing.
+- The skill's `description` had to be made significantly more "pushy" than initial draft to avoid undertriggering — the canonical "description = WHEN, not WHAT" guidance was load-bearing.
 ```
+
+### When this claim crossed a WIP cap — paste-able bullet
+
+If claiming this card pushed the Consumer to or past either WIP cap (the global cross-kanban total or a per-kanban local cap), append one of these bullets to the `## Automated Verification` block above so the Manager review-queue routine sees it. Substitute the actual numbers and kanban id; omit the bullet entirely when no cap was crossed.
+
+```markdown
+- [x] WIP cap crossed: cross-kanban total <N>/<wip_limit> with this claim (global `wip_limit: <wip_limit>`) — flagged for review-queue visibility.
+```
+
+If a per-kanban local cap is the binding constraint, append a second bullet:
+
+```markdown
+- [x] WIP cap crossed: kanban `<kanban-id>` local count <K>/<wip_limit_local> with this claim (`modules.m10_kanban.kanbans[<kanban-id>].wip_limit_local: <wip_limit_local>`) — flagged for review-queue visibility.
+```
+
+The primary cap is the per-actor cross-kanban total against the global `modules.m5_repo_configuration.wip_limit` in `<repo>/.board-superpowers/settings.yml`; the optional per-kanban `modules.m10_kanban.kanbans[].wip_limit_local` is an additional cap that, when set, must also hold for the originating kanban. See `board-canon` § "WIP counting" + its `references/wip-counting.md` § "If the repo has multiple kanbans" for the full formula.
 
 ## Bug fix in a script
 

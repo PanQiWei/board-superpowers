@@ -1,22 +1,39 @@
 # Scope-shape judgment — manager-side intake reference
 
-> **Scope**: this file owns *which scope/level* a fresh
-> requirement should land at — single card, multi-card sharing
-> a milestone, milestone-grouped within a release-gate, or
-> cross-release roadmap. It also owns the trigger for "do we
-> hand this off to `decomposing-into-milestones`?".
->
-> **Out of scope** — this file does NOT own the *how* of
-> decomposition. INVEST application, SPIDR vertical-slicing
-> mechanics, size calibration, and the converged Card body
-> schema are owned by
-> [`board-superpowers:decomposing-into-milestones`](../../decomposing-into-milestones/SKILL.md).
-> For the **how** of decomposition, see that skill's
-> references — explicit pointers per decision below.
+## Use this file when
 
-This reference is consumed by the `intake.md` decision tree
-(see § "Decision tree extension" in `intake.md`) and by the
-`managing-board` SKILL body's intake routine.
+You arrive here at intake **Step 2** of [`intake.md`](./intake.md)
+to decide *which scope/level* a fresh requirement should land at —
+single card, multi-card sharing a milestone, milestone-grouped
+within a release-gate, or cross-release roadmap. Apply the three
+tables below in order:
+
+- **Table 1** decides shape (the four-row hierarchy).
+- **Table 2** picks the cross-card relationship mechanism (Milestone
+  field / hard `depends-on:` / soft `depends-on:` / Label).
+- **Table 3** decides whether to hand the artifact to
+  `decomposing-into-milestones` (#35) and what entry conditions to
+  attach.
+
+### When to read the sibling files
+
+After this file's tables fire, the next reads are:
+
+- **[`spec-first-checklist.md`](./spec-first-checklist.md)** — read
+  next at intake **Step 3** once shape is "single card" or
+  "multi-card", to verify spec preconditions clear before card
+  creation.
+- **[`skill-routing.md`](./skill-routing.md)** — read at intake
+  **Step 4** once preconditions are clear, to pick the pre-card
+  sibling skill (`gstack:/*`, `superpowers:*`, or
+  `decomposing-into-milestones`) and frame manager-locked vs
+  consumer-deferred design.
+- **[`board-superpowers:decomposing-into-milestones`](../../decomposing-into-milestones/SKILL.md)**
+  — invoke when Table 1 routes to "multi-card" or
+  "milestone-grouped". That skill owns the *how* of decomposition
+  (INVEST, SPIDR vertical-slicing, sizing, the converged Card body
+  schema). This file does NOT own that surface — explicit pointers
+  per decision below.
 
 ## Primary-source vocabulary
 
@@ -47,13 +64,13 @@ on the implementing branch.
 
 The four-row hierarchy. Each row maps to one Cohn Planning Onion
 horizon (strategy + day deliberately omitted — strategy lives
-in `0001-positioning.md` and day-level planning is the
-architect's, not the manager skill's). Rows are evaluated
+in the project's positioning charter and day-level planning is
+the architect's, not the manager skill's). Rows are evaluated
 top-down; the first row whose triggers fire wins.
 
 | Shape | Cohn horizon | Patton level | Triggers — fire any one | Outcome |
 |-------|--------------|--------------|------------------------|---------|
-| **Cross-release roadmap** | portfolio | (above backbone) | (a) requirement crosses two or more plugin-version transitions; (b) requirement names a release-gate or cross-version umbrella; (c) requirement bundles features that will not all ship in one cycle. | Defer card creation. Surface to architect: "this is roadmap-level — a positioning doc or umbrella card belongs in `docs/architecture/` first". DO NOT decompose into cards yet. |
+| **Cross-release roadmap** | portfolio | (above backbone) | (a) requirement crosses two or more plugin-version transitions; (b) requirement names a release-gate or cross-version umbrella; (c) requirement bundles features that will not all ship in one cycle. | Defer card creation. Surface to architect: "this is roadmap-level — a positioning doc or umbrella card belongs in the maintainer's design-spec area first". DO NOT decompose into cards yet. |
 | **Milestone-grouped within a release-gate** | release | backbone | (a) the requirement names a coherent shipped-together unit (a release-gate umbrella card, an "audit-pipeline-rollout" group, etc.); (b) the cards in the group together deliver Denne-MMF-shaped value (shipping any subset alone delivers strictly less); (c) cards span 2 or more bounded contexts (e.g., audit + bootstrap, or board + spec). | Use the **umbrella-card-with-soft-`depends-on:`** pattern (this is the project's de-facto milestone substitute — see Table 2). Then route to #35 with the umbrella card as anchor. |
 | **Multi-card sharing a milestone** | release sub-batch | tasks | (a) requirement adds 2-N independent capabilities that are conceptually one feature; (b) Independence (INVEST-I) holds across the candidate cards (one can ship before another); (c) **expected internal chunk count >5** — empirical signal that single-card scope will reactively chunk into a multi-PR sequence. | Route to #35 (`decomposing-into-milestones`). The skill's INVEST + SPIDR pipeline produces N cards. Optionally use the umbrella-card pattern if the N cards together are MMF-coherent. |
 | **Single card** | iteration | story | (a) a single user-visible / developer-visible capability; (b) Estimable as XS / S / M / L (no extension into "we'll see"); (c) no cross-card design A/B requiring shared rationale (in-card design A/B is fine and uses [`skill-routing.md`](./skill-routing.md) Table 3 template — #43 / #44 / #45 are precedents); (d) belongs in one bounded context. | Direct card creation via `intake.md` § "Direct card creation". Use #35's `card-schema.md` for the body shape. |

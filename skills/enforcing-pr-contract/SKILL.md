@@ -171,7 +171,7 @@ When the Producer's `managing-board` skill runs its review-queue routine, for ea
 4. If validation fails: comments on the PR pointing at the specific violation (cite which contract + which rule); the Producer then proposes routing the card from `In Review` back to `In Progress` (rework signal) and asks the Consumer to acknowledge before transitioning. Contract C violations carry a special note: appending the trailer post-OPEN does NOT fix the auto-close chain — surface this to the architect and prepare for manual cleanup at merge time (Consumer Step 12 stage (a) covers this).
 5. If validation passes: leaves the card in `In Review` for normal review-and-merge.
 
-This skill is the **single source of truth** for both sides (Consumer write + Producer validate) — there is no second implementation of these rules anywhere in the plugin. Changes to the contract land in this one SKILL.md and take effect on both sides automatically.
+Whether you are writing the PR (Consumer side) or validating it (Producer side), read these rules from this SKILL.md — there is no second copy in the plugin. An edit here applies to both sides automatically.
 
 ## Override mechanism
 

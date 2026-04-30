@@ -1,6 +1,6 @@
 ---
 name: using-board-superpowers
-description: Use as the FIRST skill in any board-superpowers session AND as the plugin's manual page. Read this skill (body + references/) for a complete, self-contained orientation — what the plugin is, the 10-skill catalog, the 6-state Card lifecycle, on-disk state, and dispatch routing. Routes ambiguous sessions into Producer mode (managing-board, for "what should I work on" / "review the PRs" / "intake this idea") or Consumer mode (consuming-card, for claiming card N). Skip when the message clearly matches a downstream skill directly (e.g., "[board-card:#12]" → consuming-card).
+description: Use as the FIRST skill in any board-superpowers session AND as the plugin's manual page. Read this skill (body + references/) for a complete, self-contained orientation — what the plugin is, the 11-skill catalog, the 6-state Card lifecycle, on-disk state, and dispatch routing. Routes ambiguous sessions into Producer mode (managing-board, for "what should I work on" / "review the PRs" / "intake this idea") or Consumer mode (consuming-card, for claiming card N). Skip when the message clearly matches a downstream skill directly (e.g., "[board-card:#12]" → consuming-card).
 when_to_use: Use when intent is ambiguous, when no other board-superpowers skill matched, when the user asks "what is this plugin / how does this work / what skills exist / explain the architecture", OR when the SessionStart hook injected an INVOKE marker pointing at a downstream skill.
 ---
 
@@ -54,16 +54,16 @@ Backlog ─▶ Ready ─▶ In Progress ─▶ In Review ─▶ Done
 
 - **Backlog** — captured but not yet shaped enough to claim.
 - **Ready** — INVEST-compliant, has acceptance criteria, sized, claimable.
-- **In Progress** — claimed by exactly one Consumer, branch `claim/<N>-<slug>` exists, work happening.
+- **In Progress** — claimed by exactly one Consumer, branch `claim/<kanban-id>-<key-slug>-<title-slug>` exists (e.g., `claim/default-42-refactor-cache`), work happening.
 - **Blocked** — claimed but cannot progress (dep / external answer needed). Released or unblocked.
 - **In Review** — PR open, awaiting Producer review + CI.
 - **Done** — PR merged, branch deleted, post-merge cleanup ran.
 
 **WIP cap** (per architect): `count(In Progress) + count(suspended-label) + count(In Review) ≤ wip_limit`. **`Blocked` is NOT counted** — so a stuck card doesn't lock the cap.
 
-Branch naming: `claim/<N>-<slug>` where `N` is the Card number, `<slug>` is a kebab-case shortened title.
+Branch naming (canonical form): `claim/<kanban-id>-<key-slug>-<title-slug>` (e.g., `claim/default-42-refactor-cache`). `<kanban-id>` identifies the kanban; `<key-slug>` is the canonical `Card.key` with hyphens rewritten to underscores (so a Linear-shaped key `ENG-42` becomes branch segment `eng_42`); `<title-slug>` is the kebab-case shortened title.
 
-## The 10 skills, by layer
+## The 11 skills, by layer
 
 Three layers, strictly downward dependency (Entry → Molecular → Atomic). Atomic skills are reflexes — they MUST NOT call any same-plugin skill.
 
@@ -73,17 +73,18 @@ Three layers, strictly downward dependency (Entry → Molecular → Atomic). Ato
 **Molecular layer (5)** — business workflows, state-machine-shaped:
 - `managing-board` *(shipped)* — Producer surface. Daily briefing, Review Queue, Intake.
 - `consuming-card` *(shipped)* — Consumer lifecycle. Claim → implement → PR → cleanup.
-- `decomposing-into-milestones` *(shipped v0.4.0)* — Turns a design artifact into INVEST-compliant vertically-sliced Cards on the board.
-- `bootstrapping-repo` *(shipped v0.2.0)* — First-time host + per-repo setup; injects routing block into AGENTS.md / CLAUDE.md.
+- `decomposing-into-milestones` *(shipped)* — Turns a design artifact into INVEST-compliant vertically-sliced Cards on the board.
+- `bootstrapping-repo` *(shipped)* — First-time host + per-repo setup; injects routing block into AGENTS.md / CLAUDE.md.
 - `migrating-repo-version` *(deferred)* — Plugin-version upgrade + schema migration. Not yet shipping; if a route would land here, respond with a "not implemented in current release" note.
 
-**Atomic layer (4)** — single-purpose contracts, reused by molecular skills:
+**Atomic layer (5)** — single-purpose contracts, reused by molecular skills:
 - `board-canon` — read-only contract: state machine + Card body schema + branch naming + WIP rules.
 - `enforcing-pr-contract` — PR three-section enforcement (Automated Verification / Human Verification TODO / Retro Notes) + Card acceptance-criteria sync at submit.
-- `classifying-actions` — D-AUTONOMY-1 matrix: classifies any mutating action as A (auto) / R (architect approval required) / N (forbidden).
+- `classifying-actions` — autonomy-classification SPOT. Per `board-superpowers:classifying-actions` (the atomic SKILL that owns the autonomy matrix + override merging + 5-step triage rule), invoke that skill with the action_id and act on its A (auto) / R (architect approval required) / N (forbidden) decision.
 - `auditing-actions` — Audit log schema + propose/resolve sequencing + BYO-RDBMS write conventions.
+- `operating-kanban` *(shipped)* — 8-action protocol dispatch over the active projection (backend selection from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`, per-projection action invocation, failure-mode dispatch).
 
-Status as of v0.4.0: **9 of 10 shipped**, only `migrating-repo-version` pending.
+Catalog status: **10 of 11 shipped**, only `migrating-repo-version` pending.
 
 ## The 5 bounded contexts
 

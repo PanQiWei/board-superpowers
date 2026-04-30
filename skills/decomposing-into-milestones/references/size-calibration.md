@@ -63,7 +63,7 @@ The replacement: count stories. Velocity = stories / iteration. Presumes stories
 - Cycle time histogram or any KPI dashboard.
 - Sprint / iteration boundaries (no time-boxed iterations).
 
-Per `0001-positioning.md` "Non-goals" + memory `feedback_question_human_team_ceremonies_in_ai_context`. board-superpowers tracks **state machine progression** (Backlog → Ready → In Progress → Done) and audit log entries. That is the entire measurement surface.
+The plugin's positioning charter explicitly lists velocity / cycle-time dashboards / sprint boundaries as non-goals (under AI orchestration the throughput / bottleneck shape inverts, and ceremonies that assume human-team cadence stop earning their keep). board-superpowers tracks **state machine progression** (Backlog → Ready → In Progress → Done) and audit log entries. That is the entire measurement surface.
 
 ## AI-cadence reframe (original framing — no canonical source)
 

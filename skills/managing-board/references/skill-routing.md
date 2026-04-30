@@ -1,54 +1,35 @@
 # Skill routing — manager-side intake reference
 
-> **Scope**: this file is the manager-mode reading of
-> [`AGENTS.md`](../../../AGENTS.md) § "How to compose gstack
-> and superpowers". It owns three decisions:
->
-> 1. **Pre-card routing** — at intake, which sibling skill
->    runs? `gstack:/*`, `superpowers:*`, this plugin's #35,
->    or direct card creation?
-> 2. **Manager-locked vs consumer-deferred design** — which
->    design decisions MUST be settled at intake (architect
->    territory) vs which can be left to the Consumer
->    session.
-> 3. **The design-left-to-consumer card-body template** —
->    when a decision IS deferrable, the card-body shape that
->    captures architect's leaning + consumer's authority.
->
-> **Out of scope** — implementation-time routing inside a
-> Consumer session (TDD, debugging, verification chain) is
-> owned by [`consuming-card/SKILL.md`](../../consuming-card/SKILL.md)
-> and that skill's `references/handoff-to-superpowers.md`.
-> This file stops at the moment the card is created.
+## Use this file when
 
-This reference is consumed by:
+You arrive here at intake **Step 4** of [`intake.md`](./intake.md)
+once shape ([`scope-shape-judgment.md`](./scope-shape-judgment.md))
+is decided and spec preconditions
+([`spec-first-checklist.md`](./spec-first-checklist.md)) are clear.
+Three decisions live in this file, applied in order:
 
-- The `intake.md` decision tree (after [`scope-shape-judgment.md`](./scope-shape-judgment.md)
-  decides shape and [`spec-first-checklist.md`](./spec-first-checklist.md)
-  clears spec preconditions).
-- The `managing-board` SKILL body's intake routine when it
-  picks which sibling to invoke.
+1. **Pre-card routing** (Table 1) — pick the sibling skill that
+   runs next: `gstack:/*`, `superpowers:*`, this plugin's
+   `decomposing-into-milestones` (#35), or direct card creation.
+2. **Manager-locked vs consumer-deferred design** (Table 2) —
+   decide which design decisions MUST be settled at intake
+   (architect territory) vs which can be left to the Consumer
+   session.
+3. **Design-left-to-consumer card-body template** (Table 3) —
+   when a decision IS deferrable, paste the template into the
+   card body to capture the architect's leaning + the
+   Consumer's refusal authority.
 
-## Mirror handshake with `AGENTS.md`
+After Table 1 routes (or direct creation triggers), the chosen
+sibling produces output, then intake usually re-enters at
+[`scope-shape-judgment.md`](./scope-shape-judgment.md) Step 2 with
+the sharpened artifact.
 
-[`AGENTS.md`](../../../AGENTS.md) § "How to compose gstack
-and superpowers" is the plugin-maintainer-facing source of
-truth for cross-plugin composition. **This file is the
-manager-mode reading of that section** — it covers the same
-composition rules, but rephrased for an LLM agent doing
-intake decisions rather than a human plugin maintainer
-reading project docs.
-
-The two files MUST stay in sync. The change-impact matrix in
-[`docs/architecture/AGENTS.md`](../../../docs/architecture/AGENTS.md)
-carries a row enforcing this:
-
-> If you change AGENTS.md compose section, also update
-> skill-routing.md AND scope-shape-judgment.md cross-refs to #35.
-
-Updates land same-PR. AGENTS.md gains a 1-paragraph anchor
-pointing here (see § "Anchor to add to AGENTS.md" at the
-bottom of this file).
+**Out of scope** — implementation-time routing inside a Consumer
+session (TDD, debugging, verification chain) is owned by
+[`consuming-card/SKILL.md`](../../consuming-card/SKILL.md) and
+that skill's `references/handoff-to-superpowers.md`. This file
+stops at the moment the card is created.
 
 ## Table 1 — Pre-card routing
 
@@ -64,7 +45,7 @@ escalation priority).
 |---------------|------------------------|-----------------|-----------------|
 | `gstack:/office-hours` | "I have an idea but I'm not sure if it's worth doing", "should we even build this", "is this real demand" | YC-style verdict (build / defer / kill) — written discussion + decision | `docs/plans/<feature>/office-hours.md` (gitignored). If verdict is "build", the discussion seeds the next intake; if "defer" or "kill", PR-less close. |
 | `gstack:/plan-ceo-review` | "rethink the problem", "10-star product", "expand scope", "challenge the premise" | CEO-mode plan critique — scope expansion / hold / reduction notes | `docs/plans/<feature>/ceo-review.md` (gitignored). Updated card body / scope decision. |
-| `gstack:/plan-eng-review` | architecture decision questions: "which adapter shape", "which storage", "schema choice", "data flow" | Architecture lock — diagrams, edge cases, test coverage | ADR (durable, into `docs/architecture/adr/`) OR `docs/plans/<feature>/eng-review.md` (gitignored, becomes spec if durable). |
+| `gstack:/plan-eng-review` | architecture decision questions: "which adapter shape", "which storage", "schema choice", "data flow" | Architecture lock — diagrams, edge cases, test coverage | A durable architecture decision record (the maintainer-side ADR area) OR `docs/plans/<feature>/eng-review.md` (gitignored, becomes spec if durable). |
 | `superpowers:brainstorming` | "let's explore this", "I'm not sure of the design", multi-step requirement that's direction-set but not design-locked | Sharpened requirements + design notes | `docs/plans/<feature>/brainstorm.md` (gitignored). Hands off to #35 (decomposition) or back to intake (single-card direct creation). |
 | `board-superpowers:decomposing-into-milestones` (#35) | [`scope-shape-judgment.md`](./scope-shape-judgment.md) Table 1 routes to "multi-card" or "milestone-grouped" | INVEST-compliant batch of N Ready cards on the board | Cards on the GitHub Project (durable). Optional decomposition-rationale notes in `docs/plans/<feature>/`. |
 | **Direct card creation** ([`intake.md`](./intake.md) § "Direct card creation") | [`scope-shape-judgment.md`](./scope-shape-judgment.md) Table 1 routes to "single card" AND [`spec-first-checklist.md`](./spec-first-checklist.md) preconditions are clear | One Ready card on the GitHub Project | Card on the GitHub Project (durable). |
@@ -127,7 +108,7 @@ This table draws the line.
 | Decision class | Lock at intake? | Why | Example |
 |----------------|-----------------|-----|---------|
 | Cross-card contract (data shape shared between cards, an interface that another card implements against) | **Locked** | Deferring forces the dependent card to wait or to ship against a placeholder; both are wasteful. | The Card body schema (#33 + #44) — every card depends on the schema being settled. |
-| ADR-level decision (architecture trade-off recorded in `docs/architecture/adr/`) | **Locked** | ADRs are immutable once accepted; any decision worth an ADR is worth deciding before implementation, not during. | ADR-0006 (autonomy matrix), ADR-0008 (plugin-to-plugin invocation). |
+| ADR-level decision (an architecture trade-off worth recording as a durable decision record) | **Locked** | ADRs are immutable once accepted; any decision worth an ADR is worth deciding before implementation, not during. | The autonomy classification matrix; the plugin-to-plugin invocation contract. |
 | Schema change (audit_log columns, action_id namespace, autonomy matrix rows, host-local state files) | **Locked** | Schema is shared by every consumer of the schema; mid-flight schema changes break siblings. | Audit log schema rows (#34). Per [`spec-first-checklist.md`](./spec-first-checklist.md) row 3, these have spec-first preconditions; they CANNOT be Consumer-deferred. |
 | Cross-bounded-context scope (the card touches Audit + Bootstrap, or Board + Spec) | **Locked** | Cross-context decisions need the architect's view of *both* contexts; the Consumer is in one context, not two. | #34 (Audit + Spec); #43 (Bootstrap + Audit). |
 | Cross-plugin edge (this plugin's skill invokes a sibling-plugin skill that's not in `SKILLS.md` § "Cross-plugin edges" yet) | **Locked** | Per [`spec-first-checklist.md`](./spec-first-checklist.md) row 2, the SKILLS.md edit is a precondition. | Any new `superpowers:*` or `gstack:/*` invocation. |
@@ -265,7 +246,42 @@ existed. This is the empirical basis for codifying the shape
 as a reusable AC pattern; verification that the Consumer
 honors the template will land when #43's PR opens.
 
-## Anchor present in `AGENTS.md`
+## When this file is wrong
+
+If the intake routine routes to a sibling skill that produces
+no useful output (e.g., `gstack:/plan-eng-review` returns
+"this isn't an architecture question, it's a direction
+question"), that's the signal that this file's trigger column
+mis-categorizes the requirement type. Revise the row in the
+same PR that observes the mis-routing.
+
+---
+
+## Maintainer-only appendix
+
+This appendix is plugin-maintainer doctrine — the cross-file
+sync contract that keeps this reference and `AGENTS.md` from
+drifting. Skip this appendix at intake; it does not affect the
+agent's routing decision.
+
+### Mirror handshake with `AGENTS.md`
+
+[`AGENTS.md`](../../../AGENTS.md) § "How to compose gstack and
+superpowers" is the plugin-maintainer-facing source of truth
+for cross-plugin composition. **This file is the manager-mode
+reading of that section** — it covers the same composition
+rules, but rephrased for an LLM agent doing intake decisions
+rather than a human plugin maintainer reading project docs.
+
+The two files MUST stay in sync. The maintainer's
+change-impact matrix carries a row enforcing this:
+
+> If you change AGENTS.md compose section, also update
+> skill-routing.md AND scope-shape-judgment.md cross-refs to #35.
+
+Updates land same-PR.
+
+### Anchor present in `AGENTS.md`
 
 `AGENTS.md` § "How to compose gstack and superpowers" carries
 a 1-paragraph anchor pointing back to this file (injected
@@ -275,23 +291,14 @@ anchor's canonical text is:
 
 > **Manager-mode mirror**: this section's composition rules
 > are mirrored for the Producer's intake routine in
-> [`skills/managing-board/references/skill-routing.md`](../../../skills/managing-board/references/skill-routing.md).
-> The two files MUST stay in sync — see the
-> change-impact-matrix row "AGENTS.md compose section ↔
-> skill-routing.md / scope-shape-judgment.md" in
-> [`docs/architecture/AGENTS.md`](../../../docs/architecture/AGENTS.md).
-> If you edit one without the other, the PR is incomplete.
+> `skills/managing-board/references/skill-routing.md`.
+> The two files MUST stay in sync — the maintainer's
+> change-impact matrix carries a row "AGENTS.md compose
+> section ↔ skill-routing.md / scope-shape-judgment.md"
+> enforcing this. If you edit one without the other, the PR
+> is incomplete.
 
 If `AGENTS.md` ever drifts from this canonical text (anchor
 missing, wording diverged), the change-impact-matrix row
 referenced in the quote is the recovery path — re-injecting
 this anchor is a same-PR contract obligation.
-
-## When this file is wrong
-
-If the intake routine routes to a sibling skill that produces
-no useful output (e.g., `gstack:/plan-eng-review` returns
-"this isn't an architecture question, it's a direction
-question"), that's the signal that this file's trigger column
-mis-categorizes the requirement type. Revise the row in the
-same PR that observes the mis-routing.

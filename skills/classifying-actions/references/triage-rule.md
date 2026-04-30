@@ -10,7 +10,7 @@ escalate to R. If the default is already R, no change.
    architectural decision recorded in an ADR) → R
 2. **Modifies a source-of-truth file**? (CLAUDE.md, AGENTS.md,
    `.board-superpowers/config.yml`, `.board-superpowers/config.local.yml`,
-   any spec under `docs/architecture/`) → R
+   any maintainer-side spec / ADR document) → R
 3. **Interrupts or risks losing in-flight work**? (transitions a card to
    Blocked while a Consumer holds it; closes a card with an open claim
    branch; cancels an active claim that has uncommitted work) → R

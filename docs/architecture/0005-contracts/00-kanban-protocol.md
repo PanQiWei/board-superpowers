@@ -274,26 +274,25 @@ deleted cards is backend-defined.
 Every Consumer claim branch has the form:
 
 ```
-claim/<key-slug>-<title-slug>
+claim/<kanban-id>-<key-slug>-<title-slug>
 ```
 
 Where:
 
-- `<key-slug>` = `slugify(Card.key)`
-  - Lowercase, alphanumeric + hyphens.
+- `<kanban-id>` = the registered local id of the active kanban
+  (read from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`;
+  for repos with one active kanban, the id is typically `primary`).
+- `<key-slug>` = branch-path encoding of canonical `Card.key`: lowercase, then rewrite `-` to `_` (the segment delimiter is `-`, so hyphens inside `Card.key` would collide and are encoded as `_`; the canonical key on the board keeps its hyphen form).
   - GitHub: `42` → `42`.
-  - Linear: `ENG-42` → `eng-42`.
-  - Jira: `PROJ-42` → `proj-42`.
-- `<title-slug>` = `slugify(Card.title)` truncated to ≤40 chars.
+  - Linear: `ENG-42` → `eng_42`.
+  - Jira: `PROJ-42` → `proj_42`.
+- `<title-slug>` = `slugify(Card.title)` truncated to ≤64 chars at the last hyphen boundary (the 40-char target is the deterministic truncation point; 64 is the hard ceiling).
 
-The full slugifier rules and edge cases live in
+The full slugifier rules, kanban-id allowlist disambiguation,
+and per-segment length budgets live in
 [`board-canon`](../../../skills/board-canon/SKILL.md) § Branch
-naming. board-canon will become the SPOT for branch naming once
-its v0.5.0 patch lands (board-canon currently still hard-codes
-the GitHub-shaped `claim/<N>-<slug>` form; the patch generalizes
-to `claim/<key-slug>-<title-slug>`). Until that patch ships,
-this protocol document is the authoritative cross-backend form
-and board-canon's prose is read in light of this generalization.
+naming + `references/branch-naming.md`. board-canon is the SPOT
+for branch naming as of v0.5.0.
 
 **Why branch naming is protocol-level**: the claim primitive
 (ADR-0002) is git-layer atomic. Branch names are observable by
@@ -302,12 +301,17 @@ machines, without the board's involvement. Naming convention IS
 the inter-session communication channel.
 
 **Migration note**: prior to v0.5.0, branch naming was
-`claim/<N>-<slug>` where N is GitHub issue number — implicitly
-GitHub-shaped. The v0.5.0 abstraction generalizes N to
-`<key-slug>` derived from `Card.key`. ADR-0001 and ADR-0002 carry
-this patch in their § Decision sections; existing GitHub-Project-
-v2 claim branches (e.g., `claim/42-fix-bug`) remain valid because
-GitHub `<key-slug>` of `42` is `42`.
+`claim/<key-slug>-<title-slug>` (two-segment, with `<key-slug>` =
+GitHub issue number for v0.4.x repos — implicitly GitHub-shaped).
+The v0.5.0 form prepends `<kanban-id>` to disambiguate
+multi-kanban repos. ADR-0001 / ADR-0002 / ADR-0026 carry this
+patch in their § Decision sections; existing v0.4.x claim
+branches (e.g., `claim/42-fix-bug`) remain valid via the
+parser's segment-count fallback (two segments → legacy form;
+three segments + kanban-id allowlist match → canonical form).
+See `skills/board-canon/references/branch-naming.md` §
+"Legacy two-segment form — parser-accepted, never emitted"
+for the parser's accept-both contract.
 
 ---
 
@@ -813,6 +817,186 @@ projection layer.
   surfaces a hard error per the backend reference.
 
 **Idempotency.** Not idempotent (each call is a new comment).
+
+---
+
+## Setup capabilities
+
+The eight protocol actions above are **runtime** contracts: every
+agentic flow that reads or mutates the board issues one of those
+eight named actions, on every invocation, for the lifetime of the
+repo. Setup capabilities are a separate projection-authoring
+surface, layered on the same projection but **not consumed at
+runtime**. They cover the **one-time board-preparation
+operations** every projection needs the architect's bootstrap
+flow to perform — creating the canonical label set, validating
+that the backend's status taxonomy folds cleanly to the six
+canonical states, provisioning credentials, and similar — and
+nothing else.
+
+The split is load-bearing: runtime actions are stable across the
+plugin's lifetime once a backend ships; setup capabilities are
+specific to the backend's first-time preparation. Conflating them
+would force the runtime SKILL to carry bootstrap logic and would
+force the bootstrap stage executors to know the runtime action
+table.
+
+### Capability declaration
+
+Each Kanban Protocol projection declares the setup capabilities
+it supports as a list of free-form lowercase-kebab-case strings
+in its reference file under
+`skills/operating-kanban/references/<projection-id>.md` § "Setup
+capabilities". The strings are **registry-internal** — no
+external API exposes them, no end user types them, and renames
+are cheap until a second projection ships.
+
+The v0.5.0 GitHub Project v2 projection declares two
+capabilities. Each capability entry in the projection's reference
+file follows this shape:
+
+```yaml
+setup_capabilities:
+  - id: ensure-labels
+    name: "Ensure canonical labels exist"
+    applicable_when:
+      backend: github-project-v2
+    dispatch_form: A   # Form A = bash CLI (gh)
+  - id: validate-status-field
+    name: "Validate Status field has six canonical options"
+    applicable_when:
+      backend: github-project-v2
+    dispatch_form: A
+```
+
+Field semantics:
+
+- `id` — registry-internal identifier, lowercase-kebab-case;
+  matched by the bootstrap stage's
+  `applicable_when: {kanban_projection_capability: <id>}` predicate.
+- `name` — short human-readable label surfaced when a setup stage
+  routes through this capability.
+- `applicable_when` — the projection-side predicate (typically
+  `{backend: <projection-id>}`); the predicate evaluator reads
+  this against the active projection from `settings.yml § modules.m10_kanban`.
+- `dispatch_form` — `A` (bash CLI), `B` (plugin-shipped MCP), or
+  `C` (REST/GraphQL); per § "Implementation surface (backend
+  projections)" below. The bootstrap stage executor reads this to
+  dispatch correctly.
+
+Note: the `applicable_when` field name appears in two roles in
+the spec. Here in the projection-side capability registry it
+carries the `backend:` discriminator (this capability is exposed
+by these projections). In the setup-stages registry (per
+[`../adr/0027-m3-dispatch-via-kanban-protocol-projection.md`](../adr/0027-m3-dispatch-via-kanban-protocol-projection.md)
+§ 4), the same field name carries
+`kanban_projection_capability:` (this stage runs only when the
+active projection exposes this capability). The two roles
+compose: stage-side
+`applicable_when: { kanban_projection_capability: <id> }` is
+satisfied iff the active projection's registry includes a
+capability whose `id` matches `<id>`.
+
+A future Linear projection's `claim_card` capability would look
+like (illustrative; lands when Linear projection ships):
+
+```yaml
+setup_capabilities:
+  - id: provision-mcp-credentials
+    name: "Provision Linear MCP credentials"
+    applicable_when:
+      backend: linear
+    dispatch_form: B   # Form B = plugin-shipped MCP server
+```
+
+Future Linear / Jira projections add their own capability
+strings (or omit ones that don't apply); per
+[`../adr/0027-m3-dispatch-via-kanban-protocol-projection.md`](../adr/0027-m3-dispatch-via-kanban-protocol-projection.md)
+§ Decision 2, an architect repo whose active projection does
+**not** declare a given capability transparently skips the
+corresponding setup stage rather than failing.
+
+### What every capability declaration MUST specify
+
+Each declared capability gets one section in the projection's
+reference file under § "Setup capabilities" → `<capability-name>`.
+The section MUST cover:
+
+- **Plain-language description** — one paragraph stating the
+  outcome the capability achieves on the backend (e.g.,
+  "ensures the canonical `type:*` and `size:*` labels exist on
+  the GitHub repo, creating any that are missing").
+- **Invocation form** — Form A (bash CLI), Form B
+  (plugin-shipped MCP server), or Form C (REST/GraphQL), per
+  the three-form vocabulary in § "Implementation surface
+  (backend projections)" below. Bootstrap stage executors read
+  the form to dispatch correctly.
+- **Idempotency contract** — what happens when the capability
+  runs against an already-prepared backend (the canonical
+  expectation: idempotent no-op; deviations explicitly called
+  out).
+- **Failure modes** — what the capability surfaces when it
+  cannot complete (insufficient permissions, missing prerequisite
+  field, unsupported native taxonomy, etc.) and whether the
+  failure is recoverable.
+- **Rollback semantics** — whether the capability is reversible,
+  and if not, what the architect's recovery path looks like.
+
+The declaration set across all of a projection's reference-file
+sections under § "Setup capabilities" forms that projection's
+**capability set** — the registry the bootstrap stage's predicate
+evaluator checks per ADR-0027 § Decision 2.
+
+### How bootstrap stage predicates consume the registry
+
+When a bootstrap stage declares
+`applicable_when: {kanban_projection_capability: <capability-name>}`,
+its predicate evaluator reads the active projection's identifier
+from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`,
+loads the projection's reference file, and checks whether
+`<capability-name>` is in the declared capability set. Match →
+stage runs. Miss → stage returns `not-applicable` and the
+bootstrap flow continues.
+
+This indirection is what keeps the bootstrap layer
+projection-agnostic: bootstrap stages declare what capability
+they need, projections declare what capabilities they support,
+and the predicate evaluator does the matching. Adding a new
+projection to the plugin (Linear, Jira, future Form C REST) is a
+single-file edit — drop a new reference file under
+`skills/operating-kanban/references/`, declare the supported
+capability set, and every bootstrap stage either runs or skips
+accordingly without source edits anywhere else.
+
+### Why "setup" is not a runtime action
+
+A capability is **not** a ninth protocol action and never
+appears in the Action contracts catalog above. The split exists
+because:
+
+- **Runtime actions are stable** — the eight names and their
+  semantic contracts are versioned modulo superseding ADR
+  (per § Versioning + immutability). Setup capabilities are
+  registry-internal vocabulary owned by the projection layer,
+  with no equivalent stability commitment.
+- **Runtime actions are agent-issued** — agents reason in the
+  protocol's eight names every time they touch the board.
+  Setup capabilities are issued exclusively by the bootstrap
+  stage executor, once per repo per first-time setup, with no
+  agent involvement.
+- **Runtime actions are uniform across projections** — every
+  projection MUST implement L1 actions, MUST implement L2 if
+  it supports the Consumer flow. Setup capabilities are
+  per-projection: a Linear-via-MCP projection that surfaces
+  Linear's project-default-state inheritance may declare zero
+  or one setup capabilities; the GitHub Form A projection
+  declares two; a future projection may declare more.
+
+If a future bootstrap need turns out to be uniform across **all**
+projections, that signals the operation belongs in a runtime
+action (or a new infrastructure surface), not in the per-projection
+setup-capability registry. Promote it via ADR; do not fork it
+into every projection's reference file.
 
 ---
 

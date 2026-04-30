@@ -9,9 +9,9 @@ the helper's marker-scan does not match against them; see
 form, and `scripts/lib/common.sh:bsp_inject_routing_block` for the
 matcher).
 
-**Injection contract** (per
-`docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md`
-§ 1.5.2 step 4 + `scripts/lib/common.sh:bsp_inject_routing_block`):
+**Injection contract** (the routing-block injection step of the
+per-repo bootstrap, implemented in
+`scripts/lib/common.sh:bsp_inject_routing_block`):
 
 1. The injection helper reads THIS file and locates the fence
    sentinels — `<!-- routing-block:start -->` and
@@ -51,7 +51,7 @@ the fence.
 <!-- routing-block:start -->
 ## board-superpowers session routing
 
-This project uses the `board-superpowers` plugin (v0.2.0).
+This project uses the `board-superpowers` plugin (v0.5.0).
 Any Claude Code session in this project plays one of two roles:
 
 - **Board Consumer** — if the first message contains `[board-card:#N]`,
@@ -160,9 +160,10 @@ When updating the routing block content above, remember:
   `<!-- /board-superpowers:routing -->` between the fence sentinels —
   the helper's sanity check rejects nested target markers.
 - The hash recorded in user repos' `state.yml:routing_blocks[]`
-  changes whenever the bytes between the fences change. F-B4 tamper
-  detection treats a hash mismatch as plausible user edit; document
-  the change in the v0.x release notes.
+  changes whenever the bytes between the fences change. The
+  per-repo version-transition migration routine's tamper detection
+  treats a hash mismatch as plausible user edit; document the
+  change in the v0.x release notes.
 - The block intentionally opens with a `## board-superpowers session
   routing` H2 heading so consumer repos' AGENTS.md / CLAUDE.md get a
   visible section title where the block lands. Removing the heading
@@ -172,7 +173,5 @@ When updating the routing block content above, remember:
   them silently — `routing_blocks[]` for that target is omitted. This
   is what lets the "AGENTS.md is the SoT, CLAUDE.md is `@AGENTS.md`"
   pattern coexist with dual-file injection. See
-  `scripts/lib/common.sh:bsp_inject_routing_block` (Stub-redirect
-  early-out section) and
-  `docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md`
-  § 1.5.2 step 4 "Stub-redirect target".
+  `scripts/lib/common.sh:bsp_inject_routing_block` (the Stub-redirect
+  early-out section) for the precise matcher rules.

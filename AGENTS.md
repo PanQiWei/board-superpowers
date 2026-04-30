@@ -6,36 +6,37 @@ user-facing overview.
 
 @SKILLS.md
 
-## Project status — v1 catalog 8/10 shipped
+## Project status — v1 catalog 10/11 shipped
 
 > **The plugin is loadable at runtime.** `hooks/`,
 > `scripts/`, and `skills/` directories exist at the repo root.
-> `SessionStart` fires. The 8 v1-catalog skills auto-match.
+> `SessionStart` fires. The 10 v1-catalog skills auto-match.
 > The plugin dogfoods itself for any new skill / script / hook.
 
-**v1 catalog = 8 of 10 skills shipped** (10 once `decomposing-into-milestones` + `migrating-repo-version` ship), per [`SKILLS.md`](./SKILLS.md):
+**v1 catalog = 10 of 11 skills shipped** (11 once `migrating-repo-version` ships), per [`SKILLS.md`](./SKILLS.md):
 
 - **Shipped**: `using-board-superpowers` (entry),
-  `managing-board` + `consuming-card` + `bootstrapping-repo`
-  (molecular), `board-canon` + `enforcing-pr-contract` +
-  **`classifying-actions` + `auditing-actions`** (atomic).
-- **Roadmap (pending shipment)**: `decomposing-into-milestones`,
-  `migrating-repo-version`. Reasons live in the SKILLS.md table.
+  `managing-board` + `consuming-card` + `bootstrapping-repo` +
+  `decomposing-into-milestones` (molecular), `board-canon` +
+  `enforcing-pr-contract` + `classifying-actions` +
+  `auditing-actions` + `operating-kanban` (atomic).
+- **Roadmap (pending shipment)**: `migrating-repo-version`.
+  Reason lives in the SKILLS.md table.
 
 **Remaining degraded behavior**:
 
 - **No `migrating-repo-version` skill yet** — current plugin
-  version is `v0.3.0`; the schema-aware migration runner lands
-  starting from the v0.3.x → v0.4.x transition. The hook never
-  injects `INVOKE: migrating-repo-version` in v0.3.0.
+  version is `v0.5.0`; the schema-aware migration runner lands
+  starting from the v0.5.x → v0.6.x transition. The hook never
+  injects `INVOKE: migrating-repo-version` in v0.5.0.
 
 The single source of truth for v1 design remains
 [`docs/architecture/`](./docs/architecture/) — read
 `0001-positioning.md` first; the
 [`docs/architecture/README.md`](./docs/architecture/README.md)
-index lists everything else in canonical order. The 8 shipped
-skills are the operating substrate; the 2 deferred skills are
-roadmap items, not gates on day-to-day work.
+index lists everything else in canonical order. The 10 shipped
+skills are the operating substrate; the 1 deferred skill is a
+roadmap item, not a gate on day-to-day work.
 
 ## Subdirectory contracts
 
@@ -91,7 +92,7 @@ the artifacts the methodology has approved.
 | [`FEATURE_DESIGN_METHODOLOGY.md`](./FEATURE_DESIGN_METHODOLOGY.md) (~1000 lines) | analytical methodology — three-stage derivation pipeline (Stage 1 two-list user-journey enumeration; Stage 2 five requirement-layer dimensions J1–J5 = trigger-actor / trigger-carrier / autonomy class / D-META-1 strength / result destination; Stage 3 ROI function = (capability gap × frequency × failure cost) / (maintenance cost + routing complexity) producing three SKILL-form archetypes A/B/C); long-term plugin health signals (falsification test for SKILL existence, base-model-evolution-driven pruning); anti-patterns. Read **before** designing a new surface / specific role, **before** proposing a new SKILL outside an existing surface, when an existing SKILL feels mis-sized, and after major base-model upgrades. The other companion docs presuppose the methodology has produced a SKILL candidate. |
 | [`SKILL_DEVELOPMENT.md`](./SKILL_DEVELOPMENT.md) (~1290 lines) | skill authoring — frontmatter, body skeletons, anti-patterns, testing, `.skill-meta.yaml` schema. |
 | [`SETUP_STAGES_DEVELOPMENT.md`](./SETUP_STAGES_DEVELOPMENT.md) (~700 lines) | setup-stages system — `scripts/stages-registry.yml`, `scripts/stages_lib/`, `scripts/stages-registry.schema.json`, `hooks/session-start.sh` lifecycle diff, `skills/bootstrapping-repo/`, the four partitioned `settings.yml` files. Read before adding/editing/removing a stage, before changing the 5-callable contract, before introducing a new `applicable_when` form, or before any spec change touching § 1.5 (Bootstrap surface redesign). The legacy filename `BOOTSTRAP_STAGES_DEVELOPMENT.md` is a one-line shim that redirects here. |
-| [`BOARD_DEVELOPMENT.md`](./BOARD_DEVELOPMENT.md) (~600 lines) | board / card / Kanban Protocol layer — `docs/architecture/0005-contracts/00-kanban-protocol.md`, ADR-0025 + ADR-0026, `skills/board-canon/`, the planned `skills/operating-kanban/`, `scripts/claim-card.sh`, the eight protocol actions, six canonical statuses, multi-kanban semantics, flat-Card hierarchy + display-only metadata, AI-native concept hygiene anchors. Read before editing the Kanban Protocol document, before authoring/changing `board-canon` or `operating-kanban`, before adding a new backend projection (Linear / Jira / others), or before touching multi-kanban schema / kanban lifecycle / branch naming / claim primitive. § 7 "Setup-stages bridge" documents how the board layer meets `SETUP_STAGES_DEVELOPMENT.md`'s M10 module. |
+| [`BOARD_DEVELOPMENT.md`](./BOARD_DEVELOPMENT.md) (~600 lines) | board / card / Kanban Protocol layer — `docs/architecture/0005-contracts/00-kanban-protocol.md`, ADR-0025 + ADR-0026, `skills/board-canon/`, the shipped `skills/operating-kanban/` (v0.5.0), `scripts/claim-card.sh`, the eight protocol actions, six canonical statuses, multi-kanban semantics, flat-Card hierarchy + display-only metadata, AI-native concept hygiene anchors. Read before editing the Kanban Protocol document, before authoring/changing `board-canon` or `operating-kanban`, before adding a new backend projection (Linear / Jira / others), or before touching multi-kanban schema / kanban lifecycle / branch naming / claim primitive. § 7 "Setup-stages bridge" documents how the board layer meets `SETUP_STAGES_DEVELOPMENT.md`'s M10 module. |
 
 **Do not "fix" these references back to `@`-prefix** — that
 change would force-load all six docs into every session and
@@ -167,7 +168,7 @@ it does four things:
    a local jsonl trace and the entry's `mode` field records the
    degradation cause (see spec 06 § "jsonl fallback mode-field").
 
-### Skills system — the v1 catalog (10 skills, 3 layers)
+### Skills system — the v1 catalog (11 skills, 3 layers)
 
 The `skills/` directory **is** the agent's action system. It is
 designed as a graph of nodes (skills) and edges (cross-skill
@@ -189,13 +190,15 @@ Molecular layer (5) — business workflows, state-machine-shaped
   bootstrapping-repo          F-B1 + F-B2 (first-time setup)
   migrating-repo-version      F-B3 + F-B4 (upgrade migration)
 
-Atomic layer (4) — single-purpose primitives, reflexive (no upward calls)
+Atomic layer (5) — single-purpose primitives, reflexive (no upward calls)
 ─────────────────────────────────────────────────────────────────
   board-canon                 state machine + Card schema + branch
                               naming + WIP rules (read-only contract)
   enforcing-pr-contract       PR three-section injection + validation
   classifying-actions         D-AUTONOMY-1 matrix + triage + overrides
   auditing-actions            audit log schema + two-entry rule + BYO DB
+  operating-kanban            8-action protocol dispatch over the active
+                              projection (backend selection + Form A/B/C)
 ```
 
 Dependency direction is **strictly downward**: Entry → Molecular
@@ -224,8 +227,8 @@ REASON: First time using board-superpowers on this (host, repo)
 
 ```
 INVOKE: migrating-repo-version
-REASON: Plugin version v0.3.0 detected; state.yml records
-        last_seen_version_in_repo=v0.2.0.
+REASON: Plugin version v0.5.0 detected; state.yml records
+        last_seen_version_in_repo=v0.4.x.
 ```
 
 The marker fast-paths the entry skill's routing decision. The
@@ -527,7 +530,7 @@ cross-cutting checks that span multiple subdirectories.
 <!-- board-superpowers:routing -->
 ## board-superpowers session routing
 
-This project uses the `board-superpowers` plugin (v0.3.0).
+This project uses the `board-superpowers` plugin (v0.5.0).
 Any Claude Code session in this project plays one of two roles:
 
 - **Board Consumer** — if the first message contains `[board-card:#N]`,

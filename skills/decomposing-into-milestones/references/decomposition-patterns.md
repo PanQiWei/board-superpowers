@@ -1,5 +1,17 @@
 # Decomposition patterns — Cohn SPIDR + business catalog
 
+## Use this file when
+
+You arrive here while running the decomposition step and the
+requirement looks too big for one card. You need to choose a
+slicing axis: **S**pike (research first), **P**aths (alternative
+user paths), **I**nterfaces (per-surface), **D**ata (restrict
+formats), or **R**ules (defer business rules). Each SPIDR letter
+below has a "Use when / Refuse when" pair plus 2-3 worked
+examples; pick the axis whose triggers fire and whose refusals
+do not. The "Five splitting mistakes" section after SPIDR lists
+the canonical refusals applied during the vertical-slicing gate.
+
 > **Sources**:
 > - Cohn, "Five Simple But Powerful Ways to Split User Stories" (SPIDR) — <https://www.mountaingoatsoftware.com/blog/five-simple-but-powerful-ways-to-split-user-stories>
 > - Cohn, "Five Story-Splitting Mistakes and How to Stop Making Them" — <https://www.mountaingoatsoftware.com/blog/five-story-splitting-mistakes-and-how-to-stop-making-them>
@@ -63,7 +75,7 @@ Split by browser / hardware / progressive UI fidelity. Each interface variant is
 Split by restricting supported data formats / value ranges. Each data variant is a separate card.
 
 **Examples**:
-- "Accept MP4 only" → defer "accept WebM, AVI, MKV, MOV..." to follow-up cards.
+- "Accept one video container format only (e.g., MPEG-4)" → defer "accept WebM, AVI, MKV, MOV..." to follow-up cards.
 - "Accept 5-digit US ZIP only" → defer "accept Canadian / UK / international postcodes".
 - "Accept ASCII characters only" → defer "accept Unicode" / "accept emoji".
 

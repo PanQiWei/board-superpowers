@@ -1,23 +1,23 @@
 ---
 name: board-canon
-description: Use whenever any board operation in board-superpowers needs the canonical contract — the 6-state machine, the Card body schema, the branch-naming convention (claim/<N>-<slug>), or the WIP counting formula. This is the read-only source of truth that every other board-superpowers skill consults before transitioning a card, validating a claim, or checking WIP. Use it even when the user doesn't say "schema" or "state machine" — any time card, branch, Status, or WIP comes up, this is what defines the rules.
+description: Use whenever any board operation in board-superpowers needs the canonical contract — the 6-state machine, the Card body schema, the branch-naming convention (claim/<kanban-id>-<key-slug>-<title-slug>), or the WIP counting formula. This is the read-only source of truth that every other board-superpowers skill consults before transitioning a card, validating a claim, or checking WIP. Use it even when the user doesn't say "schema" or "state machine" — any time card, branch, Status, or WIP comes up, this is what defines the rules.
 when_to_use: Use whenever a card transition, claim push, branch name, WIP cap check, or PR-to-card linkage is being reasoned about. Also when validating that a manual edit to the board respects the contract.
 user-invocable: false
 ---
 
 # board-canon
 
-This skill is the schema authority for the board-superpowers plugin. It answers "what is the contract" — it does not perform actions itself. Other skills consult it before mutating the board.
+Consult this skill before any card transition, claim push, branch name, or WIP check. It answers "what is the contract" — it does not perform actions itself. Read the relevant § below to settle the rule, then return to the calling skill to act.
 
-## Quick reference
+## How to apply this skill
 
-| Question | Where |
-|----------|-------|
-| What states does a card pass through? | § State machine (below) + `references/state-machine.md` |
-| What does a Card body look like? | § Card body schema (below) + `references/card-body-schema.md` |
-| How is a claim signaled? | § Claim protocol (below) + `references/claim-protocol.md` |
-| How is WIP counted? | § WIP counting (below) + `references/wip-counting.md` |
-| What's the branch name format? | § Branch naming (below) + `references/branch-naming.md` |
+| What you need to do | Look up here |
+|---------------------|--------------|
+| Validate a card transition (e.g., Backlog → Ready) | § State machine + `references/state-machine.md` |
+| Resolve a claim conflict or release a stale claim | § Claim protocol + `references/claim-protocol.md` |
+| Generate a claim branch name from a card | § Branch naming + `references/branch-naming.md` |
+| Compute a Consumer's WIP count vs cap | § WIP counting + `references/wip-counting.md` |
+| Validate a card body's section shape | § Card body schema + `references/card-body-schema.md` |
 
 ## State machine
 
@@ -36,10 +36,10 @@ Legal transitions:
 | From | To | Trigger |
 |------|-----|--------|
 | Backlog | Ready | Card body has all 5 mandatory sections + Acceptance criteria pass INVEST (Independent / Negotiable / Valuable / Estimable / Small / Testable) + an Estimate is set + no hard `depends-on` is still in Backlog or Ready |
-| Ready | In Progress | A Consumer claims the card by pushing a `claim/<N>-<slug>` branch (per § Claim protocol). Consumer's WIP count + 1 must not exceed the cap; no other Consumer may already hold a claim branch on this card |
+| Ready | In Progress | A Consumer claims the card by pushing a `claim/<kanban-id>-<key-slug>-<title-slug>` branch (per § Claim protocol). Consumer's WIP count + 1 must not exceed the cap; no other Consumer may already hold a claim branch on this card |
 | In Progress | Blocked | An external dependency is unresolved. The blocker MUST be named in a card comment; "I haven't started yet" is not a blocker |
 | Blocked | In Progress | The named blocker is resolved |
-| In Progress | In Review | The Consumer opens a PR from `claim/<N>-...` whose body passes the three-section PR contract (see the `enforcing-pr-contract` skill) |
+| In Progress | In Review | The Consumer opens a PR from the card's claim branch whose body passes the three-section PR contract (see the `enforcing-pr-contract` skill) |
 | In Review | In Progress | Reviewer requests changes (rework loop). The Consumer addresses comments on the same claim branch, NOT a new branch |
 | In Review | Done | The PR is merged (NOT closed without merge); no outstanding "request changes" review remains |
 
@@ -92,6 +92,8 @@ Every Card body MUST have this structure. Sections appear in this order. The Pro
 
 The 5 visible sections (Goal / Acceptance criteria / Out of scope / Dependencies / Notes) are MANDATORY. An optional 6th section, `## Execution Hints`, may appear before `## Notes` for Producer-to-Consumer signals (recommended skill, known gotcha, conditional-gate routing tags). The thin-pointer block at the top and the bottom marker are auto-generated by tooling — hand edits to the bottom marker are explicitly rejected.
 
+When a Card is read from the backend, the projection may also surface read-only display metadata (`display_parent`, `display_children_count`, `display_hierarchy_path`) — these are agent-readable for context only and never participate in state, claim, WIP, or PR-linkage decisions. See `references/card-body-schema.md` § "Display-only metadata" for the field contract and absence semantics.
+
 Two bottom-region marker pairs are reserved (machine-managed):
 
 - `<!-- board-superpowers:creator-trace -->` — platform + session id of the creating session (per card #44; new cards only — see `references/card-body-schema.md` § "Creator-trace marker").
@@ -108,19 +110,19 @@ hand or by decomposition tooling.
 
 ## Claim protocol
 
-A Consumer claims a card by pushing an empty branch named `claim/<N>-<slug>` to origin. **The branch push is the claim signal** — the board's Status field flip is a downstream effect, not the source of truth.
+A Consumer claims a card by pushing an empty branch named per § Branch naming below to origin. **The branch push is the claim signal** — the board's Status field flip is a downstream effect, not the source of truth.
 
 Why a branch push, not a Status edit:
 
-1. **Atomic + audit-friendly**: a git push is logged in `git reflog` + the GitHub event stream; a Status edit alone is harder to forensically trace later.
+1. **Atomic + audit-friendly**: a git push is logged in `git reflog` + the backend's event stream; a Status edit alone is harder to forensically trace later.
 2. **Conflict-detectable**: two Consumers attempting to claim the same card hit a non-fast-forward push rejection (one wins; the loser sees the rejection).
-3. **Cheap to undo**: `git push origin --delete claim/N-slug` releases the claim cleanly.
+3. **Cheap to undo**: `git push origin --delete <claim-branch>` releases the claim cleanly.
 
 The transactional write order (performed by `scripts/claim-card.sh`):
 
-1. Set the Status field → "In Progress" (via `gh project item-edit`).
-2. Create a local worktree at `$HOME/.config/superpowers/worktrees/<repo>/claim/<N>-<slug>` (override base path with `BOARD_SP_WORKTREE_DIR`).
-3. Create branch `claim/<N>-<slug>` from `origin/main` inside the worktree.
+1. Set the Status field → "In Progress" (via the active backend's projection).
+2. Create a local worktree at `$HOME/.config/superpowers/worktrees/<repo>/<claim-branch>` (override base path with `BOARD_SP_WORKTREE_DIR`).
+3. Create the claim branch (named per § Branch naming) from `origin/main` inside the worktree.
 4. Push the branch to origin so the claim is publicly visible.
 
 If step 4 fails, steps 1-3 are NOT rolled back automatically — the Consumer must explicitly surface the partial state to the architect rather than silently retry.
@@ -146,25 +148,28 @@ The default cap is 5 per Consumer (per spec). Each architect overrides per-repo 
 
 ## Branch naming
 
-Format: `claim/<N>-<slug>`
+Canonical format: `claim/<kanban-id>-<key-slug>-<title-slug>`
 
 Where:
-- `<N>` is the card's GitHub issue number (no `#` prefix)
-- `<slug>` is the card title slugified by `bsp_slugify` (defined in `scripts/lib/common.sh`): lowercase, alphanumeric + hyphens, max 40 characters
+- `<kanban-id>` is the local id of the active kanban this card belongs to (read from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`). For repos with one active kanban, the id is typically `primary`.
+- `<key-slug>` is `slugify(Card.key)` — `Card.key` is the backend's display-stable opaque card identifier (GitHub Project v2: the issue number `42`; Linear: `eng-42`; Jira: `proj-42`). The slugifier (`bsp_slugify` in `scripts/lib/common.sh`) lowercases and reduces to alphanumeric + hyphens.
+- `<title-slug>` is the card title slugified by the same rules: lowercase, alphanumeric + hyphens, max 40 characters.
 
 Examples:
 
-| Card title | Branch |
-|------------|--------|
-| `Implement board-canon SKILL.md` | `claim/12-implement-board-canon-skill-md` |
-| `Fix issue with WIP counter (race)` | `claim/47-fix-issue-with-wip-counter-race` |
-| `[urgent] add audit log fallback` | `claim/103-urgent-add-audit-log-fallback` |
+| Active kanban | Card key | Card title | Branch |
+|---------------|----------|------------|--------|
+| `primary` (GitHub Project v2) | `12` | `Implement board-canon SKILL.md` | `claim/primary-12-implement-board-canon-skill-md` |
+| `primary` (GitHub Project v2) | `47` | `Fix issue with WIP counter (race)` | `claim/primary-47-fix-issue-with-wip-counter-race` |
+| `legal` (future Jira projection) | `comp-7` | `Audit log retention review` | `claim/legal-comp-7-audit-log-retention-review` |
 
 Banned characters in branch names (replaced with hyphens by the slugifier; runs collapsed): spaces, `/`, `:`, `?`, `[`, `]`, `^`, `~`, `\`, `*`, control characters.
 
-The same card uses exactly **one** `claim/N-slug` branch across its lifetime, including rework. Push new commits to the same branch on a "request changes" review — do NOT create `claim/N-slug-v2`.
+The same card uses exactly **one** claim branch across its lifetime, including rework. Push new commits to the same branch on a "request changes" review — do NOT create a `-v2` suffixed variant.
 
-`references/branch-naming.md` documents the slugifier edge cases and the rare exception flow for materially-renamed cards.
+A two-segment legacy form exists on repos authored under earlier plugin versions; the parser accepts both, and only the canonical three-segment form is emitted for new claims. See `references/branch-naming.md` § "Legacy two-segment form" for the parser contract and migration path.
+
+`references/branch-naming.md` documents the slugifier edge cases, the legacy-form parser contract, and the rare exception flow for materially-renamed cards.
 
 ## What this skill does NOT cover
 

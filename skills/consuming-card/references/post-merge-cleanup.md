@@ -25,8 +25,9 @@ These steps run for every successful card delivery (A-class).
 3. **Local cleanup** —
    ```bash
    git worktree remove \
-     "$HOME/.config/superpowers/worktrees/<repo>/claim/<N>-<slug>"
-   git branch -d claim/<N>-<slug>   # safe-delete; remote already gone
+     "$HOME/.config/superpowers/worktrees/<repo>/claim/<kanban-id>-<key-slug>-<title-slug>"
+   git branch -d claim/<kanban-id>-<key-slug>-<title-slug>   # safe-delete; remote already gone
+   # e.g., claim/default-42-refactor-cache
    ```
    If `git branch -d` refuses (unmerged commits detected),
    surface to the architect — do not force-delete.
@@ -68,6 +69,7 @@ removal on either platform.
   close-out.
 - `scripts/install-post-merge-cron.sh` — installs and
   uninstalls the OS-level scheduler entry.
-- `docs/architecture/0005-contracts/03-config-schemas.md`
-  § `post_merge_cleanup` — the config block the architect edits
-  to enable auto-cron.
+- `<repo>/.board-superpowers/config.yml` § `post_merge_cleanup`
+  — the config block the architect edits to enable auto-cron.
+  The block has the shape `{ enabled: bool, interval_minutes:
+  int, timeout_hours: int }`.

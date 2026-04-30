@@ -1,22 +1,26 @@
 # Spec-first checklist — manager-side intake reference
 
-> **Scope**: this file lists the must-have spec artifacts that
-> have to land **before** a card can be created (or, in the
-> spec-only case, **as** the card). It also documents when
-> `docs/plans/<feature>/` is mandatory vs optional scaffolding.
->
-> **Out of scope** — once a precondition is met and the card
-> is created, the work itself is governed by the Consumer
-> session's discipline; this file does not prescribe
-> implementation order.
+## Use this file when
 
-This reference is consumed by:
+You arrive here at intake **Step 3** of [`intake.md`](./intake.md)
+to verify spec preconditions before a card is created — after
+[`scope-shape-judgment.md`](./scope-shape-judgment.md) decided shape
+and before [`skill-routing.md`](./skill-routing.md) picks a sibling
+skill. Apply the six-row table below: run each row's *trigger
+check* against the requirement; if any trigger fires, the named
+spec artifact MUST land first (separate PR or same-PR companion)
+before the card is created. Spec-only PRs (row 6) are the inverse:
+the card body IS the spec edit.
 
-- The `intake.md` decision tree, after [`scope-shape-judgment.md`](./scope-shape-judgment.md)
-  routes a requirement to "single card" or "multi-card" shape.
-- The `decomposing-into-milestones` (#35) skill's Step 1 —
-  before #35 ingests an artifact, the architect should have
-  already cleared this checklist for the umbrella requirement.
+After this file clears (or its preconditions land), proceed to
+[`skill-routing.md`](./skill-routing.md) at intake Step 4. If a
+precondition is open, pause card creation, surface the spec edit
+to the architect, and resume Step 3 once the spec PR merges.
+
+The `decomposing-into-milestones` (#35) skill's Step 1 also
+consults this checklist — before #35 ingests an artifact, the
+architect should have already cleared the six rows for the
+umbrella requirement.
 
 ## Why "spec first"
 
@@ -32,9 +36,11 @@ half-shipped work.
 Spec-first eliminates that failure mode: the architect's
 decisions land first (as ADRs, spec edits, or paired-PR
 companion changes), then the implementation card claims the
-work. Project history (#34 with ADR-0006 + spec 06; #43 with
-F-B2 spec; #45 with this checklist itself) is the evidence
-that the discipline pays for itself.
+work. Project history (the audit-log governance card with its
+autonomy matrix + audit-log schema spec; the bootstrap audit
+drift fix paired with its bootstrap-step spec; this checklist
+card itself) is the evidence that the discipline pays for
+itself.
 
 ## Mandatory spec artifacts before card creation
 
@@ -42,18 +48,17 @@ Six rows. Run each row's *trigger check* against the
 requirement; if the trigger fires, the named artifact MUST be
 edited / created **first** (separate PR or same-PR companion,
 architect's call) before the card is created. Each row cites
-the change-impact matrix row in
-[`docs/architecture/AGENTS.md`](../../../docs/architecture/AGENTS.md)
-that owns the cross-reference graph for the artifact.
+the maintainer-side change-impact-matrix row that owns the
+cross-reference graph for the artifact.
 
 | # | Trigger | Artifact that must land first | Change-impact-matrix row | Worked example |
 |---|---------|------------------------------|--------------------------|----------------|
-| 1 | Touches multiple bounded contexts (per [`docs/architecture/0003-domain-model/02-bounded-contexts.md`](../../../docs/architecture/0003-domain-model/02-bounded-contexts.md) — Board / Session / Bootstrap / Audit / Spec) | ADR or §-level spec edit naming the cross-context contract | (matches whichever change-impact-matrix row owns the bounded-context contract being crossed; "ADR-0005 BoardAdapter contract surface" is one example, "ADR-0006 D-AUTONOMY-1 matrix" is another) | #34 (Audit + Spec contexts): ADR-0006 + `0005-contracts/06-audit-log-schema.md` landed first; the implementation card claimed against the settled spec. |
-| 2 | Adds a new cross-plugin edge (this plugin's skill invokes a `superpowers:*` or `gstack:/*` skill that wasn't previously in the catalog) | [`SKILLS.md`](../../../SKILLS.md) § "Cross-plugin edges" gains the row | "Skill catalog (add / rename / split / merge)" row | #35: `decomposing-into-milestones` → `superpowers:writing-plans` and `gstack:/plan-eng-review` edges landed in `SKILLS.md` first (paired-PR contract). |
-| 3 | Changes audit_log schema, `action_id` namespace, or autonomy matrix | ADR-0006 + [`docs/architecture/0005-contracts/06-audit-log-schema.md`](../../../docs/architecture/0005-contracts/06-audit-log-schema.md) edited first | "ADR-0006 D-AUTONOMY-1 matrix" row | #34: ADR-0006 + spec 06 landed first. The classifying-actions skill consumes both as authoritative. |
-| 4 | Affects routing block (the `<!-- board-superpowers:routing -->` injection target) or hook intent injection (`INVOKE:` / `REASON:` markers) | [`docs/architecture/0005-contracts/02-hook-contracts.md`](../../../docs/architecture/0005-contracts/02-hook-contracts.md) § "Intent-injection markers" edited first | "Hook intent-injection marker grammar" row | bootstrapping-repo's routing-block injection landed against an existing spec 02 row; any new marker grammar (e.g., `INVOKE: migrating-repo-version`) requires the spec edit first. |
-| 5 | Modifies `~/.board-superpowers/` host-local state layout (path conventions, file names, schema) | [`docs/architecture/0005-contracts/03-config-schemas.md`](../../../docs/architecture/0005-contracts/03-config-schemas.md) + [`docs/architecture/0005-contracts/07-path-conventions.md`](../../../docs/architecture/0005-contracts/07-path-conventions.md) edited first | "host-local state" row | bootstrap v0.2.0 (#28) and the per-repo config split (#39) both landed spec edits in the same PR as the implementation, satisfying the same-PR variant of "land first". |
-| 6 | Spec-only PR (the work IS the spec — landing an ADR, a feature row, a contract page) | n/a — the artifact is itself the spec; no separate pre-card artifact | (matches multiple matrix rows depending on which spec section is touched) | #31 (ADR-0010), #33 (v1 design completeness — ADR-0011 + 0006/0007/0008 stub fills). The card body's Goal IS "land this spec"; AC is "spec page edited and reviewed". |
+| 1 | Touches multiple bounded contexts (Board / Session / Bootstrap / Audit / Spec — the five domain-model contexts the plugin partitions over) | ADR or §-level spec edit naming the cross-context contract | (matches whichever change-impact-matrix row owns the bounded-context contract being crossed; "BoardAdapter contract surface" is one example, "autonomy matrix" is another) | The audit-log governance card (Audit + Spec contexts): autonomy matrix + audit-log-schema spec landed first; the implementation card claimed against the settled spec. |
+| 2 | Adds a new cross-plugin edge (this plugin's skill invokes a `superpowers:*` or `gstack:/*` skill that wasn't previously in the catalog) | The plugin's `SKILLS.md` § "Cross-plugin edges" gains the row | "Skill catalog (add / rename / split / merge)" row | The decomposing-into-milestones card: edges to `superpowers:writing-plans` and `gstack:/plan-eng-review` landed in `SKILLS.md` first (paired-PR contract). |
+| 3 | Changes audit_log schema, `action_id` namespace, or autonomy matrix | The autonomy-matrix ADR + the audit-log schema contract edited first | "autonomy matrix" row | The audit-log governance card: autonomy matrix + audit-log-schema spec landed first. The classifying-actions skill consumes both as authoritative. |
+| 4 | Affects routing block (the `<!-- board-superpowers:routing -->` injection target) or hook intent injection (`INVOKE:` / `REASON:` markers) | The hook contracts spec § "Intent-injection markers" edited first | "Hook intent-injection marker grammar" row | bootstrapping-repo's routing-block injection landed against an existing spec row; any new marker grammar (e.g., `INVOKE: migrating-repo-version`) requires the spec edit first. |
+| 5 | Modifies `~/.board-superpowers/` host-local state layout (path conventions, file names, schema) | The config-schemas spec + the path-conventions spec edited first | "host-local state" row | bootstrap v0.2.0 and the per-repo config split both landed spec edits in the same PR as the implementation, satisfying the same-PR variant of "land first". |
+| 6 | Spec-only PR (the work IS the spec — landing an ADR, a feature row, a contract page) | n/a — the artifact is itself the spec; no separate pre-card artifact | (matches multiple matrix rows depending on which spec section is touched) | Recent ADR-only PRs (e.g., the v1 design completeness fill-in cards). The card body's Goal IS "land this spec"; AC is "spec page edited and reviewed". |
 
 ### Same-PR vs separate-PR for "land first"
 
@@ -64,13 +69,14 @@ shapes, both compliant with the spec-first discipline:
   card is created against the merged spec; Consumer claims
   and ships against settled spec. Highest discipline; longest
   total flow time. Used when the spec change is itself
-  load-bearing for multiple downstream cards (e.g., ADR-0006
-  for #34 + #43 + future audit work).
+  load-bearing for multiple downstream cards (e.g., the
+  autonomy-matrix ADR is consumed by audit governance + the
+  bootstrap audit drift fix + future audit work).
 - **Same PR, paired**: spec edit + implementation land in one
   PR. Lower flow time; relies on PR review to verify both
   halves are coherent. Used when the spec change is local to
-  one card and not shared with siblings (e.g., #28's spec edit
-  + bootstrap implementation).
+  one card and not shared with siblings (e.g., the bootstrap
+  v0.2.0 spec edit + bootstrap implementation landed paired).
 
 Row 6 has no spec-first variant — the spec IS the artifact.
 
@@ -101,7 +107,7 @@ plans") is **mandatory** when:
 | Condition | Why mandatory | Worked example |
 |-----------|---------------|----------------|
 | The card's AC includes a "design A/B" requirement (architect lists 2-N options + leaning + Consumer picks) | The rationale capture has to live somewhere durable enough to survive across the Consumer's session and the reviewer's read; gitignored scaffolding is the right vehicle (it's not spec — it's the work-in-progress that becomes spec if the decision is durable). | #43 AC4 — bootstrap audit-contract fix; #44 AC1 + AC3 — card schema platform field; #45 AC4 — design-left-to-consumer template (this card). |
-| The card's intake produced brainstorming or eng-review artifacts (transcripts, sketches, alternatives explored) | Same reason — the artifacts have to land somewhere that the Consumer can read, but they aren't part of `docs/architecture/` (which is the durable, English-only, spec-quality store). | The audit at `docs/plans/manager-decision-frameworks/canonical-practice-audit.md` for this card (#45). |
+| The card's intake produced brainstorming or eng-review artifacts (transcripts, sketches, alternatives explored) | Same reason — the artifacts have to land somewhere that the Consumer can read, but they aren't part of the maintainer's durable spec area (which is the durable, English-only, spec-quality store). | The audit at `docs/plans/manager-decision-frameworks/canonical-practice-audit.md` for this card. |
 | The decomposition produced 4+ cards | The decomposition rationale (which axis was used, what was rejected, the dep graph) lives in `docs/plans/<feature>/`. Single-card decompositions don't need it; large batches do. | When #35's decomposition pipeline produces ≥4 cards from one artifact, the audit lands in `docs/plans/<feature>/decomposition-rationale.md`. |
 
 `docs/plans/<feature>/` is **optional** otherwise (single-card
@@ -114,9 +120,9 @@ the directory is a smell (it accumulates stale shadow-spec).
 `docs/plans/<feature>/` lives only across the Manager → Consumer
 cycle that produced it. When the feature's last card lands,
 the architect deletes the directory in the cleanup PR.
-Durable findings get promoted to `docs/architecture/` in the
-PR that ships the relevant card; the rest is scaffolding that
-served its purpose and gets pruned.
+Durable findings get promoted to the maintainer's spec area in
+the PR that ships the relevant card; the rest is scaffolding
+that served its purpose and gets pruned.
 
 Per [`AGENTS.md`](../../../AGENTS.md) § "Implementation-facing
 plans" — "stale plans decay silently and mislead future
@@ -130,24 +136,27 @@ reproduce actual decisions:
 
 - **#34** (governance skills + RDBMS). Row 1 fires (Audit
   + Spec contexts). Row 3 fires (audit_log schema +
-  action_id catalog + autonomy matrix). ADR-0006 + spec 06
-  + spec 03 + spec 07 + spec 02 all landed in PR #42's run-up.
-  **Reproduces actual decision (separate-PR variant).**
+  action_id catalog + autonomy matrix). The autonomy-matrix
+  ADR + audit-log schema spec + config schema + path
+  conventions + hook contracts all landed first in the
+  preceding PR. **Reproduces actual decision (separate-PR
+  variant).**
 - **#38** (v1 release-gate umbrella). Row 6 fires (the
   umbrella card body itself is the spec for the gate).
   Optional `docs/plans/v1-release-gate/` was not created
   (single umbrella card, no design A/B).
   **Reproduces actual decision.**
 - **#43** (bootstrap audit drift fix). Row 1 fires (Bootstrap
-  + Audit contexts). F-B2 spec edit was bundled in the same
-  PR (paired-PR variant). `docs/plans/<feature>/` was
-  mandatory (AC4 design-A/B). **Reproduces actual decision.**
+  + Audit contexts). The per-repo bootstrap routine's spec
+  edit was bundled in the same PR (paired-PR variant).
+  `docs/plans/<feature>/` was mandatory (AC4 design-A/B).
+  **Reproduces actual decision.**
 - **#45** (this card). Row 6 partially fires — the new
   references files ARE manager-side spec, but they live under
-  `skills/managing-board/references/`, not
-  `docs/architecture/`; the references are SKILL-level spec
-  (per [`SKILLS.md`](../../../SKILLS.md)'s SoT contract for
-  skills) which falls under skill-authoring discipline, not
+  `skills/managing-board/references/`, not in the maintainer's
+  spec area; the references are SKILL-level spec (under the
+  plugin's `SKILLS.md` source-of-truth contract for skills)
+  which falls under skill-authoring discipline, not
   spec-architecture discipline. The change-impact-matrix row
   added by AC6 is the spec-architecture artifact for this
   card; it lands in the same PR (paired). `docs/plans/<feature>/`

@@ -76,8 +76,8 @@ common shapes; for the full per-row schema, the implementation lives in
 ```
 
 For the full per-row catalog (all 14 Producer rows + 14 Consumer rows + 9 Bootstrap rows),
-see `docs/architecture/0005-contracts/06-audit-log-schema.md` § "Per-action_id payload sub-schemas"
-and the payload templates in this file.
+consult the payload templates in this file plus the per-row payload sub-schemas defined
+alongside each `action_id` row in the calling skill's matrix reference.
 
 ## Quoting and escape
 

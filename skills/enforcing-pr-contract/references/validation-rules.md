@@ -79,8 +79,6 @@ This is why `submit-pr.sh` is the **only sanctioned PR-open path** in the plugin
 
 The PR↔Issue link registered at OPEN is **not frozen** — GitHub re-evaluates the PR body on every update (`gh pr edit --body-file`, web UI body edits, GraphQL `updatePullRequest`) and re-derives `closingIssuesReferences` from the current content. An update that strips the canonical trailer silently de-registers the link; the next merge then fires without the auto-close webhook chain. Once that merge has happened, retroactively re-appending the trailer does NOT replay the chain — the merge event reads link state at merge time, and a fresh trailer that was absent at merge time is no different from a hand-typed line for webhook-replay purposes.
 
-Observed in production: PR #47 / card #45 opened via `submit-pr.sh` with the trailer in place; commits `4c0110a` (chunk 4 retro update) and `4ac446f` (chunk 5 retro update) ran `gh pr edit --body-file` to expand the retro notes section and silently overwrote the trailer; the post-merge `closingIssuesReferences` GraphQL probe returned `[]`; Issue #45 had to be closed manually and ProjectV2 Status flipped manually per the `consuming-card` Step 12 stage (a) recovery path.
-
 The sanctioned post-OPEN body-update path is `bash scripts/submit-pr.sh --update-body --pr <PR-N> --body-file <path> --card <N>`. The subcommand:
 
 1. Fetches the PR's current body (`gh pr view --json body`).
@@ -103,9 +101,3 @@ We deliberately did NOT define a JSON-Schema-style strict format for the section
 ## Override mechanism
 
 The Producer can override validation for a specific PR by adding the `pr-contract-override` label BEFORE merge. The override creates an audit-log entry so the bypass is traceable.
-
-## Future hardening (not yet implemented)
-
-- Semantic filler detection (LLM-grade rather than regex)
-- Per-card-type templates (mechanical vs UX vs spec) selected automatically from card labels
-- Cross-PR retro aggregation (carry "lesson learned" entries forward to a per-quarter retro doc)

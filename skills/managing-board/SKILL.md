@@ -18,7 +18,7 @@ This is the Producer-session main skill for board-superpowers. It runs four rout
 
 If the user invokes via `/board-superpowers:managing-board <routine>`, the routine name arrives as the first argument. Otherwise pick the routine from the user's prompt vocabulary using the table above. If the prompt is genuinely ambiguous (e.g., "let's look at the board"), **ask the Producer** which routine they want — do NOT pick a default. The cost of asking is low; routing wrong burns more attention.
 
-**Required sub-skills**: `board-superpowers:board-canon` (read schema before any transition decision), `board-superpowers:enforcing-pr-contract` (review-queue contract validation).
+**Required sub-skills**: `board-superpowers:board-canon` (read schema before any transition decision), `board-superpowers:operating-kanban` (`read_board` for the daily / triage scans, `transition_card` for review-queue Status flips, `create_card` for intake card creation — protocol-action dispatch over the active projection), `board-superpowers:enforcing-pr-contract` (review-queue contract validation).
 
 ## Flow at a glance
 
@@ -43,7 +43,7 @@ flowchart TD
 
 Goal: produce a one-screen briefing of the board's current state that helps the Producer decide what to do next.
 
-1. **Read the board**. Run `bash scripts/read-board.sh --owner <owner> --project <number>`. The owner + project number live in the repo's `.board-superpowers/config.yml`. Parse the JSON output.
+1. **Read the board**. This is the `read_board` protocol action — invoke `board-superpowers:operating-kanban` with action `read_board`; it resolves the active projection from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` (or `<repo>/.board-superpowers/config.yml § board` if absent — operating-kanban routes both transparently) and returns the board state grouped by status. The owner + project number resolve from the same active kanban registration and are consumed by the active projection's reference. Parse the JSON output.
 
 2. **Group by Status field**. Produce a markdown summary in this format:
 
@@ -88,7 +88,7 @@ Goal: validate every open PR linked to a card against the three-section PR contr
 
 3. **For each violation**:
    - Comment on the PR pointing at the failing section + the fix template from the `board-superpowers:enforcing-pr-contract` skill's references.
-   - The card Status transition back to `In Progress` is a mutating action with action_id 6 (Status flip on an in-flight claim). Apply the 5-step sequence from "How mutating actions are handled" below.
+   - The card Status transition back to `In Progress` is a mutating action with action_id 6 (Status flip on an in-flight claim). The Status flip itself is the `transition_card` protocol action — invoke `board-superpowers:operating-kanban` with action `transition_card` and target status `In Progress`; apply the 5-step sequence from "How mutating actions are handled" below.
 
 4. **For each compliant PR**: no action — leave the card in `In Review` for human merge approval.
 
@@ -107,7 +107,7 @@ Goal: turn a new requirement (text, design doc, idea) into a shape decision: spe
    - **Idea / vision** → `gstack:/office-hours` for direction-setting. Produces an "is this worth building" verdict.
    - **Architecture decision** → `gstack:/plan-eng-review`. Produces an architecture lock.
    - **Multi-step requirement** that's already direction-set → `superpowers:brainstorming` for sharper decomposition. Then the architect hand-decomposes the result into Ready cards.
-   - **Single-card-sized work** that's clearly defined → draft a card body using the schema from `board-superpowers:board-canon` § "Card body schema". Creating the card on the board is a mutating action — apply the 5-step sequence from "How mutating actions are handled" below (action_id 1).
+   - **Single-card-sized work** that's clearly defined → draft a card body using the schema from `board-superpowers:board-canon` § "Card body schema". Creating the card on the board is the `create_card` protocol action (dispatched via `board-superpowers:operating-kanban`); it's a mutating action — apply the 5-step sequence from "How mutating actions are handled" below (action_id 1).
 
 3. **NOT this skill's job to do the work itself**. The intake routine ends with the work being either a spec / design artifact or a Ready card on the board. If the architect tries to "just do it" mid-intake, push back: the design rests on intake → decompose → claim being separate acts.
 
@@ -117,7 +117,7 @@ Goal: turn a new requirement (text, design doc, idea) into a shape decision: spe
 
 Goal: scan Blocked cards + stale claims; recommend either unblocking actions or release.
 
-1. **Read Blocked cards**: `bash scripts/read-board.sh --status Blocked`. For each, inspect the card body for the named blocker (per `board-superpowers:board-canon` state machine, Blocked entries name their blocker in a card comment). Recommend an action.
+1. **Read Blocked cards**: the `read_board` protocol action via `board-superpowers:operating-kanban` (with status filter `Blocked`). For each, inspect the card body for the named blocker (per `board-superpowers:board-canon` state machine, Blocked entries name their blocker in a card comment). Recommend an action.
 
 2. **Read stale claims**: list `claim/N-...` branches; check commit count beyond the initial empty claim marker; flag any > 72h with no progress.
 

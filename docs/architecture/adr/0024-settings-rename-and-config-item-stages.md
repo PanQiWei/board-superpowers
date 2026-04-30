@@ -1,6 +1,6 @@
 # ADR 0024: settings.yml rename + new config-item stages (`m5.repo.set-wip-limit`, `m10.repo.choose-kanban-backend`)
 
-**Status:** proposed
+**Status:** proposed; § Part B M10 stage canonical name renamed by ADR-0027 § 4 (`m10.repo.choose-kanban-backend` → `m10.repo.choose-kanban-projection`; settings.yml field name `modules.m10_kanban.<id>.projection` unchanged)
 **Date:** 2026-04-28
 **Deciders:** PanQiWei (architect)
 

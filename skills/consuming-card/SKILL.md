@@ -39,6 +39,7 @@ flowchart TD
 ## Required sub-skills
 
 - `board-superpowers:board-canon` — read schema before claiming (state machine, claim protocol, WIP rules).
+- `board-superpowers:operating-kanban` — protocol-action dispatch for `read_card` (Step 2), `claim_card` (Step 3, embedded in `claim-card.sh`), `transition_card` (Step 6 Blocked, etc.), and `link_pr_to_card` (Step 10, embedded in `submit-pr.sh`'s auto-trailer).
 - `board-superpowers:enforcing-pr-contract` — at PR submit time.
 - `superpowers:writing-plans` — turn the card's Acceptance criteria into an executable plan.
 - `superpowers:test-driven-development` — drive the implementation Red → Green → Refactor.
@@ -68,6 +69,10 @@ If the card number cannot be resolved unambiguously, ask the user. Wrong card nu
 
 ## Step 2 — read the card
 
+This is the `read_card` protocol action — invoke `board-superpowers:operating-kanban` with action `read_card`. It resolves the active projection from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` (or `<repo>/.board-superpowers/config.yml § board` if absent; operating-kanban routes both transparently) and dispatches the per-Form invocation.
+
+For the `github-project-v2` projection the Form A bash invocation is:
+
 ```bash
 gh issue view <N> --json number,title,body,state,labels,comments
 ```
@@ -80,18 +85,21 @@ Inspect:
 
 ## Step 3 — claim
 
+Step 3 is the `claim_card` protocol action. For the `github-project-v2` projection, `claim_card`'s invocation entry IS `bash scripts/claim-card.sh` — the script wraps the protocol action's 4-step transaction primitive (git-layer atomic; exit-code semantics + worktree+branch+Status-flip atomicity are script-level concerns). Each projection's reference file declares its own invocation entry; the protocol-action call shape from this SKILL stays the same regardless of projection.
+
 ```bash
 bash scripts/claim-card.sh \
   --owner <owner> --project <number> \
   --repo <repo> --card <N> --title "<title>"
 ```
 
-The owner + project number live in the repo's `.board-superpowers/config.yml`. The script performs the four-step transaction described in `board-superpowers:board-canon` § "Claim protocol". Any failure leaves a partial state — read the script's stderr and surface to the architect rather than silently retry.
+The owner + project number resolve from the active kanban registration (`<repo>/.board-superpowers/settings.yml § modules.m10_kanban`, or `<repo>/.board-superpowers/config.yml § board` if absent — operating-kanban routes both). The script performs the four-step transaction described in `board-superpowers:board-canon` § "Claim protocol"; the embedded Status flip from `Ready` to `In Progress` is itself a `transition_card` protocol action realized inside the claim transaction. Any failure leaves a partial state — read the script's stderr and surface to the architect rather than silently retry.
 
 ## Step 4 — enter the worktree
 
 ```bash
-cd "$HOME/.config/superpowers/worktrees/<repo>/claim/<N>-<slug>"
+cd "$HOME/.config/superpowers/worktrees/<repo>/claim/<kanban-id>-<key-slug>-<title-slug>"
+# e.g., claim/default-42-refactor-cache
 ```
 
 The worktree is your isolated work surface. Do NOT `cd` back to the repo root for any work — the repo root may be shared with other sessions and stays on `main` per the project's working-tree discipline. Override the worktree base path via `BOARD_SP_WORKTREE_DIR` if needed.
@@ -111,7 +119,7 @@ This skill does NOT re-implement TDD or planning — those are the canonical dis
 If the card hits a blocker mid-flight:
 
 1. Comment on the card naming the blocker.
-2. The Status transition to `Blocked` is a mutating action with action_id 6 — apply the 5-step sequence from "How mutating actions are handled" below. The Status flip itself happens in step 3 (A) or step 4d (R approve).
+2. The Status transition to `Blocked` is a mutating action with action_id 6 — apply the 5-step sequence from "How mutating actions are handled" below. The Status flip itself is the `transition_card` protocol action — invoke `board-superpowers:operating-kanban` with action `transition_card` and target status `Blocked` (it dispatches per the active projection); this happens in step 3 (A) or step 4d (R approve).
 
 Otherwise leave the card in `In Progress` for the duration of the implementation. Do NOT churn the Status field on every commit — Status reflects the gross state of the work, not its internal progress.
 
@@ -171,7 +179,7 @@ Draft the PR body using the templates in `board-superpowers:enforcing-pr-contrac
 bash scripts/submit-pr.sh --title "<title>" --body-file <path> --card <N>
 ```
 
-The script validates the three-section contract before opening the PR. If validation fails: re-edit the body to address the specific failure (printed to stderr) and retry. The script auto-appends a trailer linking back to the card; do NOT hand-add the trailer.
+The script validates the three-section contract before opening the PR. If validation fails: re-edit the body to address the specific failure (printed to stderr) and retry. The script auto-appends a trailer linking back to the card; do NOT hand-add the trailer. Step 10's PR-OPEN side-effect is the `link_pr_to_card` protocol action. For the `github-project-v2` projection, the invocation entry IS `bash scripts/submit-pr.sh` (whose canonical-trailer logic registers the PR↔Issue link via GitHub's `Closes #<N>` keyword chain). Each projection's reference file declares its own invocation entry.
 
 **Why the auto-trailer is load-bearing**: GitHub's PR-merge → Issue-close → ProjectV2 Auto-close webhook chain fires only when the PR body contains a `Closes #<N>` (or `Fixes #<N>` / `Resolves #<N>`) keyword. The PR↔Issue link is registered in `closingIssuesReferences` at PR-OPEN AND re-derived on every body update — so a body update that strips the canonical trailer silently de-registers the link, and the next merge fires without the auto-close webhook. Once that merge has fired, retroactively re-appending the trailer does NOT replay the chain. Two production failures so far: PR #42 / card #34 (direct `gh pr create` opened without the trailer) and PR #47 / card #45 (commits `4c0110a` + `4ac446f` ran `gh pr edit --body-file` to expand retro notes, silently overwriting the trailer; `closingIssuesReferences` returned `[]` after merge). Contract C in `board-superpowers:enforcing-pr-contract` catches both failure modes at submit-time via idempotent injection.
 
@@ -230,8 +238,9 @@ Once the PR is merged the Consumer's responsibility is a four-part close-out (ac
 3. **Local cleanup** —
    ```bash
    cd ~/Dev/repos/<repo>           # back to repo root (on main)
-   git worktree remove "$HOME/.config/superpowers/worktrees/<repo>/claim/<N>-<slug>"
-   git branch -d claim/<N>-<slug>  # local cleanup; remote was already deleted by the merge
+   git worktree remove "$HOME/.config/superpowers/worktrees/<repo>/claim/<kanban-id>-<key-slug>-<title-slug>"
+   git branch -d claim/<kanban-id>-<key-slug>-<title-slug>  # local cleanup; remote was already deleted by the merge
+   # e.g., claim/default-42-refactor-cache
    ```
 4. **Audit row** — invoke `board-superpowers:auditing-actions` with action_id 113; payload includes `{card_number, pr_number, merged_at, worktree_removed: true, branch_deleted: true}`.
 
@@ -291,3 +300,13 @@ If this skill is running as a subagent that the Producer's `board-superpowers:ma
 - For required sub-skills that themselves spawn subagents (verify each one's body for `Agent` tool / `subagent_type` references), surface a procedural fallback to the architect — see `references/handoff-to-superpowers.md`.
 
 This Producer-spawned-Consumer mode is currently Claude Code only. On Codex CLI, only architect-spawned Consumer (your direct session) is supported.
+
+## References
+
+| File | When to read | Purpose |
+|------|--------------|---------|
+| `references/handoff-to-superpowers.md` | At Step 4 (implement) and Step 5 (verify) when running as a Producer-spawned subagent (depth-1 budget exhausted). | Procedural-fallback table — for each sibling skill that itself spawns subagents, the read-and-inline procedure that replaces a subagent dispatch. |
+| `references/permission-boundary.md` | At session start when establishing the invocation contract — architect-spawned vs Producer-spawned. | Authoritative comparison of the two Consumer-invocation modes — which surfacing channels apply, which sub-skills are allowed, what the architect-visibility tier is. |
+| `references/post-merge-cleanup.md` | After PR is merged (interactive cleanup) or once at claim time when deciding whether to install the auto-cron handoff. | Contract for the close-out sequence — interactive vs auto-cron paths, the cron install / uninstall lifecycle, the terminal-state triggers (merged / closed / timeout). |
+| `references/pr-template.md` | At Step 6 (open the PR) when drafting the PR body before invoking `submit-pr.sh`. | Practical paste-ready PR body templates — default template, Automated Verification skeleton, Human Verification TODO patterns, Retro Notes shape. |
+| `references/surface-protocol.md` | Whenever surfacing information back to the architect — design-A/B leaning, blocked-card escalation, mid-flight scope question, post-implementation summary. | The three surface channels (card thread comment / PR description / direct-message-to-architect surfacing) plus when each channel is the right one. |

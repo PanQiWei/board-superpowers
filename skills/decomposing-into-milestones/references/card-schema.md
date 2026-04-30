@@ -4,7 +4,7 @@
 
 ## What this skill produces
 
-Every card emitted by `decomposing-into-milestones` Step 7 (synthesize batch) MUST conform to the terminal Card body schema, which is double-collapsed from the prior `board-canon` v0.3.0 schema and spec § 1.6.3 schema (per `#35`'s schema-drift-double-collapse acceptance criterion).
+Every card emitted by `decomposing-into-milestones` Step 7 (synthesize batch) MUST conform to the terminal Card body schema defined by `board-superpowers:board-canon`. That skill is the single source of truth for the schema; this file's role is to summarize what shape `decomposing-into-milestones` produces.
 
 ## Terminal schema — at a glance
 
@@ -109,7 +109,7 @@ If empty, omit the section entirely. Producer-side validation: AC and scope item
 
 Freeform rationale, driver, cross-card context. Examples:
 
-- "Driver: user feedback in P0 intake — sign-in friction is blocking trial conversion."
+- "Driver: user feedback in top-priority intake — sign-in friction is blocking trial conversion."
 - "Cross-card context: this card unblocks #45 (mobile sign-in) and #46 (account linking)."
 - "Retro-folded: an earlier attempt assumed Google's OAuth scope `openid email profile` was sufficient; turned out we also need `https://www.googleapis.com/auth/userinfo.email` for the email field on the callback. Documented for future cards."
 

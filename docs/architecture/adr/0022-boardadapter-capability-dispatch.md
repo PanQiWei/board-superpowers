@@ -1,6 +1,6 @@
 # ADR 0022: BoardAdapter capability dispatch (M3 stages route via BoardAdapter capabilities) + M10 BoardAdapter-selection module
 
-**Status:** proposed
+**Status:** proposed; § M3 capability dispatch superseded by ADR-0027 (M3 dispatches via Kanban Protocol projection, not BoardAdapter SDK); § M10 module existence preserved (canonical stage name renamed per ADR-0027 § 4)
 **Date:** 2026-04-28
 **Deciders:** PanQiWei (architect)
 

@@ -208,11 +208,11 @@ gating; they route to direct claim, not to #35.
 ## Decline policy
 
 If the requirement is misaligned with the project's premises
-or non-goals (see
-[`docs/architecture/0001-positioning.md`](../../../docs/architecture/0001-positioning.md)),
-the intake routine produces a "we won't do this and here's
-why" response. The architect can override; the routine
-surfaces the conflict explicitly so the override is conscious.
+or non-goals (the project's positioning charter — what the
+plugin is for, what it explicitly does NOT do), the intake
+routine produces a "we won't do this and here's why" response.
+The architect can override; the routine surfaces the conflict
+explicitly so the override is conscious.
 
 ## Worked retrofit traces
 
@@ -221,9 +221,10 @@ their actual shape decisions:
 
 - **#34** (governance skills, M, single card). Step 2: shape
   = single card (one bounded-context-spanning capability that
-  must land atomically). Step 3: rows 1 + 3 fire; ADR-0006 +
-  spec 06 land separate-PR. Step 4: direct creation (no
-  sibling skill needed once spec is settled). **Reproduces.**
+  must land atomically). Step 3: rows 1 + 3 fire; the autonomy
+  matrix + audit-log schema land separate-PR. Step 4: direct
+  creation (no sibling skill needed once spec is settled).
+  **Reproduces.**
 - **#38** (release-gate umbrella, S, single umbrella card).
   Step 2: shape = single card (the umbrella card itself; the
   cards under the umbrella are separate intakes that bind via
@@ -234,8 +235,8 @@ their actual shape decisions:
   even when the body's purpose is to anchor a milestone.**
 - **#43** (audit drift fix, M, single card with AC4
   design-A/B). Step 2: single card (one bounded-context fix).
-  Step 3: row 1 fires; F-B2 spec edit bundled same-PR. Step 4:
-  direct creation; AC4 uses
+  Step 3: row 1 fires; per-repo bootstrap routine's spec edit
+  bundled same-PR. Step 4: direct creation; AC4 uses
   [`skill-routing.md`](./skill-routing.md) Table 3 template.
   **Reproduces.**
 - **#44** (card schema platform field, S, single card with

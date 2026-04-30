@@ -1,4 +1,4 @@
-# Skills system — board-superpowers v1 catalog (10 skills total: 9 shipped + 1 deferred to v1-complete, 3 layers)
+# Skills system — board-superpowers v1 catalog (11 skills total: 10 shipped + 1 deferred to v1-complete, 3 layers)
 
 > **Always loaded.** This document is referenced from
 > [`AGENTS.md`](./AGENTS.md) via `@SKILLS.md` and rides into
@@ -31,7 +31,7 @@ The reverse also holds: an edit to this document without the
 matching `skills/` change makes the spec drift. Both halves
 land together.
 
-The skills system has three layers, ten skills, and a fixed set
+The skills system has three layers, eleven skills, and a fixed set
 of cross-plugin edges. None of these numbers should change
 without an explicit decision recorded here first.
 
@@ -83,13 +83,13 @@ responsibility (A9) even when the resulting skill stays under
 the body-length budget.
 
 The canonical example, applied first to v0.5.0's
-`board-canon` + `operating-kanban` pair (which lands when the
-new atomic ships):
+`board-canon` + `operating-kanban` pair (the new atomic landed
+in v0.5.0):
 
 | Atomic | SPOT it consolidates | One-line discriminator |
 |--------|----------------------|------------------------|
 | `board-canon` | "Kanban is what" — ontology, schema rules, state machine, branch-naming convention, WIP formula. **Backend-agnostic.** Stable; rarely changes. | If the question is *"what is legal / what does X mean"*, route to `board-canon`. |
-| `operating-kanban` *(lands v0.5.0)* | "How to act on the active backend" — backend selection (reads `<repo>/.board-superpowers/config.yml § kanban`), per-backend action invocation (Form A / B / C projections), failure-mode dispatch. **Backend-aware.** Mutates as new projections land. | If the question is *"how do I do X on this repo's backend"*, route to `operating-kanban`. |
+| `operating-kanban` (shipped v0.5.0) | "How to act on the active backend" — backend selection (reads `<repo>/.board-superpowers/settings.yml § modules.m10_kanban`), per-backend action invocation (Form A / B / C projections), failure-mode dispatch, and bootstrap-side setup-capability registry. **Backend-aware.** Mutates as new projections land. | If the question is *"how do I do X on this repo's backend"*, route to `operating-kanban`. |
 
 **Boundary discriminator (one sentence)**: *if the new content
 is "what is legal," it belongs in `board-canon`; if it is "in a
@@ -106,14 +106,16 @@ rationale that motivates the split.
 
 ## v1 minimum vs v1 complete
 
-The full v1 catalog defines **10 skills**. As of `v0.4.0`,
-**9 skills ship** — enough to make the plugin self-hostable on
+The full v1 catalog defines **11 skills**. As of `v0.5.0`,
+**10 skills ship** — enough to make the plugin self-hostable on
 this very repo AND to bootstrap a fresh consuming repo from zero
 AND to govern every mutating action through classifying-actions +
 auditing-actions AND to decompose design artifacts into
-INVEST-compliant vertically-sliced cards via decomposing-into-milestones.
-The remaining **1 is deferred to v1-complete** and ships in a
-follow-up PR once unblocked.
+INVEST-compliant vertically-sliced cards via decomposing-into-milestones
+AND to dispatch the eight Kanban Protocol actions through the
+active projection via operating-kanban. The remaining **1 is
+deferred to v1-complete** and ships in a follow-up PR once
+unblocked.
 
 | Skill | Layer | v1 status | Why this scoping |
 |-------|-------|-----------|-------------------|
@@ -125,6 +127,7 @@ follow-up PR once unblocked.
 | `migrating-repo-version` | Molecular | deferred to v1-complete | Migration becomes meaningful starting from v0.2.x → v0.3.x transitions; the v0.2.0 ship establishes the baseline. |
 | `board-canon` | Atomic | **v1-minimum** | True SPOT — every other v1-minimum skill consumes its state machine + schema + WIP rules. |
 | `enforcing-pr-contract` | Atomic | **v1-minimum** | True SPOT — Consumer's F-C12 PR submit + Manager's F-02 Review Queue both depend on it. |
+| `operating-kanban` | Atomic | shipped (v0.5.0) | True SPOT shipped in v0.5.0 — every molecular SKILL routes the eight Kanban Protocol actions (per ADR-0025) and the bootstrap-side setup capabilities (per ADR-0027) through this skill's per-projection reference files. |
 | `classifying-actions` | Atomic | shipped (v0.3.0) | True SPOT shipped in v0.3.0 — every mutating SKILL consumes its D-AUTONOMY-1 matrix (14 Producer + 14 Consumer + 9 Bootstrap rows) + 5-step triage rule + autonomy_overrides parsing. |
 | `auditing-actions` | Atomic | shipped (v0.3.0) | True SPOT shipped in v0.3.0 — every mutating SKILL invokes audit-log-write.sh through this skill's payload templates and propose/resolve sequencing rules. |
 
@@ -152,7 +155,7 @@ means for board-superpowers" #3 for the full rationale.
 #### `using-board-superpowers` (v1-minimum)
 
 - **Role**: Manual page + first-touch router. Loaded every
-  session; provides full plugin orientation inline (10-skill
+  session; provides full plugin orientation inline (11-skill
   catalog, 6-state Card lifecycle, 5 bounded contexts,
   on-disk state, routing tree) AND routes ambiguous sessions
   or hook-injected `INVOKE:` markers to the right molecular
@@ -161,7 +164,7 @@ means for board-superpowers" #3 for the full rationale.
 - **Body target**: Entry-layer 200-line baseline intentionally
   exceeded (currently ~225 lines) to support the manual-page
   double duty — agents in community consumer projects must
-  one-shot-ingest the routing context (10-skill catalog,
+  one-shot-ingest the routing context (11-skill catalog,
   6-state lifecycle, 5 bounded contexts, on-disk state,
   routing tree), so progressive disclosure cannot replace
   inline content here. Keep additions justified by the same
@@ -206,6 +209,12 @@ means for board-superpowers" #3 for the full rationale.
   (paired same-PR per the change-impact-matrix row in
   `docs/architecture/AGENTS.md`).
 - **Composes (atomic)**: `board-canon`,
+  `board-superpowers:operating-kanban` (`read_board` for daily
+  briefing + triage Blocked scan, `transition_card` for
+  review-queue Status flips back to `In Progress`,
+  `release_claim` for triage cancel-claim of stale claims,
+  `create_card` for intake card creation —
+  protocol-action dispatch over the active projection),
   `enforcing-pr-contract` (Review Queue contract-violation
   check), `classifying-actions` + `auditing-actions` (every
   mutating action).
@@ -227,6 +236,10 @@ means for board-superpowers" #3 for the full rationale.
 - **References folder**:
   `references/{handoff-to-superpowers,pr-template,surface-protocol,permission-boundary}.md`.
 - **Composes (atomic)**: `board-canon`,
+  `board-superpowers:operating-kanban` (`read_card` Step 2,
+  `claim_card` Step 3, `transition_card` Step 6,
+  `link_pr_to_card` Step 10 — protocol-action dispatch over
+  the active projection),
   `board-superpowers:enforcing-pr-contract` (Step 9.5
   card body sync + Step 10 PR submit; action_ids 112 and 113
   also audit via this path),
@@ -262,7 +275,8 @@ means for board-superpowers" #3 for the full rationale.
   reframes explicitly labeled "original framing" per memory
   `feedback_research_canonical_practice_first`.
 - **Composes (atomic)**: `board-canon` (terminal Card body schema
-  authority), `classifying-actions`, `auditing-actions`.
+  authority), `operating-kanban` (`create_card` + `transition_card`
+  protocol action dispatch), `classifying-actions`, `auditing-actions`.
 - **Composes (cross-plugin)**: see § "Cross-plugin edges" below.
 - **Tier 2 frontmatter**: `when_to_use` (extended trigger
   vocabulary covering "decompose / 拆 / split / break this into
@@ -318,14 +332,17 @@ means for board-superpowers" #3 for the full rationale.
   `plugin.json:version` (fast path), OR architect says
   "what's new in this version" (fallback path).
 
-### Atomic layer (4 skills, all shipped)
+### Atomic layer (5 skills, all shipped)
 
 #### `board-canon` (v1-minimum)
 
 - **Role**: Pure read-only contract — 6-state machine + Card
-  body schema (thin-pointer + 5 sections + bottom marker) +
-  branch naming (`claim/<N>-<slug>`) + WIP counting formula
-  (`In Progress + suspended + In Review`; `Blocked` excluded).
+  body schema (thin-pointer + 5 sections + bottom marker +
+  display-only metadata fields per ADR-0026) + branch naming
+  (v0.5.0+ canonical `claim/<kanban-id>-<key-slug>-<title-slug>`;
+  v0.4.x legacy `claim/<key-slug>-<title-slug>` accepted by
+  parser) + WIP counting formula (`In Progress + suspended +
+  In Review`; `Blocked` excluded).
 - **Body target**: 200-300 lines.
 - **References folder**:
   `references/{state-machine,card-body-schema,claim-protocol,wip-counting,branch-naming}.md`.
@@ -360,6 +377,41 @@ means for board-superpowers" #3 for the full rationale.
   and Contract B (AC terminal-state rule) would otherwise be
   inlined separately in both Consumer and Producer skills —
   this skill is the single source of truth for both.
+- **Tier 2 frontmatter**: `user-invocable: false` (atomic
+  reflex, never user-driven directly).
+
+#### `operating-kanban` (v1-complete, shipped v0.5.0)
+
+- **Role**: Backend-projection dispatch SPOT — owns "how to act
+  on the active backend" for the eight Kanban Protocol actions
+  (`read_board`, `read_card`, `create_card`, `transition_card`,
+  `claim_card`, `release_claim`, `link_pr_to_card`,
+  `comment_on_card` OPTIONAL). Reads `<repo>/.board-superpowers/
+  settings.yml § modules.m10_kanban` to resolve the active
+  projection per kanban id, loads the per-projection reference
+  file under its own `references/` directory, and dispatches per
+  Form A (bash CLI) / Form B (plugin-shipped MCP server) / Form C
+  (REST/GraphQL). Also owns the bootstrap-side setup-capability
+  registry that M3 stage predicates (per ADR-0027) consume.
+- **Body target**: 200-300 lines (atomic budget).
+- **References folder**:
+  `references/{action-dispatch,backend-selection,form-a-bash,form-b-mcp,form-c-rest,failure-mode-dispatch,github-project-v2}.md`
+  + future per-projection reference files (`linear.md` /
+  `jira.md` ship with their projections).
+- **Called by**: every molecular skill that touches the board
+  (`managing-board`, `consuming-card`, `decomposing-into-milestones`,
+  and once the v0.5.0 `bootstrapping-repo` rebase per #67 lands —
+  the bootstrap-side setup-capability dispatch).
+- **Calls**: nothing in-plugin. Atomic = reflexive. Externally,
+  invokes the active projection (bash `gh` / MCP tool / REST
+  endpoint) per the projection's reference file.
+- **SPOT consolidates**: backend-routing logic (which projection
+  is active + how each protocol action maps to a backend
+  invocation) would otherwise be inlined into 4+ molecular
+  callers. Distinct from `board-canon`'s SPOT per the
+  Atomic-layer boundary discipline above: `board-canon` owns
+  "what is legal" (backend-agnostic), `operating-kanban` owns
+  "how to act" (backend-aware).
 - **Tier 2 frontmatter**: `user-invocable: false` (atomic
   reflex, never user-driven directly).
 
@@ -421,26 +473,26 @@ means for board-superpowers" #3 for the full rationale.
       │ managing-   │ │consu-│ │decom-│ │bootstrap-│ │ migrating-     │
       │   board     │ │ ming-│ │posing│ │ ping-repo│ │  repo-version  │
       │ (Producer)  │ │ card │ │      │ │          │ │                │
-      └──┬─────┬────┘ └─┬──┬─┘ └──┬───┘ └────┬─────┘ └────────┬───────┘
-         │     │        │  │      │          │                │
-         │     │  (cross-plugin: 见 § "Cross-plugin edges")    │
-         │     │        │  │      │          │                │
-   ┌─────┼─────┼────────┼──┼──────┼──────────┼────────────────┘
-   │     │     │        │  │      │          │
-   ▼     ▼     ▼        ▼  ▼      ▼          ▼            (Atomic — 反射弧)
-   ┌────────────┐  ┌─────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-   │ board-canon│  │enforcing-pr-    │  │classifying-      │  │ auditing-actions │
-   │ (read-only │  │   contract      │  │   actions        │  │ (audit schema +  │
-   │   schema)  │  │ (PR 三段式)     │  │ (D-AUTONOMY-1 +  │  │   DB 写入约定)   │
-   │            │  │                 │  │  override 解析)  │  │                  │
-   └────────────┘  └─────────────────┘  └──────────────────┘  └──────────────────┘
-                                                  │
-                                                  └─── after A/R decision ───┐
-                                                                              ▼
-                                                       (mutating skill MUST also call auditing-actions)
+      └──┬───┬───┬──┘ └─┬──┬─┘ └──┬───┘ └────┬─────┘ └────────┬───────┘
+         │   │   │      │  │      │          │                │
+         │   │   │  (cross-plugin: 见 § "Cross-plugin edges") │
+         │   │   │      │  │      │          │                │
+   ┌─────┼───┼───┼──────┼──┼──────┼──────────┼────────────────┘
+   │     │   │   │      │  │      │          │
+   ▼     ▼   ▼   ▼      ▼  ▼      ▼          ▼              (Atomic — 反射弧)
+   ┌────────────┐  ┌─────────────────┐  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────┐
+   │ board-canon│  │enforcing-pr-    │  │ operating-   │  │classifying-      │  │ auditing-actions │
+   │ (read-only │  │   contract      │  │   kanban     │  │   actions        │  │ (audit schema +  │
+   │   schema)  │  │ (PR 三段式)     │  │ (8-action    │  │ (D-AUTONOMY-1 +  │  │   DB 写入约定)   │
+   │            │  │                 │  │  dispatch)   │  │  override 解析)  │  │                  │
+   └────────────┘  └─────────────────┘  └──────────────┘  └──────────────────┘  └──────────────────┘
+                                                                  │
+                                                                  └─── after A/R decision ───┐
+                                                                                              ▼
+                                                                   (mutating skill MUST also call auditing-actions)
 ```
 
-## SPOT derivation — why exactly 4 atomic skills
+## SPOT derivation — why exactly 5 atomic skills
 
 The atomic-layer count is not preference; it's the result of a
 SPOT (single-point-of-truth) census. Any contract that
@@ -451,6 +503,7 @@ candidate that MUST be promoted to atomic. v1 census:
 |----------|---------------------------|--------------------------|
 | State machine + Card schema + branch naming + WIP rules | All 5 molecular | `board-canon` |
 | PR three-section shape + filler detection | `consuming-card` (write) + `managing-board` (validate) | `enforcing-pr-contract` |
+| 8-action protocol dispatch + projection routing + setup-capability registry | All 4 board-touching molecular (`managing-board`, `consuming-card`, `decomposing-into-milestones`, `bootstrapping-repo` once #67 lands) | `operating-kanban` |
 | D-AUTONOMY-1 matrix + override parsing | All 5 mutating molecular | `classifying-actions` |
 | Audit log schema + two-entry rule | All 5 mutating molecular | `auditing-actions` |
 
@@ -472,7 +525,7 @@ Per
 
 | Bounded context | Owns / reads | Skill(s) acting on it |
 |-----------------|--------------|------------------------|
-| **Board** | Card + PR aggregates; GitHub Project + Issues + git refs | `managing-board` (R), `consuming-card` (R + W own card), `decomposing-into-milestones` (W new cards), `bootstrapping-repo` (R Status field), `board-canon` (schema authority) |
+| **Board** | Card + PR aggregates; GitHub Project + Issues + git refs | `managing-board` (R), `consuming-card` (R + W own card), `decomposing-into-milestones` (W new cards), `bootstrapping-repo` (R Status field), `board-canon` (schema authority), `operating-kanban` (per-projection dispatch authority) |
 | **Session** | ProducerSession + ConsumerLogical aggregates; OS processes + worktrees | `managing-board` (R lifecycle), `consuming-card` (own session) |
 | **Bootstrap** | HostBootstrap + RepoBootstrap + RepoConfig | `bootstrapping-repo` (R + W), `migrating-repo-version` (R + W), `using-board-superpowers` (R for state checks) |
 | **Audit** | AuditTrail aggregate; BYO RDBMS | `auditing-actions` (W via DB script) |
