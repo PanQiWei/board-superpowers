@@ -1,0 +1,67 @@
+# settings.host-shared.yml — host-shared locality template
+#
+# Locality:  host-shared
+# Path:      ~/.board-superpowers/settings.yml
+# Tracked:   No (host-local, gitignored on the host filesystem)
+# Mode:      0644 (no secrets — credentials live in credentials.yml at 0600)
+# Replaces:  v0.4.0 manifest.yml + overrides.yml (folded)
+#
+# ADR-0024 § Part A: this file is the host-shared settings.yml.
+# ADR-0021: two-section split — stages_completed[] (machine) + modules (architect).
+#
+# Stage entries here: M1 host stages, M2 uv install, M8 autonomy presets,
+# M9 codex hook registration.
+#
+# applicable_when predicates that read this file:
+#   - m1.host.create-state-dir: checks stages_completed[] for host state dir stage
+#   - m1.host.write-manifest:   checks stages_completed[] for manifest write stage
+#   - m2.host.install-uv:       checks stages_completed[] + modules.m2_python_runtime.uv_version
+#   - m8.host.bootstrap-overrides-yml: reads modules.m8_autonomy.presets_chosen
+#   - m9.host.register-codex-hooks:    reads modules.m9_hook_registration.codex_hooks_registered
+
+# Top-level file metadata (ADR-0021 § file-level schema_version)
+setup:
+  schema_version: 1
+  # filled by bootstrap-host.sh on first run:
+  generated_at: <will-be-filled-by-bootstrap>
+  plugin_version: <will-be-filled-by-bootstrap>
+
+# Section 1 — flat lifecycle source-of-truth (machine view; ADR-0013)
+# Hook reads this for (generation, target_state_hash) diff against registry.
+# Do NOT hand-edit these entries; SKILL re-writes them on stage completion.
+stages_completed: []
+
+# Section 2 — module-namespaced config-items projection (architect view; ADR-0021)
+# Each module's section holds only architect-facing config items.
+# SKILL writes both sections atomically (mktemp + mv) on stage completion.
+modules:
+
+  # M1 — Plugin runtime / host manifest
+  # No architect-facing config items; section exists as schema anchor.
+  m1_plugin_runtime:
+    schema_version: 1
+
+  # M2 — Python runtime (uv + venv)
+  # uv_version: recorded after m2.host.install-uv completes.
+  # Used by: bsp_ensure_venv to decide if uv self-update is warranted.
+  m2_python_runtime:
+    schema_version: 1
+    uv_version: ""  # filled by m2.host.install-uv
+
+  # M8 — Autonomy overrides (ADR-0006 § "promotion path")
+  # Folds the v0.4.0 overrides.yml into this locality.
+  # presets_chosen: subset of curated preset names the architect selected.
+  # autonomy_overrides: free-form list of {action_id, class} overrides.
+  # Empty selection is a valid completed state (one-keystroke re-confirm).
+  # applicable_when: m8.host.bootstrap-overrides-yml reads presets_chosen.
+  m8_autonomy:
+    schema_version: 1
+    presets_chosen: []     # e.g. [allow-pr-creation]
+    autonomy_overrides: [] # e.g. [{action_id: 3, class: A}]
+
+  # M9 — Hook registration (Codex CLI only; CC auto-discovers hooks/hooks.json)
+  # codex_hooks_registered: true once m9.host.register-codex-hooks has run.
+  # applicable_when: m9.host.register-codex-hooks checks this flag.
+  m9_hook_registration:
+    schema_version: 1
+    codex_hooks_registered: false

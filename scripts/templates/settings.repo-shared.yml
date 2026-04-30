@@ -1,0 +1,72 @@
+# settings.repo-shared.yml — repo-shared locality template
+#
+# Locality:  repo-shared
+# Path:      ~/.board-superpowers/repos/<repo-identity>/settings.yml
+#            NOTE: HOST-side path, NOT under <repo>/; cross-clone shared.
+# Tracked:   No (host-local, gitignored)
+# Cross-clone: YES — shared across all clones of the same (host, GitHub repo) pair
+# Mode:      0644 (no secrets)
+# Replaces:  v0.4.0 state.yml
+#
+# ADR-0024 § Part A: repo-shared locality.
+# ADR-0017 (I-13 invariant): repo-identity = "<owner>/<repo>" slug derived from
+#   git remote "origin", lowercased. This ensures cross-clone state sharing.
+# ADR-0013: stages_completed[] + per-stage three-layer fingerprint.
+# ADR-0021: two-section split.
+#
+# Stage entries here: M1 per-repo state, M4 audit stages, M7 form-detect
+# cache, external-stage TTL caches.
+#
+# applicable_when predicates that read this file:
+#   - m1.repo.write-state-yml:   reads stages_completed[] for lifecycle diff
+#   - m4.repo.acquire-dsn:       reads modules.m4_audit.dsn_recorded (re-use path)
+#   - m4.repo.flush-pending-audit: reads modules.m4_audit.pending_count
+#   - m4.repo.audit-health-check: reads modules.m4_audit health fields
+#   - m7.repo.detect-agentsmd-form: reads modules.m7_routing.detected_form (cache)
+#   - bsp_stage_state_set / bsp_stage_state_get: read/write modules.lifecycle
+
+# Top-level file metadata (ADR-0021)
+setup:
+  schema_version: 1
+  generated_at: <will-be-filled-by-bootstrap>
+  plugin_version: <will-be-filled-by-bootstrap>
+  # repo_identity is recorded for human readability; the path itself encodes it.
+  repo_identity: <will-be-filled-by-bootstrap>  # e.g. "panqiwei/board-superpowers"
+
+# Section 1 — flat lifecycle source-of-truth (machine view; ADR-0013)
+stages_completed: []
+
+# Section 2 — module-namespaced config-items projection (architect view; ADR-0021)
+modules:
+
+  # M1 — per-repo plugin runtime state
+  # No architect-facing config items at the repo-shared layer.
+  m1_plugin_runtime:
+    schema_version: 1
+    bootstrapped_at: ""  # filled by m1.repo.write-state-yml
+
+  # M4 — Audit log (per-repo; ADR-0015 moved this from host-shared to repo-shared)
+  # dsn_recorded: true after m4.repo.acquire-dsn completes (DSN in credentials.yml)
+  # audit_rows_landed: last known DB row count (from m4.repo.audit-health-check)
+  # pending_count: jsonl fallback rows awaiting flush
+  m4_audit:
+    schema_version: 1
+    dsn_recorded: false
+    audit_rows_landed: 0
+    pending_count: 0
+
+  # M7 — AGENTS.md / CLAUDE.md routing form detection cache
+  # detected_form: one of cc-only | codex-only | dual | neither
+  # Cached to avoid re-scanning on every session start (ADR-0018).
+  m7_routing:
+    schema_version: 1
+    detected_form: ""   # filled by m7.repo.detect-agentsmd-form
+
+  # lifecycle — internal section written by bsp_stage_state_set helper
+  # (bsp_stage_state_set / bsp_stage_state_get in scripts/lib/common.sh)
+  # Maps stage_id → {status, generation, target_state_hash}
+  # Machine-managed; created on first bsp_stage_state_set call.
+  # schema_version omitted: lifecycle is not an ADR-0021 module section;
+  # it is a helper-internal dict created dynamically under modules.lifecycle.
+  lifecycle:
+    schema_version: 1

@@ -1717,3 +1717,325 @@ bsp_render_creator_trace_block() {
 <!-- /board-superpowers:creator-trace -->
 EOF
 }
+
+# =============================================================================
+# --- Stage-aware settings helpers (Card #67, Phase 2 Batch 3 T2.7) ----------
+# =============================================================================
+#
+# These helpers are the bash analog of scripts/stages_lib/_partitioned_settings.py.
+# They use python3 shell-out for YAML manipulation to preserve the single-producer
+# canonical YAML emit rule (per ADR-0014 line 90 + ADR-0021: write path must be
+# deterministic). Rationale for python3-over-yq choice: (1) python3 + PyYAML is
+# already a hard dependency of the audit writer above; (2) yq versions differ
+# across systems and their output format is not pinned; (3) Python's yaml.safe_dump
+# with sort_keys=True matches the canonicalization invariant from _canonical.py.
+#
+# All four helpers conform to the ADR-0024 § Part A four-path table:
+#   host-shared:  $home/.board-superpowers/settings.yml
+#   repo-shared:  $home/.board-superpowers/repos/$repo_identity/settings.yml
+#                 NOTE: HOST-side path, NOT under <repo>/
+#   repo-git:     $repo_root/.board-superpowers/settings.yml
+#   repo-clone:   $repo_root/.board-superpowers/settings.local.yml
+
+# bsp_settings_path <locality> <home> <repo_root> <repo_identity>
+#
+# Bash analog of _partitioned_settings.settings_path().
+# Stdout: absolute path for the given locality.
+# Exit 1 if locality is unknown.
+#
+# Args:
+#   $1  locality        — one of: host-shared | repo-shared | repo-git | repo-clone
+#   $2  home            — $HOME (or override for tests)
+#   $3  repo_root       — absolute repo root
+#   $4  repo_identity   — "owner/repo" slug (lowercase)
+#
+# Note: repo-shared is HOST-side ($home/.board-superpowers/repos/<identity>/...)
+# and must NOT be confused with repo-git (<repo_root>/.board-superpowers/...).
+
+bsp_settings_path() {
+    local locality="${1:?usage: bsp_settings_path <locality> <home> <repo_root> <repo_identity>}"
+    local home="${2:?usage: bsp_settings_path <locality> <home> <repo_root> <repo_identity>}"
+    local repo_root="${3:?usage: bsp_settings_path <locality> <home> <repo_root> <repo_identity>}"
+    local repo_identity="${4:?usage: bsp_settings_path <locality> <home> <repo_root> <repo_identity>}"
+
+    case "${locality}" in
+        host-shared)
+            printf '%s/.board-superpowers/settings.yml\n' "${home}"
+            ;;
+        repo-shared)
+            # HOST-side: ~/.board-superpowers/repos/<owner>/<repo>/settings.yml
+            # repo_identity is e.g. "panqiwei/board-superpowers"
+            printf '%s/.board-superpowers/repos/%s/settings.yml\n' "${home}" "${repo_identity}"
+            ;;
+        repo-git)
+            printf '%s/.board-superpowers/settings.yml\n' "${repo_root}"
+            ;;
+        repo-clone)
+            printf '%s/.board-superpowers/settings.local.yml\n' "${repo_root}"
+            ;;
+        *)
+            bsp_die "bsp_settings_path: unknown locality '${locality}' (expected: host-shared | repo-shared | repo-git | repo-clone)"
+            ;;
+    esac
+}
+
+# bsp_settings_read <locality> <home> <repo_root> <repo_identity>
+#
+# cat the settings.yml at locality; empty stdout if file absent.
+# Args same as bsp_settings_path.
+
+bsp_settings_read() {
+    local locality="${1:?usage: bsp_settings_read <locality> <home> <repo_root> <repo_identity>}"
+    local home="${2:?}"
+    local repo_root="${3:?}"
+    local repo_identity="${4:?}"
+
+    local path
+    path="$(bsp_settings_path "${locality}" "${home}" "${repo_root}" "${repo_identity}")"
+    if [ -f "${path}" ]; then
+        cat "${path}"
+    fi
+    # Intentionally silent (no output, exit 0) when file is absent.
+}
+
+# bsp_repo_identity [<repo_root>]
+#
+# Resolve the repo_identity slug ("owner/repo" lowercase) from the git remote
+# URL of the given repo_root. Defaults to git rev-parse --show-toplevel from
+# the current directory.
+#
+# Stdout: "<owner>/<repo>" (lowercase, without .git suffix)
+# Returns: 0 on success, 1 if not in a git repo or remote URL unparseable.
+
+bsp_repo_identity() {
+    local repo_root="${1:-}"
+
+    if [ -z "${repo_root}" ]; then
+        repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+            bsp_die "bsp_repo_identity: not in a git repository"
+        }
+    fi
+
+    command -v git >/dev/null 2>&1 || bsp_die "bsp_repo_identity: git not found"
+
+    local origin_url
+    origin_url="$(git -C "${repo_root}" remote get-url origin 2>/dev/null)" || {
+        bsp_die "bsp_repo_identity: no 'origin' remote in ${repo_root}"
+    }
+
+    # Parse owner/repo from both HTTPS and SSH URLs.
+    # HTTPS: https://github.com/Owner/Repo.git → Owner/Repo
+    # SSH:   git@github.com:Owner/Repo.git     → Owner/Repo
+    local slug
+    slug="$(printf '%s' "${origin_url}" | python3 -c '
+import re, sys
+url = sys.stdin.read().strip()
+# Strip .git suffix
+url = re.sub(r"\.git$", "", url)
+# HTTPS: https://github.com/Owner/Repo
+m = re.search(r"github\.com[:/](.+/[^/]+)$", url)
+if m:
+    print(m.group(1).lower())
+    sys.exit(0)
+# Generic: take last two path segments
+parts = re.split(r"[:/]", url.rstrip("/"))
+if len(parts) >= 2:
+    slug = "/".join(parts[-2:])
+    print(slug.lower())
+    sys.exit(0)
+sys.exit(1)
+')" || bsp_die "bsp_repo_identity: cannot parse owner/repo from remote URL: ${origin_url}"
+
+    printf '%s\n' "${slug}"
+}
+
+# bsp_stage_state_set <stage_id> <status> <generation> <target_state_hash> [<repo_root>]
+#
+# Update lifecycle state for a stage in the repo-shared settings.yml.
+# Uses python3 shell-out for atomic YAML read-modify-write (same strategy
+# as bsp_audit_local_write above — py3 guarantees atomic YAML with mktemp+replace).
+#
+# Persists into:
+#   ~/.board-superpowers/repos/<repo_identity>/settings.yml
+#   under modules.lifecycle.<stage_id> section.
+#
+# Args:
+#   $1  stage_id           — e.g. "m1.host.create-state-dir"
+#   $2  status             — one of: applied | pending | failed | not-applicable
+#   $3  generation         — integer
+#   $4  target_state_hash  — hex hash string
+#   $5  repo_root          — optional; defaults to current directory
+
+bsp_stage_state_set() {
+    local stage_id="${1:?usage: bsp_stage_state_set <stage_id> <status> <generation> <target_state_hash> [<repo_root>]}"
+    local status="${2:?}"
+    local generation="${3:?}"
+    local target_state_hash="${4:?}"
+    local repo_root="${5:-${PWD}}"
+
+    local repo_identity
+    repo_identity="$(bsp_repo_identity "${repo_root}")" || return 1
+
+    local settings_file
+    settings_file="$(bsp_settings_path "repo-shared" "${HOME}" "${repo_root}" "${repo_identity}")"
+    local parent_dir
+    parent_dir="$(dirname "${settings_file}")"
+    mkdir -p "${parent_dir}"
+
+    # Resolve a python3 interpreter with PyYAML available.
+    # Priority: (1) per-repo venv (bsp_ensure_venv), (2) plugin-root stages_lib
+    # via PYTHONPATH injection against the plugin's own scripts/ directory.
+    # The stages_lib/_partitioned_settings.py module requires PyYAML, which is
+    # guaranteed in the venv (per pyproject.toml) and available in the plugin
+    # root's own dev environment. The PYTHONPATH injection ensures yaml is
+    # reachable even when HOME is overridden in tests (macOS user site-packages
+    # is keyed on HOME at Python startup, so HOME override removes user site).
+    local bsp_python3
+    if bsp_python3="$(bsp_ensure_venv "${repo_root}" 2>/dev/null)"; then
+        : # venv python3 has PyYAML
+    else
+        bsp_python3="python3"
+        # Inject plugin-root stages_lib path so _partitioned_settings import works.
+        # Also inject the real user site-packages path (resolved when common.sh was
+        # first sourced — before any HOME override) for portable yaml availability.
+        local _plugin_root
+        _plugin_root="$(bsp_plugin_root)"
+        local _user_site
+        _user_site="$("${bsp_python3}" -c 'import site; print(site.getusersitepackages())' 2>/dev/null || true)"
+        # Prepend plugin scripts dir (for stages_lib) + real user site-packages
+        export PYTHONPATH="${_plugin_root}/scripts${_user_site:+:${_user_site}}${PYTHONPATH:+:${PYTHONPATH}}"
+    fi
+
+    BSP_SETTINGS_FILE="${settings_file}" \
+    BSP_STAGE_ID="${stage_id}" \
+    BSP_STATUS="${status}" \
+    BSP_GENERATION="${generation}" \
+    BSP_HASH="${target_state_hash}" \
+    "${bsp_python3}" - <<'PY'
+import os, sys, tempfile
+
+# Import yaml via stages_lib or direct
+try:
+    import yaml
+except ImportError:
+    sys.stderr.write("[bsp ERROR] bsp_stage_state_set: yaml (PyYAML) not available\n")
+    sys.exit(1)
+
+path     = os.environ["BSP_SETTINGS_FILE"]
+stage_id = os.environ["BSP_STAGE_ID"]
+status   = os.environ["BSP_STATUS"]
+generation = int(os.environ["BSP_GENERATION"])
+hash_val = os.environ["BSP_HASH"]
+
+# Load existing or start fresh
+try:
+    with open(path) as f:
+        data = yaml.safe_load(f) or {}
+except FileNotFoundError:
+    data = {}
+
+if not isinstance(data, dict):
+    data = {}
+
+# Ensure modules.lifecycle exists
+if "modules" not in data or not isinstance(data.get("modules"), dict):
+    data["modules"] = {}
+if "lifecycle" not in data["modules"] or not isinstance(data["modules"].get("lifecycle"), dict):
+    data["modules"]["lifecycle"] = {}
+
+data["modules"]["lifecycle"][stage_id] = {
+    "status": status,
+    "generation": generation,
+    "target_state_hash": hash_val,
+}
+
+content = yaml.safe_dump(
+    data,
+    default_flow_style=False,
+    sort_keys=True,
+    allow_unicode=True,
+    indent=2,
+    width=10**9,
+)
+
+parent = os.path.dirname(path) or "."
+fd, tmp = tempfile.mkstemp(prefix=".bsp-state-", dir=parent)
+try:
+    with os.fdopen(fd, "w") as fh:
+        fh.write(content)
+    os.replace(tmp, path)
+except Exception:
+    try: os.unlink(tmp)
+    except OSError: pass
+    raise
+PY
+}
+
+# bsp_stage_state_get <stage_id> [<repo_root>]
+#
+# Read lifecycle state for a stage from the repo-shared settings.yml.
+# Stdout: "<status>\n<generation>\n<target_state_hash>" (3 lines) when found.
+#         Empty stdout when stage is absent (not an error).
+# Returns: 0 always.
+
+bsp_stage_state_get() {
+    local stage_id="${1:?usage: bsp_stage_state_get <stage_id> [<repo_root>]}"
+    local repo_root="${2:-${PWD}}"
+
+    local repo_identity
+    repo_identity="$(bsp_repo_identity "${repo_root}" 2>/dev/null)" || return 0
+
+    local settings_file
+    settings_file="$(bsp_settings_path "repo-shared" "${HOME}" "${repo_root}" "${repo_identity}")"
+
+    [ -f "${settings_file}" ] || return 0
+
+    # Same python3 resolution as bsp_stage_state_set: prefer venv, fall back
+    # with PYTHONPATH injection for portable yaml availability.
+    local bsp_python3
+    if bsp_python3="$(bsp_ensure_venv "${repo_root}" 2>/dev/null)"; then
+        : # venv python3 has PyYAML
+    else
+        bsp_python3="python3"
+        local _plugin_root
+        _plugin_root="$(bsp_plugin_root)"
+        local _user_site
+        _user_site="$("${bsp_python3}" -c 'import site; print(site.getusersitepackages())' 2>/dev/null || true)"
+        export PYTHONPATH="${_plugin_root}/scripts${_user_site:+:${_user_site}}${PYTHONPATH:+:${PYTHONPATH}}"
+    fi
+
+    BSP_SETTINGS_FILE="${settings_file}" \
+    BSP_STAGE_ID="${stage_id}" \
+    "${bsp_python3}" - <<'PY'
+import os, sys
+
+try:
+    import yaml
+except ImportError:
+    sys.exit(0)  # yaml absent → empty output (graceful degradation)
+
+path     = os.environ["BSP_SETTINGS_FILE"]
+stage_id = os.environ["BSP_STAGE_ID"]
+
+try:
+    with open(path) as f:
+        data = yaml.safe_load(f) or {}
+except FileNotFoundError:
+    sys.exit(0)
+
+if not isinstance(data, dict):
+    sys.exit(0)
+
+lifecycle = data.get("modules", {}).get("lifecycle", {})
+if not isinstance(lifecycle, dict):
+    sys.exit(0)
+
+entry = lifecycle.get(stage_id)
+if not entry or not isinstance(entry, dict):
+    sys.exit(0)
+
+print(entry.get("status", ""))
+print(entry.get("generation", ""))
+print(entry.get("target_state_hash", ""))
+PY
+}
