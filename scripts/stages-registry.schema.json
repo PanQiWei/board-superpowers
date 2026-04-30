@@ -1,0 +1,356 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://board-superpowers.example/scripts/stages-registry.schema.json",
+  "title": "board-superpowers stage registry",
+  "description": "JSON Schema validating scripts/stages-registry.yml. Per ADR-0014 (3-artifact pattern: YAML metadata + Python helpers + JSON Schema validation). Catches enum typos, missing required fields, malformed `applicable_when` predicates, malformed `target_state_schema` shapes, and dangling `depends_on` references (cross-stage validation lives in scripts/stages_lib/_lifecycle.py — JSON Schema cannot easily express). Vocabulary anchors: ADR-0027 § 2 (`kanban_projection_capability` predicate; supersedes the pre-#70 dispatch model retired by ADR-0027); ADR-0024 § Part A (settings.yml family + four localities); ADR-0023 (5-element config item protocol — `interactive_prompt` + `validation_kind`); ADR-0020 (3 `applicable_when` forms).",
+  "type": "object",
+  "required": ["stages"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "description": "Optional registry-level metadata. Per ADR-0021 — schema_version is per-file (registry as a whole) AND per-stage-target (declared inside each stage's `target_state_schema_version`).",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Registry-file schema version. Bumped when the *registry's own shape* changes (a new top-level field, a new required column, etc.) — independent of any individual stage's `target_state_schema_version`."
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The stage entries. Order is informational — runtime ordering is computed from `depends_on` (topological sort) by scripts/stages_lib/_lifecycle.py.",
+      "items": {
+        "$ref": "#/$defs/stageEntry"
+      }
+    }
+  },
+  "$defs": {
+    "interactivePromptOption": {
+      "type": "object",
+      "description": "A single literal option for single-choice or multi-choice prompts when `options_source: literal`. The `value` must correspond to a value accepted by the parent stage's `target_state_schema`.",
+      "required": ["value", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "description": "Machine-readable value; MUST match a value in the parent stage's `target_state_schema` enum (for single-choice) or be a list element (for multi-choice). This is the value persisted to settings.yml."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable display label shown to the architect in the prompt."
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional one-sentence explanation of what choosing this option means."
+        }
+      }
+    },
+    "stageEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage_id",
+        "stage_name",
+        "description",
+        "module",
+        "character",
+        "locality",
+        "platforms",
+        "introduced_in_version",
+        "executor",
+        "generation",
+        "depends_on",
+        "target_state_schema",
+        "target_state_schema_version"
+      ],
+      "properties": {
+        "stage_id": {
+          "type": "string",
+          "pattern": "^m([1-9]|10)\\.(host|repo)\\.[a-z0-9]+(-[a-z0-9]+)*(\\.[a-z0-9]+(-[a-z0-9]+)*)*$",
+          "description": "Globally unique identifier. Per design doc § Stages: `<module>.<scope>.<verb-noun>`. `<scope>` is `host` or `repo` (matching `locality`). `<verb-noun>` may carry sub-segments (e.g., `m7.repo.inject-block.routing-rule`). Module number is 1..10. The per-stage Python helper lives at `scripts/stages_lib/<stage_id_slug>.py` where slug = stage_id with `.` and `-` replaced by `_` (e.g., `m4.repo.apply-audit-ddl` → `m4_repo_apply_audit_ddl.py`). Per ADR-0014 § Decision, the runtime path is derivable from `stage_id` via this slug rule — no separate path field is required."
+        },
+        "stage_name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable short name for the architect-facing Stages table (design doc § Stages column 2)."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "One-sentence prose description (design doc § Stages column 3)."
+        },
+        "module": {
+          "type": "string",
+          "enum": ["M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9", "M10"],
+          "description": "Functional module identifier (per ADR-0014 + design doc § Column / field semantics + phase-2-foundation.md T2.1). Values `M1`..`M10`. The settings.yml family persists each stage's `target_state` projection at `modules.<module_section_path>` (overridable via `module_section_path` per ADR-0021)."
+        },
+        "character": {
+          "type": "string",
+          "enum": ["automated", "agentic"],
+          "description": "Axis A — execution character (per ADR-0014 + design doc § Column / field semantics). `automated` = SKILL computes target_state without architect input. `agentic` = stage requires architect input via 5-element config item protocol (ADR-0023)."
+        },
+        "locality": {
+          "type": "string",
+          "enum": ["host-shared", "repo-shared", "repo-git", "repo-clone", "external"],
+          "description": "Axis B — locality (per ADR-0014 + ADR-0024 § Part A). Where target_state is persisted. `host-shared` = `~/.board-superpowers/settings.yml`. `repo-shared` = `~/.board-superpowers/repos/<repo-identity>/settings.yml` (HOST-side, gitignored at host level — per ADR-0024 § Path mappings). `repo-git` = `<repo>/.board-superpowers/settings.yml` (committed). `repo-clone` = `<repo>/.board-superpowers/settings.local.yml` (gitignored). `external` = observed via API (RDBMS / GitHub Project / etc.) — NOT persisted; observed via target_state_predicate live IO subject to `external_ttl_seconds` cache."
+        },
+        "platforms": {
+          "type": "string",
+          "enum": ["both", "cc-only", "codex-only", "cc", "codex"],
+          "description": "Per ADR-0016 cross-platform parity contract. `both` is the default. `cc` is an alias for `cc-only`; `codex` is an alias for `codex-only`. The hook applies `platforms` BEFORE `applicable_when` (ADR-0016 § Composition with `applicable_when`); a stage filtered out by `platforms` does not appear in any lifecycle state on the wrong platform."
+        },
+        "flags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "heavy",
+              "network-required",
+              "confirm-only",
+              "agentic-on-failure",
+              "platform-specific",
+              "single-choice-currently",
+              "block-size-capped"
+            ]
+          },
+          "uniqueItems": true,
+          "description": "Free-form flag set documenting non-functional traits the lifecycle / hook may treat specially (e.g., `heavy` = take longer than a typical stage; `network-required` = needs internet; `confirm-only` = agentic stage that frequently confirms a sensible default)."
+        },
+        "introduced_in_version": {
+          "type": "string",
+          "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.-]+)?$",
+          "description": "Plugin version that first shipped this stage's *semantic work* (not when the registry-modeled stage_id concept was introduced). Used by the lifecycle model to detect cohort introduction."
+        },
+        "deprecated_in_version": {
+          "type": "string",
+          "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.-]+)?$",
+          "description": "Plugin version that retires this stage. Recorded entries flip to `deprecated` lifecycle state — preserved as history but no longer drive execution. Optional."
+        },
+        "executor": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Architect-facing executor description (design doc § Stages column 11; per ADR-0014 SoT field). For automated stages: `scripts/<script>.sh` or `scripts/stages_lib/<stage_id_slug>.py`. For agentic SKILL-routed stages: `SKILL: bootstrapping-repo` or compound form. Note: the runtime Python callable path is derivable from `stage_id` via the slug rule (per ADR-0014 § Decision) — this field carries the architect-facing display string, not a separate runtime path."
+        },
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "K8s-style monotonic integer (Layer 1 of three-layer fingerprint per ADR-0013). Bumped when *any* aspect of the expected target changes (schema, executor, content template). Layer-1 fast-path for the lifecycle hook."
+        },
+        "depends_on": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^m([1-9]|10)\\.(host|repo)\\.[a-z0-9]+(-[a-z0-9]+)*(\\.[a-z0-9]+(-[a-z0-9]+)*)*$"
+          },
+          "uniqueItems": true,
+          "description": "Stage_ids that must be `completed` before this stage runs (per ADR-0014 SoT field name). Forms an explicit DAG; topological sort by scripts/stages_lib/_lifecycle.py. Cross-stage existence + acyclicity validation happens at lifecycle load — JSON Schema only checks pattern conformance here."
+        },
+        "target_state_schema": {
+          "type": "object",
+          "description": "JSON-Schema-style declaration of the shape `compute_target_state()` returns. Free-form object; the lifecycle validates each entry's recorded `target_state` against this schema at load time. Authoring guide: design doc § 'Per-stage entry shape' (lines 607-660 of redesign doc) — DO NOT invent shapes; mirror what the executor actually computes."
+        },
+        "target_state_schema_version": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Schema version of the `target_state` field's *own shape* (per ADR-0013). Bumped when the stage author changes the structure of `target_state` itself (additive only, lazy-on-read). Independent of registry-file `meta.schema_version` and per-stage `generation`."
+        },
+        "default_value": {
+          "description": "For `character: agentic` stages: the default value the prompt-renderer pre-fills (ADR-0023 element 1 + element 3). Architect may accept the default to advance. Type matches `target_state_schema`'s declared shape (e.g., int for `numeric-range`, string for `single-choice`). Optional for automated stages."
+        },
+        "validation_kind": {
+          "type": "string",
+          "enum": [
+            "single-choice",
+            "multi-choice",
+            "free-text",
+            "boolean",
+            "numeric-range"
+          ],
+          "description": "Per ADR-0023 element 3 (Interaction). One of the five supported `interactive_prompt` kinds. REQUIRED when `character: agentic`; SHOULD be omitted when `character: automated` (no architect input)."
+        },
+        "interactive_prompt": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Per ADR-0023 element 3. Generic prompt-renderer reads this object and produces the architect-facing question. SHOULD be present whenever `character: agentic`. When `options_source: literal`, the `options` array MUST be populated with structured option objects whose `value` fields map to values in the parent stage's `target_state_schema`.",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "single-choice",
+                "multi-choice",
+                "free-text",
+                "boolean",
+                "numeric-range"
+              ]
+            },
+            "prompt": {
+              "type": "string",
+              "minLength": 1,
+              "description": "User-facing prompt template. May reference enum option list / numeric range from `target_state_schema`."
+            },
+            "options_source": {
+              "type": "string",
+              "enum": ["literal", "computed-from-schema-enum", "runtime-derived"],
+              "description": "Where the option list comes from when `kind` is `single-choice` or `multi-choice`. `literal` = structured `options` array in this object. `computed-from-schema-enum` = derived from parent stage's `target_state_schema` enum at render time. `runtime-derived` = computed by Python callable at runtime."
+            },
+            "options": {
+              "type": "array",
+              "description": "Structured literal option list. REQUIRED when `options_source: literal`. Each option's `value` MUST correspond to a value in the parent stage's `target_state_schema` enum (for single-choice) or be a permitted list element (for multi-choice). The generic prompt-renderer uses these to produce a machine-parseable choice list.",
+              "items": {
+                "$ref": "#/$defs/interactivePromptOption"
+              },
+              "minItems": 1
+            },
+            "min": {
+              "type": "number",
+              "description": "Lower bound for `numeric-range`."
+            },
+            "max": {
+              "type": "number",
+              "description": "Upper bound for `numeric-range`."
+            }
+          },
+          "required": ["kind", "prompt"]
+        },
+        "re_prompt_trigger": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Per ADR-0023 element 5. One-sentence description of when this stage re-prompts. The mechanism is always lifecycle-derived (generation bump → stale → re-prompt; manual settings-file edit fails schema → stale → re-prompt; `scripts/bsp-stage-rerun.sh <stage_id>` forces never-run). The text here documents the *trigger condition* the architect should expect."
+        },
+        "hash_excluded_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "description": "Dot-paths within `target_state` that are stripped before `target_state_hash` computation (per design doc § 'Hash-allowlist (fields excluded from hash)'). Default per-stage exclusions (`last_validated_at`, `last_run_id`, `external_validated_at`, `external_ttl_seconds`) are auto-applied — list only stage-specific additions."
+        },
+        "external_ttl_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Cache TTL for `locality: external` stages. The lifecycle's Layer-3 live IO (target_state_predicate) re-runs only when wall-clock time exceeds `external_validated_at + external_ttl_seconds`. Default convention: 86400 (24h). REQUIRED when `locality: external`. MUST NOT appear on non-external stages."
+        },
+        "applicable_when": {
+          "type": "object",
+          "description": "Per ADR-0020 conditional applicability predicate. Three legal forms: (1) setting-path declarative; (2) kanban-projection-capability declarative (per ADR-0027 § 2 — supersedes the pre-#70 dispatch model); (3) Python escape hatch. Predicate evaluates false → stage returns `not-applicable`. Cheap to evaluate (hook-side); never blocks for IO.",
+          "oneOf": [
+            {
+              "required": ["setting_path", "equals"],
+              "additionalProperties": false,
+              "properties": {
+                "setting_path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Dotted path into the merged settings (e.g., `m10.repo.choose-kanban-projection.target_state.kanban_projection`)."
+                },
+                "equals": {
+                  "description": "Value the setting_path must equal for the predicate to evaluate true."
+                }
+              }
+            },
+            {
+              "required": ["kanban_projection_capability"],
+              "additionalProperties": false,
+              "properties": {
+                "kanban_projection_capability": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                  "description": "Per ADR-0027 § 2. Capability name as declared in the active projection's reference file under `skills/operating-kanban/references/<projection-id>.md § 'Setup capabilities'`. Lowercase-kebab-case. Resolved at evaluation time by reading `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.<kanban-id>.projection`, loading the matching reference file, and checking whether the named capability is declared. Predicate true → stage runs; false → `not-applicable`."
+                },
+                "kanban_id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Per ADR-0026 multi-kanban schema. Kanban id whose projection is consulted. Defaults to `primary` when omitted."
+                }
+              }
+            },
+            {
+              "required": ["python"],
+              "additionalProperties": false,
+              "properties": {
+                "python": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^stages_lib\\.[a-z0-9_]+\\.[a-z0-9_]+$",
+                  "description": "Per ADR-0020 escape hatch. Dotted import path to a callable returning bool. LAST RESORT — every Form-3 use accumulates registry-side complexity. Document the rationale in the per-stage Python module's docstring."
+                }
+              }
+            }
+          ]
+        },
+        "module_section_path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^modules\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+          "description": "Per ADR-0021. Override for the `target_state` projection target inside the settings.yml file. Default is `modules.<lower(module)>` (e.g., `modules.m4_audit` for an M4 stage). Override when the architect-facing concept name differs from the internal module name."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["required", "optional"],
+          "description": "M7-only field per ADR-0018 multi-stage routing-block protocol. `required` blocks must be present in the routing target file; `optional` blocks are opt-in."
+        },
+        "block_max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "M7-only field per ADR-0018. Per-block byte budget. The 4 KiB single-block cap and 32 KiB total Codex AGENTS.md budget are the canonical caps."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "locality": { "const": "external" }
+            },
+            "required": ["locality"]
+          },
+          "then": {
+            "required": ["external_ttl_seconds"],
+            "description": "external-locality stages MUST declare external_ttl_seconds (live IO cache TTL)."
+          },
+          "else": {
+            "properties": {
+              "external_ttl_seconds": false
+            },
+            "description": "non-external-locality stages MUST NOT declare external_ttl_seconds."
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "character": { "const": "agentic" }
+            },
+            "required": ["character"]
+          },
+          "then": {
+            "required": ["validation_kind", "interactive_prompt", "default_value"],
+            "description": "agentic stages MUST declare validation_kind + interactive_prompt + default_value per ADR-0023 5-element protocol."
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "module": { "const": "M7" },
+              "stage_id": {
+                "pattern": "^m7\\.repo\\.inject-block\\."
+              }
+            },
+            "required": ["module", "stage_id"]
+          },
+          "then": {
+            "required": ["kind", "block_max_bytes"],
+            "description": "M7 inject-block stages MUST declare kind + block_max_bytes per ADR-0018."
+          }
+        }
+      ]
+    }
+  }
+}
