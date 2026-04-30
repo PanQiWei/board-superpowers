@@ -35,18 +35,18 @@ This split is what lets board-superpowers stay small. Roughly: planning, slicing
                     └──────────────┬───────────────┘
                                    │ routes to
                     ┌──────────────▼───────────────┐
-                    │       Molecular layer        │   5 skills
+                    │       Molecular layer        │   4 skills
                     │  managing-board ·            │
                     │  consuming-card ·            │
                     │  decomposing-into-milestones │
-                    │  bootstrapping-repo ·        │
-                    │  migrating-repo-version      │
+                    │  bootstrapping-repo          │
                     └──────────────┬───────────────┘
                                    │ reads from
                     ┌──────────────▼───────────────┐
-                    │         Atomic layer         │   4 skills
+                    │         Atomic layer         │   5 skills
                     │  board-canon ·               │
                     │  enforcing-pr-contract ·     │
+                    │  operating-kanban ·          │
                     │  classifying-actions ·       │
                     │  auditing-actions            │
                     └──────────────────────────────┘
@@ -101,7 +101,7 @@ The domain divides into five bounded contexts. Each context has its own vocabula
 |---------|------------|---------------|--------|
 | **Board** | Card + PR | GitHub Project + Issues + git refs | `managing-board` (read), `consuming-card` (read + write own card), `decomposing-into-milestones` (write new cards), `bootstrapping-repo` (read Status field), `board-canon` (schema authority) |
 | **Session** | ProducerSession + ConsumerLogical | OS processes + worktrees | `managing-board` (lifecycle read), `consuming-card` (own session) |
-| **Bootstrap** | HostBootstrap + RepoBootstrap + RepoConfig | `~/.board-superpowers/manifest.yml`, per-repo `config.yml`, host-local `state.yml` | `bootstrapping-repo` (read + write), `migrating-repo-version` (read + write), `using-board-superpowers` (read for state probes) |
+| **Bootstrap** | HostBootstrap + RepoBootstrap + RepoConfig | `~/.board-superpowers/manifest.yml`, per-repo `config.yml`, host-local `state.yml` | `bootstrapping-repo` (read + write — sole executor for setup-stages including version-transition migrations per ADR-0012), `using-board-superpowers` (read for state probes) |
 | **Audit** | AuditTrail | BYO RDBMS, jsonl on degradation | `auditing-actions` (write via `audit-log-write.sh`) |
 | **Spec** | SpecPointer (thin) | Card body's first line | `consuming-card` (read at claim time) |
 

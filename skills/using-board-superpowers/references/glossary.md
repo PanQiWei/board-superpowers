@@ -90,7 +90,7 @@ The directory where the plugin's hooks, scripts, and skills live. Resolves to `$
 board-superpowers groups skills into three layers with strict downward dependency:
 
 - **Entry** — this skill (`using-board-superpowers`). Auto-matches first; routes only.
-- **Molecular** — business workflows (`managing-board`, `consuming-card`, `decomposing-into-milestones`, `bootstrapping-repo`, `migrating-repo-version`).
+- **Molecular** — business workflows (`managing-board`, `consuming-card`, `decomposing-into-milestones`, `bootstrapping-repo`).
 - **Atomic** — single-purpose contracts reused by molecular skills (`board-canon`, `enforcing-pr-contract`, `classifying-actions`, `auditing-actions`). Atomic skills MUST NOT call any same-plugin skill — they are reflexes, not orchestrators.
 
 The layer determines what the skill is allowed to depend on, its body-length budget, and how often it gets loaded.

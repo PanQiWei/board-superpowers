@@ -31,9 +31,11 @@ per-repo bootstrap, implemented in
    `{target_file, block_hash: "sha256:<hex>", injected_at: <iso8601>}`
    — into `~/.board-superpowers/repos/<normalized>/state.yml`'s
    `routing_blocks:` list.
-5. The `board-superpowers:migrating-repo-version` skill consumes
-   `state.yml:routing_blocks[]` hashes for tamper detection at plugin
-   upgrade time.
+5. The `board-superpowers:bootstrapping-repo` skill consumes
+   `state.yml:routing_blocks[]` hashes for tamper detection on
+   subsequent sessions — including plugin-upgrade reconvergence,
+   per ADR-0012's absorption of version-transition migrations into
+   the unified setup-stages flow.
 
 LF-only line endings. No BOM. Final line of the block ends with a
 single LF.

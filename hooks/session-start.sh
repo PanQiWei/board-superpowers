@@ -10,10 +10,14 @@
 #   (b) intent injection — when on-disk state implies a specific
 #       skill should be invoked, emit one of the legal markers per
 #       docs/architecture/0005-contracts/02-hook-contracts.md
-#       § "Intent-injection markers". v0.2.0 emits only
-#       INVOKE: bootstrapping-repo (manifest.yml or per-repo state.yml
-#       absent). INVOKE: migrating-repo-version is reserved for a future
-#       slice once schema-aware version comparison ships.
+#       § "Intent-injection markers". The hook emits only
+#       INVOKE: bootstrapping-repo, with REASON varying by trigger
+#       (first-time bootstrap when manifest.yml or per-repo state.yml
+#       is absent; plugin-upgrade reconvergence when the lifecycle diff
+#       finds any setup-stage in never-run / stale). Per ADR-0012, the
+#       formerly-deferred migrating-repo-version SKILL is absorbed
+#       into bootstrapping-repo as the single executor for setup-stages,
+#       so there is no separate migration marker.
 #
 # Output protocol: ONE JSON object on stdout per
 # https://code.claude.com/docs/en/hooks (additionalContext rides as
