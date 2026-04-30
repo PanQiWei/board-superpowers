@@ -309,9 +309,9 @@ patch in their § Decision sections; existing v0.4.x claim
 branches (e.g., `claim/42-fix-bug`) remain valid via the
 parser's segment-count fallback (two segments → legacy form;
 three segments + kanban-id allowlist match → canonical form).
-See `skills/board-canon/references/branch-naming.md` § "v0.4.x
-legacy form — historical callout" for the parser's accept-both
-contract.
+See `skills/board-canon/references/branch-naming.md` §
+"Legacy two-segment form — parser-accepted, never emitted"
+for the parser's accept-both contract.
 
 ---
 

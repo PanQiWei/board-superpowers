@@ -319,9 +319,17 @@ two reference-file trees on every change.
   unchanged)`. The amendment is strictly additive.
 - **#67 explicitly anticipated this ADR.** ADR-0026's Notes
   section names "ADR-0027" as the queued supersession; this ADR
-  fulfils that prediction. ADR-0026 itself does NOT need
-  editing — its forward reference becomes a backward reference
-  once this ADR lands, which is correct ADR discipline.
+  fulfils that prediction. ADR-0026's forward reference does NOT
+  need rewriting — it becomes a backward reference once this ADR
+  lands, which is correct ADR discipline.
+- **ADR-0026's status header is amended (in-place) to:**
+  `accepted; § "Multi-kanban semantics" schema field name
+  amended in #68 — modules.m10_kanban.<id>.backend renamed to
+  modules.m10_kanban.<id>.projection (per ADR-0027 § Decision 4
+  vocabulary anchor; semantic unchanged)`. The amendment is
+  strictly additive — only the field name renames; the schema
+  shape and lifecycle semantics in ADR-0026's Decision sections
+  carry forward unchanged.
 - The capability vocabulary at v0.5.0 is two strings
   (`ensure-labels`, `validate-status-field`), matching the M3
   stages 1:1 because v0.5.0 has only the `github-project-v2`
