@@ -43,10 +43,11 @@ The four user scenarios this matrix covers (see §2.1 / §2.2 /
   (SessionStart hook) does **two** things: (a) the dep alert
   banner (best-effort, advisory; emit when a sibling plugin is
   missing); (b) **intent injection** — when on-disk state implies
-  the architect needs `bootstrapping-repo` or
-  `migrating-repo-version`, the hook emits an `INVOKE: <skill>`
-  marker into `additionalContext` so the entry skill fast-paths
-  the routing decision (per
+  the architect needs `bootstrapping-repo` (any stage `never-run`
+  or `stale` per the unified setup-stages flow, ADR-0012; covers
+  both first-time bootstrap and plugin-upgrade drift), the hook
+  emits an `INVOKE: <skill>` marker into `additionalContext` so
+  the entry skill fast-paths the routing decision (per
   [`0004-component-architecture.md`](../0004-component-architecture.md)
   § "Hook intent injection pattern" and
   [`0005-contracts/02-hook-contracts.md`](../0005-contracts/02-hook-contracts.md)
@@ -128,8 +129,9 @@ is worse than a future single-line migration):
 ```yaml
 # ~/.board-superpowers/manifest.yml — schema_version: 2 (current,
 # shipped in v0.3.0 / Card #34). v1 manifests get an inline mini-
-# migration on bootstrap-host re-run until migrating-repo-version
-# skill ships.
+# migration on bootstrap-host re-run; under the unified setup-stages
+# flow (per ADR-0012), schema bumps land as stage `target_state_hash`
+# changes that the bootstrapping-repo SKILL re-runs automatically.
 schema_version: 2
 host_bootstrapped_at: "2026-04-26T10:30:00Z"
 last_seen_version: "0.3.0"

@@ -420,11 +420,14 @@ intentional surface choices:
 - **Deferred Producer routines (F-03..F-07 + F-10..F-15) returning "not
   implemented in v1".** Per ADR-0011, those routines are deferred
   pending demand pull; their absence is the design.
-- **`migrating-repo-version` skill not triggering at v0.2.0 → v0.2.x
-  transitions.** Per `AGENTS.md` § "v1-minimum degraded behaviors", the
-  migration runner does not exist until the v0.2.x → v0.3.x transition;
-  the hook explicitly does not inject `INVOKE: migrating-repo-version`
-  in v0.2.0.
+- **No separate `INVOKE: migrating-repo-version` marker emission on
+  version drift.** Per ADR-0012, the formerly deferred
+  `migrating-repo-version` SKILL is absorbed into
+  `bootstrapping-repo`: version transitions are "running the stages
+  the lifecycle identifies as `stale`", driven by the same
+  `INVOKE: bootstrapping-repo` marker the hook emits for first-time
+  setup. The absence of a dedicated migration marker is the design,
+  not a fault.
 - **R-class default for every mutating action in v1-minimum.** Per
   `AGENTS.md` § "v1-minimum degraded behaviors", until
   `classifying-actions` ships, every mutation requires architect ack.

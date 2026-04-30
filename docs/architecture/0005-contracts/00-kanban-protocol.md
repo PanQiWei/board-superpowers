@@ -361,10 +361,13 @@ v0.4.x legacy:      claim/<key-slug>-<title-slug>
 
 Legacy v0.4.x branches remain valid via a parser fallback in
 operating-kanban; physical rename is NOT performed during
-migration. `migrating-repo-version` registers the legacy
-branches against the migrated repo's `primary` kanban via
-on-disk state, preserving the binding without rewriting git
-refs.
+migration. The unified setup-stages flow inside
+`bootstrapping-repo` (per
+[ADR-0012](../adr/0012-unified-check-script-trigger-model.md),
+which absorbed the formerly deferred `migrating-repo-version`
+scope) registers the legacy branches against the migrated
+repo's `primary` kanban via on-disk state, preserving the
+binding without rewriting git refs.
 
 ### WIP semantics — per-actor cross-kanban total
 

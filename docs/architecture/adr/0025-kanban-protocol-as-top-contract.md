@@ -179,9 +179,11 @@ naming.
   documented in
   [`0005-contracts/03-config-schemas.md`](../0005-contracts/03-config-schemas.md).
   Existing v0.4.x repos require migration on next bootstrap
-  re-run; the `migrating-repo-version` skill (deferred to
-  v1-complete per [`SKILLS.md`](../../../SKILLS.md)) will absorb
-  this when it ships.
+  re-run; the unified setup-stages flow inside `bootstrapping-repo`
+  (per [ADR-0012](./0012-unified-check-script-trigger-model.md))
+  carries this migration as a `stale`-classified stage diff,
+  absorbing what the formerly deferred `migrating-repo-version`
+  scope was reserved for.
 - **A new atomic skill `operating-kanban` lands in v0.5.0** as the
   backend-projection dispatch SPOT. Catalog row + SKILL.md ship
   in a follow-up PR after this protocol document lands.

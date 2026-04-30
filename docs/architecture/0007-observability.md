@@ -131,15 +131,19 @@ for the documented failure mode).
   CLI which does not export a plugin-root env var, derived from this
   file's own location two levels up (i.e., `<plugin-root>/.codex-plugin/plugin.json`).
   Both paths resolve through `bsp_plugin_root()` in
-  `scripts/lib/common.sh`. Compared against
-  `state.yml.last_seen_version_in_repo` to decide whether to inject
-  `INVOKE: migrating-repo-version` (deferred until v0.2.x → v0.3.x
-  transition per AGENTS.md).
+  `scripts/lib/common.sh`. The unified setup-stages check (per
+  ADR-0012) compares each stage's recorded `generation` /
+  `target_state_hash` against the registry's current target; any
+  `never-run` or `stale` stage triggers `INVOKE: bootstrapping-repo`
+  (one marker covers both first-time bootstrap AND plugin-upgrade
+  drift; there is no separate version-transition marker).
 - **Routing block hashes** in `state.yml.routing_blocks[]`. Each entry
   pins a `target_file` (e.g., `AGENTS.md`) and a `block_hash` (sha256 of
   the canonical routing block text). Probe re-hashes the live block in
-  the target file; mismatch indicates user modification (handled per
-  `migrating-repo-version` three-way prompt; deferred in v1-minimum).
+  the target file; mismatch indicates user modification (handled by
+  the M7 routing-block stage's three-way prompt inside the unified
+  setup-stages flow per ADR-0012 + ADR-0018, executed by
+  `bootstrapping-repo`).
 - **Per-repo `.board-superpowers/config.yml`** (committed to git,
   opposite of `state.yml`). Schema in
   `0005-contracts/03-config-schemas.md` § "`<repo>/.board-superpowers/config.yml` — RepoConfig".

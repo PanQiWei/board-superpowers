@@ -187,14 +187,18 @@ v0.4.x legacy:      claim/<key-slug>-<title-slug>
                     e.g., claim/42-fix-bug
 ```
 
-Migration: `migrating-repo-version` registers v0.4.x branches
-to the migrated repo's primary kanban via the M10 module's
-projection at `~/.board-superpowers/repos/<normalized>/settings.yml`
-under `modules.m10_kanban.legacy_claims` (path consistent with
-ADR-0017 cross-clone state sharing + ADR-0024 settings.yml
-rename). Physical branch rename is **not** performed — the legacy
-parser in `operating-kanban` accepts both forms during the
-transition window.
+Migration: the unified setup-stages flow inside
+`bootstrapping-repo` (per
+[ADR-0012](./0012-unified-check-script-trigger-model.md), which
+absorbed the formerly deferred `migrating-repo-version` scope)
+registers v0.4.x branches to the migrated repo's primary kanban
+via the M10 module's projection at
+`~/.board-superpowers/repos/<normalized>/settings.yml` under
+`modules.m10_kanban.legacy_claims` (path consistent with ADR-0017
+cross-clone state sharing + ADR-0024 settings.yml rename).
+Physical branch rename is **not** performed — the legacy parser
+in `operating-kanban` accepts both forms during the transition
+window.
 
 #### WIP semantics — per-actor cross-kanban total
 
@@ -313,9 +317,10 @@ Milestone aggregation in `managing-board` routines.
 - v1.0 runtime hard-fails on `kanbans:` length > 1; architects
   expecting multi-kanban runtime must wait for v1.x.
 - v0.5.0 implementation work (`operating-kanban` skill,
-  `bootstrapping-repo` patches, `migrating-repo-version`
-  schema migration, `board-canon` v0.5.0 patch) is gated by
-  this ADR's acceptance.
+  `bootstrapping-repo` patches that include the v0.4.x →
+  v0.5.0 schema migration via the unified setup-stages flow
+  per [ADR-0012](./0012-unified-check-script-trigger-model.md),
+  `board-canon` v0.5.0 patch) is gated by this ADR's acceptance.
 - All claim branches authored under v0.5.0+ MUST use the
   uniform form `claim/<kanban-id>-<key-slug>-<title-slug>`;
   v0.4.x legacy `claim/<key-slug>-<title-slug>` branches
