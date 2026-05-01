@@ -181,8 +181,8 @@ partitioned settings files (`~/.board-superpowers/settings.yml`,
 `<repo>/.board-superpowers/settings.yml`,
 `<repo>/.board-superpowers/settings.local.yml`) and
 `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`, computes
-the lifecycle diff (per ADR-0013's 5-state model), and emits
-a marker if any stage is `never-run` or `stale`.
+the lifecycle diff (per ADR-0013's 6-state model), and emits
+a marker if any stage is `pending` or `drifted`.
 
 The hook is **observation-only**: it reads settings files and
 emits a marker. It never writes status. It never executes a
@@ -207,12 +207,12 @@ emits are:
 
 | Marker value | Trigger condition |
 |--------------|-------------------|
-| `bootstrapping-repo` | Any stage in the registry (ADR-0014) is `never-run` (no entry in `stages_completed[]`) or `stale` (recorded `generation` or `target_state_hash` no longer matches registry); covers both first-time bootstrap AND plugin upgrade drift |
+| `bootstrapping-repo` | Any stage in the registry (ADR-0014) is `pending` (no entry in `modules.lifecycle.<id>`) or `drifted` (recorded `generation` or `target_state_hash` no longer matches registry); covers both first-time bootstrap AND plugin upgrade drift |
 
 > **Replaces:** the v0.4.0 two-entry table (`bootstrapping-repo`
 > for file-absence only + `migrating-repo-version` for version drift).
 > The `migrating-repo-version` marker is **removed** — migration is
-> "running the stages the lifecycle identifies as `stale`", handled
+> "running the stages the lifecycle identifies as `drifted`", handled
 > by the same `bootstrapping-repo` SKILL (ADR-0012 absorbed
 > `migrating-repo-version` into the unified model).
 
@@ -232,15 +232,15 @@ On every `SessionStart`, the hook reads:
    stage registry (ADR-0014); the source of current `generation`
    and `target_state_schema` for each stage.
 2. `~/.board-superpowers/settings.yml` — host-shared
-   `stages_completed[]` (ADR-0013 lifecycle entries).
+   `modules.lifecycle` entries (ADR-0013 lifecycle store).
 3. `~/.board-superpowers/repos/<repo-identity>/settings.yml` —
-   repo-shared `stages_completed[]`.
+   repo-shared `modules.lifecycle` entries (primary lifecycle
+   store for most stages).
 4. `<repo>/.board-superpowers/settings.yml` — repo-git locality
-   (checked for existence; no `stages_completed[]` at repo-git
-   in v1).
+   (checked for existence; no lifecycle entries at repo-git in v1).
 5. `<repo>/.board-superpowers/settings.local.yml` — repo-clone
-   locality (checked for existence; `stages_completed[]` present
-   if repo-clone stages run).
+   locality (checked for existence; `modules.lifecycle` entries
+   present if repo-clone stages have run).
 6. `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` — current
    plugin version.
 
@@ -254,17 +254,18 @@ For each stage in the registry whose `applicable_when` predicate
 (per ADR-0020) evaluates true against current settings:
 
 1. **Layer 1 check (O(1)):** compare `entry.generation` vs
-   `registry[stage_id].generation`. If equal: `completed`.
+   `registry[stage_id].generation`. If equal: `applied`.
 2. **Layer 2 check (hash):** if generations differ OR no entry
    exists: compute `sha256(canonical YAML emit of registry's
    current `compute_target_state()` output)` and compare against
-   `entry.target_state_hash`. If no entry: `never-run`.
-3. **Lifecycle classification:** `never-run` | `completed` |
-   `stale` | `deprecated` | `not-applicable` per ADR-0013.
+   `entry.target_state_hash`. If no entry: `pending`.
+3. **Lifecycle classification:** `pending` | `applied` |
+   `drifted` | `deprecated` | `not-applicable` | `failed` |
+   `blocked` per ADR-0013.
 
 The hook emits `INVOKE: bootstrapping-repo / REASON: <N> stages
 need running (<stage_id1>, <stage_id2>, ...)` when one or more
-stages are `never-run` or `stale`. A canonical REASON wording
+stages are `pending` or `drifted`. A canonical REASON wording
 (from ADR-0012):
 
 ```

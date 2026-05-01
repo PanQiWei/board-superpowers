@@ -276,7 +276,7 @@ Which subsystem does this stage configure? Nine values
     of every downstream `m7.repo.inject-block.*` stage,
     so any later change to the repo's file structure (user
     adds AGENTS.md to a previously CC-only repo, etc.)
-    flips every M7 inject stage to `stale` and triggers
+    flips every M7 inject stage to `drifted` and triggers
     a full re-injection.
   - Each routing block (`routing-rule`, `skill-routing`,
     plus future blocks) is a separate stage with shape
@@ -337,7 +337,7 @@ Which subsystem does this stage configure? Nine values
   options land via registry-only edits (the option's
   `introduced_in` field gates re-prompt: a repo whose
   `kanban_backend` is `github-project-v2` from v0.5.0
-  remains `completed` after the v0.6.0 enum bump because
+  remains `applied` after the v0.6.0 enum bump because
   its `target_state` matches an extant option).
   **Why a separate module from M3 (GitHub Project
   integration).** M3 holds the *operations* against a
@@ -357,7 +357,7 @@ script walks every session start. **Add a new stage = add a
 new row. Remove = set `deprecated_in_version`. Migrate = bump
 the stage's `target_state_hash_fn` so the lifecycle model
 (§ "Stage lifecycle states") flips affected entries to
-`stale`.** Column semantics live in § "Stage registry
+`drifted`.** Column semantics live in § "Stage registry
 contract" below.
 
 | stage_id | stage_name | description | module | character | locality | platforms | flags | introduced_in | depends_on | executor |
@@ -471,10 +471,10 @@ PLUGIN_VERSION=$(read_plugin_json_version)
 REPO_IDENTITY=$(compute_repo_identity)  # <owner>-<repo> or fallback
 
 # Step 1: read four partitioned status files (each cheap, ~10ms each)
-HOST_STATUS=$(read_yaml ~/.board-superpowers/manifest.yml stages_completed)
-REPO_SHARED_STATUS=$(read_yaml ~/.board-superpowers/repos/${REPO_IDENTITY}/state.yml stages_completed)
-REPO_GIT_STATUS=$(read_yaml ${REPO_ROOT}/.board-superpowers/repo-state.yml stages_completed)
-REPO_CLONE_STATUS=$(read_yaml ${REPO_ROOT}/.board-superpowers/clone-state.yml stages_completed)
+HOST_STATUS=$(read_yaml ~/.board-superpowers/manifest.yml modules.lifecycle)
+REPO_SHARED_STATUS=$(read_yaml ~/.board-superpowers/repos/${REPO_IDENTITY}/state.yml modules.lifecycle)
+REPO_GIT_STATUS=$(read_yaml ${REPO_ROOT}/.board-superpowers/repo-state.yml modules.lifecycle)
+REPO_CLONE_STATUS=$(read_yaml ${REPO_ROOT}/.board-superpowers/clone-state.yml modules.lifecycle)
 
 # Step 2: compute lifecycle for every stage in the registry
 PENDING=()
@@ -483,8 +483,8 @@ for stage in $(registry_iter); do
   status_entry=$(lookup_in_bucket "$bucket" "$stage")
   state=$(compute_lifecycle "$stage" "$status_entry" "$PLUGIN_VERSION")
   case "$state" in
-    completed|deprecated) continue ;;
-    never-run|stale) PENDING+=("${stage}:${state}") ;;
+    applied|deprecated) continue ;;
+    pending|drifted) PENDING+=("${stage}:${state}") ;;
   esac
 done
 
@@ -547,12 +547,12 @@ This split enables:
 
 | Failure | Hook behavior | SKILL behavior |
 |---------|---------------|----------------|
-| Status file missing / corrupt | Treat as `never-run` for affected stages; emit marker | First action is to (re-)create the file via `m1.host.write-manifest` / `m1.repo.write-state-yml` etc. |
+| Status file missing / corrupt | Treat as `pending` for affected stages; emit marker | First action is to (re-)create the file via `m1.host.write-manifest` / `m1.repo.write-state-yml` etc. |
 | Hook takes >2s (CC slow-hook warning) | Already cheap by design; if observed, partitioned files are too large or registry is too big — escalate to ADR | n/a |
-| Stage executor fails | n/a (hook doesn't run executors) | Log structured failure to status file (`status: failed`, `last_error`); leave entry in `never-run` / `stale`; next session re-attempts |
-| Agentic stage abandoned mid-flow | n/a | SKILL records `status: pending-architect-input`; lifecycle keeps surfacing via marker on next session |
+| Stage executor fails | n/a (hook doesn't run executors) | Log structured failure to lifecycle entry (`status: failed`, `last_error`); stage retried next session |
+| Agentic stage abandoned mid-flow | n/a | SKILL records `status: blocked`; lifecycle keeps surfacing via marker on next session |
 | Concurrent SKILL invocations (two sessions) | n/a | Per-status-file `flock` while updating; reread + merge before write |
-| External stage's TTL expired | Lifecycle returns `stale` for that stage; hook emits marker | Re-runs the stage's `target_state_predicate` (e.g., `gh api` to re-validate labels) and refreshes the cached hash |
+| External stage's TTL expired | Lifecycle returns `drifted` for that stage; hook emits marker | Re-runs the stage's `target_state_predicate` (e.g., `gh api` to re-validate labels) and refreshes the cached hash |
 
 ## Declarative state schema
 
@@ -566,7 +566,7 @@ The `settings.yml` naming is the architect-facing surface (per
 § "Architect UX"): every architect's plugin configuration is
 visible by reading the appropriate `settings.yml`. The same
 files are also the plugin runtime's lifecycle source-of-truth
-(stages_completed entries with three-layer fingerprint live
+(modules.lifecycle.<stage_id> entries with three-layer fingerprint live
 inside). Pre-v1 breaking change: existing v0.4.0 plumbing
 filenames (`manifest.yml`, `state.yml`, `config.yml`,
 `config.local.yml`) rename to the unified family below; existing
@@ -606,55 +606,60 @@ mental model, one filename family.
 
 ### Per-stage entry shape
 
-Each `stages_completed[]` entry has the same shape regardless
-of which file it lives in. The shape carries the
-**three-layer fingerprint** (generation + hash + structured
-target_state) plus identification + diagnostic fields:
+Each lifecycle entry has the same shape regardless of which
+file it lives in. Entries are stored at
+`modules.lifecycle.<stage_id>` (keyed dict; supersedes the
+earlier `stages_completed[]` flat-list — see ADR-0013
+§ "Persistence path" and ADR-0021 schema-migration note).
+The shape carries the **three-layer fingerprint**
+(generation + hash + structured target_state) plus
+identification + diagnostic fields:
 
 ```yaml
-stages_completed:
-  - stage_id: m1.host.write-manifest
-    status: completed              # 4-state lifecycle enum (+ 2 transient)
-    completed_at: 2026-04-28T14:23:05Z
-    plugin_version: v0.5.0         # the version that ran it
-    generation: 3                  # K8s-style integer (registry-bumped)
-    target_state_hash: a1b2c3...   # derived from canonical(target_state)
-    target_state:                  # structured ground truth (per-stage shape)
-      manifest_path: ~/.board-superpowers/manifest.yml
-      schema_version: 2
-      fields_present: [last_seen_version, host_bootstrapped_at, uv_version]
-      mode: 0644
-    target_state_schema_version: 1 # schema of the target_state field itself
-    last_error: null               # populated on `failed` status
-  - stage_id: m4.repo.apply-audit-ddl
-    status: completed
-    completed_at: 2026-04-28T14:23:12Z
-    plugin_version: v0.5.0
-    generation: 7
-    target_state_hash: d4e5f6...
-    target_state:
-      audit_log:
+modules:
+  lifecycle:
+    m1.host.write-manifest:
+      status: applied              # 6-state lifecycle enum (+ 2 transient)
+      completed_at: 2026-04-28T14:23:05Z
+      plugin_version: v0.5.0       # the version that ran it
+      generation: 3                # K8s-style integer (registry-bumped)
+      target_state_hash: a1b2c3... # derived from canonical(target_state)
+      target_state:                # structured ground truth (per-stage shape)
+        manifest_path: ~/.board-superpowers/manifest.yml
         schema_version: 2
-        columns_required: [event_id, event_uuid, action_id, ts, ...]
-        indexes_required: [idx_event_uuid_unique]
-      audit_outbox:
-        columns_required: [...]
-      audit_schema_meta:
-        columns_required: [version, applied_at]
-    target_state_schema_version: 1
-    last_error: null
+        fields_present: [last_seen_version, host_bootstrapped_at, uv_version]
+        mode: 0644
+      target_state_schema_version: 1 # schema of the target_state field itself
+      last_error: null             # populated on `failed` status
+    m4.repo.apply-audit-ddl:
+      status: applied
+      completed_at: 2026-04-28T14:23:12Z
+      plugin_version: v0.5.0
+      generation: 7
+      target_state_hash: d4e5f6...
+      target_state:
+        audit_log:
+          schema_version: 2
+          columns_required: [event_id, event_uuid, action_id, ts, ...]
+          indexes_required: [idx_event_uuid_unique]
+        audit_outbox:
+          columns_required: [...]
+        audit_schema_meta:
+          columns_required: [version, applied_at]
+      target_state_schema_version: 1
+      last_error: null
 ```
 
 | Field | Type | Required? | Semantics |
 |-------|------|-----------|-----------|
 | `stage_id` | string | yes | Lookup key (matches registry). |
-| `status` | enum `completed` \| `never-run` \| `stale` \| `deprecated` \| `failed` \| `pending-architect-input` | yes | The 4-state lifecycle plus two transient states (`failed`, `pending-architect-input`) the SKILL may write while a stage is mid-flow. The lifecycle model treats `failed` and `pending-architect-input` as effectively `never-run` (re-attempt next session). |
-| `completed_at` | ISO 8601 UTC | when status=completed | Wall-clock observability; never used for trigger logic. |
-| `plugin_version` | semver | when status=completed | The plugin version whose registry executed this stage. Used for the lifecycle's composite key. |
-| `generation` | non-negative int | when status=completed | Monotonic integer bumped by the registry when the stage's expected target changes (schema, executor, content template). Layer-1 of three-layer fingerprint (cheap fast-path). Always increases; never decreases (rollback unsupported). |
-| `target_state_hash` | hex string (sha256) | when status=completed | sha256 of canonical YAML emit of `target_state` (sorted keys, fixed indent, normalized newlines, hash-allowlist excluded). Layer-2 of three-layer fingerprint — catches "developer forgot to bump generation" cases. |
-| `target_state` | structured YAML (per-stage shape) | when status=completed | Layer-3 of three-layer fingerprint — full structured ground truth of what was done. SKILL diffs current registry's `target_state` against recorded for human-readable migration messages. |
-| `target_state_schema_version` | non-negative int | when status=completed | Schema version of the `target_state` field's *own shape*. Bumped when the stage author changes the structure of `target_state` itself (additive only, lazy-on-read). |
+| `status` | enum `applied` \| `pending` \| `drifted` \| `deprecated` \| `failed` \| `blocked` | yes | The 6-state lifecycle plus two transient states (`failed`, `blocked`) the SKILL may write while a stage is mid-flow. The lifecycle model treats `failed` and `blocked` as effectively `pending` (re-attempt next session). `pending` was `never-run`; `applied` was `completed`; `drifted` was `stale`; `blocked` was `pending-architect-input` — see ADR-0013 vocabulary note. |
+| `completed_at` | ISO 8601 UTC | when status=applied | Wall-clock observability; never used for trigger logic. |
+| `plugin_version` | semver | when status=applied | The plugin version whose registry executed this stage. Used for the lifecycle's composite key. |
+| `generation` | non-negative int | when status=applied | Monotonic integer bumped by the registry when the stage's expected target changes (schema, executor, content template). Layer-1 of three-layer fingerprint (cheap fast-path). Always increases; never decreases (rollback unsupported). |
+| `target_state_hash` | hex string (sha256) | when status=applied | sha256 of canonical YAML emit of `target_state` (sorted keys, fixed indent, normalized newlines, hash-allowlist excluded). Layer-2 of three-layer fingerprint — catches "developer forgot to bump generation" cases. |
+| `target_state` | structured YAML (per-stage shape) | when status=applied | Layer-3 of three-layer fingerprint — full structured ground truth of what was done. SKILL diffs current registry's `target_state` against recorded for human-readable migration messages. |
+| `target_state_schema_version` | non-negative int | when status=applied | Schema version of the `target_state` field's *own shape*. Bumped when the stage author changes the structure of `target_state` itself (additive only, lazy-on-read). |
 | `last_error` | string | when status=failed | Short failure summary; pointer to log file for details. |
 
 ### Hash-allowlist (fields excluded from hash)
@@ -692,7 +697,7 @@ Two different schemas evolve independently:
 
 - **File-level `schema_version`** (top of each status file)
   — controls the shape of the file as a whole (the
-  `stages_completed[]` entry shape, top-level fields).
+  `modules.lifecycle.<stage_id>` entry shape, top-level fields).
   Bumped when the entry's universal fields change (e.g.,
   if a future redesign adds `priority: <int>` to every
   entry).
@@ -734,7 +739,7 @@ fields:
 `external_validated_at` and `external_ttl_seconds` are in
 the hash-allowlist (excluded from hash). If
 `now > external_validated_at + external_ttl_seconds`, the
-lifecycle returns `stale` regardless of generation /
+lifecycle returns `drifted` regardless of generation /
 hash match — forcing a fresh `gh api` call. TTL per stage
 is declared in the registry (default 86400 = 24h,
 overridable per-stage).
@@ -753,21 +758,24 @@ schema_version: 1                        # FILE-level schema version
 plugin_version: v0.5.0                   # plugin version that last wrote
 host_bootstrapped_at: 2026-04-28T...
 
-# Section 1 — flat lifecycle source-of-truth (machine view)
-stages_completed:
-  - stage_id: m1.host.create-state-dir
-    status: completed
-    generation: 1
-    target_state_hash: a1b2...
-    target_state: { ... }
-    target_state_schema_version: 1
-    completed_at: 2026-04-28T14:23:05Z
-    plugin_version: v0.5.0
-  - stage_id: m9.host.register-codex-hooks
-    ...
+# NOTE: earlier design used stages_completed[] flat list here.
+# Superseded by modules.lifecycle below (see ADR-0013 § "Persistence path").
 
-# Section 2 — module-namespaced config-items projection (architect view)
+# Section 1 — lifecycle store (machine view; O(1) key lookup)
 modules:
+  lifecycle:
+    m1.host.create-state-dir:
+      status: applied
+      generation: 1
+      target_state_hash: a1b2...
+      target_state: { ... }
+      target_state_schema_version: 1
+      completed_at: 2026-04-28T14:23:05Z
+      plugin_version: v0.5.0
+    m9.host.register-codex-hooks:
+      ...
+
+  # Section 2 — module-namespaced config-items projection (architect view)
   m1_plugin_runtime:
     schema_version: 1                    # MODULE-level independent schema
     # M1 has no architect-facing config items
@@ -784,10 +792,13 @@ modules:
 
 The two-section split:
 
-- **`stages_completed[]`** — flat list of stage entries with
-  the three-layer fingerprint per ADR-0013. Hook reads this
-  for lifecycle diff (machine-optimized; cheap fast-path on
-  `generation` int compare).
+- **`modules.lifecycle.<stage_id>`** — keyed dict of per-stage
+  lifecycle entries with the three-layer fingerprint per
+  ADR-0013. Hook reads this for lifecycle diff
+  (machine-optimized; O(1) key lookup on `stage_id`).
+  Supersedes the earlier `stages_completed[]` flat-list design
+  (see ADR-0013 § "Persistence path" and ADR-0021 migration
+  note). Machine-managed; architects do not edit it directly.
 - **`modules.<id>`** — namespaced config-item projection.
   Architect-friendly view; each module's section holds **only
   the architect-facing config items** of that module's
@@ -799,17 +810,17 @@ The two-section split:
 
 Two equally valid sources of truth would invite drift; one
 authoritative + one derived doesn't. The redesign picks
-**`stages_completed[]` as authoritative** (the full
-fingerprint lives there); `modules.<id>` is **derived**
+**`modules.lifecycle`** as authoritative (the full fingerprint
+lives there); `modules.<config-id>` sections are **derived**
 (re-written deterministically by SKILL whenever a stage's
-target_state changes). Architects who hand-edit `modules.<id>`
-trigger validation: SKILL's next pass detects the divergence
-between projection and source-of-truth and prompts the
-architect to either re-elicit the stage (lifecycle re-run)
-or revert the manual edit. This mirrors how Helm rejects
-divergence between `values.yaml` and chart-default values:
-projection editing has to pass through the chart's interface,
-not directly mutate values storage.
+target_state changes). Architects who hand-edit
+`modules.<config-id>` trigger validation: SKILL's next pass
+detects the divergence between projection and source-of-truth
+and prompts the architect to either re-elicit the stage
+(lifecycle re-run) or revert the manual edit. This mirrors
+how Helm rejects divergence between `values.yaml` and
+chart-default values: projection editing has to pass through
+the chart's interface, not directly mutate values storage.
 
 ### Per-module schema versioning
 
@@ -818,9 +829,9 @@ of:
 
 - The **file-level** `schema_version` at the top of
   `settings.yml`. (File-level only changes when the
-  flat-section `stages_completed[]` entry shape changes,
-  which is rare — additive only per
-  `0005-contracts/03-config-schemas.md` migration policy.)
+  `modules.lifecycle` entry shape changes, which is rare —
+  additive only per `0005-contracts/03-config-schemas.md`
+  migration policy.)
 - **Other modules'** `schema_version`s. M4 changing its
   audit DDL bumps `m4_audit.schema_version` only;
   `m8_autonomy.schema_version` stays put.
@@ -828,7 +839,7 @@ of:
 Module schema bump → all that module's stages' `target_state`
 shape changes → their `compute_target_state()` returns new
 shape → their `target_state_hash` changes → lifecycle flips
-those stages to `stale` → SKILL re-runs them (with
+those stages to `drifted` → SKILL re-runs them (with
 human-readable structural diff for the architect).
 
 ### Module naming convention
@@ -1031,7 +1042,7 @@ fields elaborated in supporting prose elsewhere are marked
 
 | Field | Type | Required? | Semantics |
 |-------|------|-----------|-----------|
-| `stage_id` **(table)** | string, `<module>.<scope>.<verb>` | yes | Globally unique identifier. `<scope>` is `host` or `repo` (matching Axis B). The lookup key in status files' `stages_completed[]` entries. |
+| `stage_id` **(table)** | string, `<module>.<scope>.<verb>` | yes | Globally unique identifier. `<scope>` is `host` or `repo` (matching Axis B). The lookup key in `modules.lifecycle.<stage_id>` entries. |
 | `stage_name` **(table)** | string, ≤30 chars | yes | Short human-readable display name; appears in CLI output and error messages. |
 | `description` **(table)** | string, one line | yes | Statement of *what the stage produces* — its work product, not its mechanics. (Mechanics belong in the executor's source code.) |
 | `module` **(table)** | enum M1..M9 | yes | Functional module ownership (Axis C). |
@@ -1041,7 +1052,7 @@ fields elaborated in supporting prose elsewhere are marked
 | `flags` **(table)** | string list | no | Free-form binary tags. Reserved tokens: `heavy` (network/IO heavy), `network-required`, `kind=required` / `kind=optional` (M7 only), `confirm-only`, `agentic-on-failure`, `platform-specific`, `block-size-capped` (M7 inject stages). |
 | `introduced_in_version` **(table)** | semver string | yes | Plugin version that first shipped this stage's *semantic work* (not when the registry-modeled stage_id concept was introduced). Used by the lifecycle model to detect cohort introduction. |
 | `deprecated_in_version` **(table)** | semver string | no | Plugin version where the stage was removed from the registry. When set, lifecycle state for any recorded entry flips to `deprecated`. |
-| `depends_on` **(table)** | list of stage_ids | no | Stages that must be `completed` before this one runs. Forms an explicit DAG; the trigger script topologically sorts. |
+| `depends_on` **(table)** | list of stage_ids | no | Stages that must be `applied` before this one runs. Forms an explicit DAG; the trigger script topologically sorts. |
 | `executor` **(table)** | `scripts/<path>` \| `SKILL: <skill-name>` | yes | Where the stage's execution lives. Script paths are relative to plugin root; skill markers are emitted via `INVOKE: <skill-name>` to drive the agent path. |
 | `generation` **(prose, registry)** | non-negative int | yes | Monotonic integer; bumped by the registry maintainer whenever any aspect of the stage's expected target changes (schema, executor, content template). Layer-1 of the three-layer fingerprint (cheap fast-path; see § "Stage lifecycle states"). |
 | `target_state_schema` **(prose)** | JSON-Schema-style declaration | yes | Per-stage shape declaration for the structured `target_state` field that gets persisted to status files. Validated by `stages-registry.schema.json` at load-time. |
@@ -1054,7 +1065,7 @@ fields elaborated in supporting prose elsewhere are marked
 | `kind` **(table, M7 only)** | enum `required` \| `optional` | M7 only | M7 routing-block kind tag (per architect direction). Surfaced as `kind=required` / `kind=optional` in the table's `flags` column. |
 | `block_max_bytes` **(prose, M7 only)** | non-negative int | M7 only | Per-block size cap (default 4096 bytes). Honors Codex 32 KiB AGENTS.md budget — see § "Functional modules" M7. |
 | `applicable_when` **(prose)** | predicate (declarative or callable) | no | Conditional applicability gate. When evaluated against current settings the predicate yields true → stage participates in lifecycle as normal; false → lifecycle returns `not-applicable` and the stage is silently skipped (no marker, no execution). Three forms: (1) declarative `{setting_path: <dot.path>, one_of: [<values>]}` — most stages use this; (2) declarative capability check `{board_capability: <name>}` — for stages that require a BoardAdapter capability (resolves through M10's selected backend's capability declarations); (3) Python predicate reference `applicable_when_fn: <module.callable>` — escape hatch for complex conditions. The predicate is evaluated by the hook (cheap — settings lookup + small comparisons); never by SKILL. |
-| `module_section_path` **(prose)** | string | no | If the stage's `target_state` should be projected into the settings file's `modules.<id>` section (per § "Settings modular layering"), this names the dotted path. SKILL writes both `stages_completed[].target_state` and `modules.<this_path>` synchronously on completion; reading is allowed from either (architect-facing reads prefer the projection). Default: `modules.<derived from module>` (e.g., `m4.repo.acquire-dsn` → `modules.m4_audit`). |
+| `module_section_path` **(prose)** | string | no | If the stage's `target_state` should be projected into the settings file's `modules.<id>` section (per § "Settings modular layering"), this names the dotted path. SKILL writes both `modules.lifecycle.<stage_id>` and `modules.<this_path>` synchronously on completion; reading is allowed from either (architect-facing reads prefer the projection). Default: `modules.<derived from module>` (e.g., `m4.repo.acquire-dsn` → `modules.m4_audit`). |
 
 ### Canonicalization invariant for hash stability
 
@@ -1143,22 +1154,23 @@ state applies — no fuzzy matching, no manual override.
 
 | State | Definition | Detection rule |
 |-------|------------|----------------|
-| **never-run** | This stage has never been recorded as completed on this `(host, repo)` pair, AND the stage's `applicable_when` predicate evaluates true (or is absent). | No entry with this `stage_id` exists in the relevant status file; `applicable_when` (if present) → true. |
-| **completed** | Last recorded run succeeded **and** the recorded fingerprint matches the current plugin version's expectation. | Entry exists; `entry.generation == registry[stage_id].generation` (fast-path) AND `entry.target_state_hash == current_target_state_hash` (verify). Both equal → up-to-date; no re-run needed. |
-| **stale** | Last recorded run succeeded, but the current plugin version's expected target state has drifted (schema bump, content change, dep upgrade, executor change). | Entry exists; either `entry.generation != registry[stage_id].generation` OR (generation equal but) `entry.target_state_hash != current_target_state_hash`. SKILL re-runs the stage on next session start; structural diff between recorded `target_state` and current `target_state` is surfaced for diagnostics. |
+| **pending** (was `never-run`) | This stage has never been recorded as applied on this `(host, repo)` pair, AND the stage's `applicable_when` predicate evaluates true (or is absent). | No entry with this `stage_id` exists in `modules.lifecycle`; `applicable_when` (if present) → true. |
+| **applied** (was `completed`) | Last recorded run succeeded **and** the recorded fingerprint matches the current plugin version's expectation. | Entry exists; `entry.generation == registry[stage_id].generation` (fast-path) AND `entry.target_state_hash == current_target_state_hash` (verify). Both equal → up-to-date; no re-run needed. |
+| **drifted** (was `stale`) | Last recorded run succeeded, but the current plugin version's expected target state has drifted (schema bump, content change, dep upgrade, executor change). | Entry exists; either `entry.generation != registry[stage_id].generation` OR (generation equal but) `entry.target_state_hash != current_target_state_hash`. SKILL re-runs the stage on next session start; structural diff between recorded `target_state` and current `target_state` is surfaced for diagnostics. |
 | **deprecated** | The stage existed in a prior plugin version but is no longer in the current registry. The recorded entry is preserved as history but no longer drives any execution. | `entry.stage_id ∉ current_registry`. The status file keeps the entry indefinitely (or until a manual prune); the check script ignores it for diff-computation purposes. |
-| **not-applicable** | The stage exists in the current registry but its `applicable_when` predicate evaluates false against current settings (e.g., `m3.repo.ensure-labels` is not-applicable when `kanban_backend ≠ github-project-v2`). The stage is silently skipped without re-prompt. | `applicable_when` predicate evaluates false. The hook does not emit a marker for not-applicable stages; SKILL does not execute them. If `applicable_when` later evaluates true (architect changed `kanban_backend`), state flips back to `never-run` (no historical entry) or `completed` (if entry exists from a prior applicable window). |
+| **not-applicable** | The stage exists in the current registry but its `applicable_when` predicate evaluates false against current settings (e.g., `m3.repo.ensure-labels` is not-applicable when `kanban_backend ≠ github-project-v2`). The stage is silently skipped without re-prompt. | `applicable_when` predicate evaluates false. The hook does not emit a marker for not-applicable stages; SKILL does not execute them. If `applicable_when` later evaluates true (architect changed `kanban_backend`), state flips back to `pending` (no historical entry) or `applied` (if entry exists from a prior applicable window). |
 
 Plus two **transient SKILL-only states** (set by the SKILL
-mid-execution; treated as effectively `never-run` /
-`stale` by the lifecycle model on next session):
+mid-execution; treated as effectively `pending` by the
+lifecycle model on next session):
 
 - **`failed`** — stage executor returned non-zero; SKILL
   records `last_error` for diagnostic. Re-attempted next
   session.
-- **`pending-architect-input`** — agentic stage waiting for
-  architect to respond (e.g., DSN prompt unanswered, optional
-  block confirmation pending). Re-surfaced on next session.
+- **`blocked`** (was `pending-architect-input`) — agentic
+  stage waiting for architect to respond (e.g., DSN prompt
+  unanswered, optional block confirmation pending).
+  Re-surfaced on next session.
 
 ### Why three layers, not just hash
 
@@ -1189,7 +1201,7 @@ architects see human-readable "what changed."
 **Per-stage `target_state` evolution is the schema-migration
 seam.** When module M4 changes its DDL, M4's stage registry
 entries bump their `generation` AND get a new derived hash;
-M4's recorded entries flip to `stale`; SKILL structural-diffs
+M4's recorded entries flip to `drifted`; SKILL structural-diffs
 the old vs new target_state ("audit_log table needs column
 `event_uuid`") and runs M4's stages re-runs which apply the
 new target_state. *Module-local schema migration* — no
@@ -1206,16 +1218,16 @@ live in an explicit allowlist.
 
 ## Cross-version evolution
 
-Cross-version evolution is mechanically implied by the 4-state
+Cross-version evolution is mechanically implied by the 6-state
 lifecycle model above:
 
 - **Adding a new stage** in plugin version `N+1`: the new
-  stage_id is absent from `state.yml`'s entries → check script
-  reads it as `never-run` on next session start → triggers
+  stage_id is absent from `modules.lifecycle` entries → check
+  script reads it as `pending` on next session start → triggers
   execution. No explicit "upgrade" action required.
 - **Changing a stage's behavior** in plugin version `N+1`: the
   stage's `target_state_hash_fn` returns a different value →
-  recorded entries flip to `stale` → check script re-runs.
+  recorded entries flip to `drifted` → check script re-runs.
   This is the single mechanism for what F-B3/F-B4 used to
   describe as "version transition."
 - **Removing a stage** in plugin version `N+1`: the stage_id
@@ -1227,7 +1239,7 @@ lifecycle model above:
   change that cannot be expressed as a hash bump alone) still
   require a new ADR + deprecation window per existing
   [`../0005-contracts/03-config-schemas.md`](../0005-contracts/03-config-schemas.md)
-  § "Migration policy". The 4-state model handles
+  § "Migration policy". The 6-state model handles
   versioned-and-additive evolution; breaking changes are
   out of band.
 
@@ -1255,13 +1267,14 @@ stage requires architect input to compute its `target_state`.
 From the architect's vantage point that input is "make a
 configuration choice"; from the plugin runtime's vantage point
 it is "fill in this stage's `target_state` so the lifecycle
-flips to `completed`". The two perspectives are the same
+flips to `applied`". The two perspectives are the same
 operation, the same persistence, the same lifecycle. Skip
 semantics evaporate — an empty / null / "no presets selected"
 choice is itself a valid `target_state` and produces
-`completed`. The lifecycle's 4 states (never-run / completed /
-stale / deprecated) cover all observable architect states; no
-fifth "skipped" or "deferred" state is introduced.
+`applied`. The lifecycle's 6 states (`pending` / `applied` /
+`drifted` / `deprecated` / `not-applicable` + transients
+`failed` / `blocked`) cover all observable architect states;
+no "skipped" or "deferred" state is introduced.
 
 ### Sequential per-stage flow (decision: B)
 
@@ -1285,11 +1298,11 @@ batch wizard. Flow:
      `target_state` into the settings file; marks completed.
    - For `agentic` stages where the architect is unreachable
      (CI, scripted environment): SKILL records
-     `status: pending-architect-input` and the stage stays
+     `status: blocked` and the stage stays
      pending until next session.
 4. SKILL emits final summary: "N stages completed; M skipped
    due to depends_on chain breakage (dependencies unmet); K
-   pending-architect-input."
+   blocked."
 
 The sequential model means architects who interrupt mid-flow
 return to a partial state next session — pending stages that
@@ -1308,10 +1321,10 @@ no bespoke prompt code is written per item.
 | Element | What it is | Where it lives | Reuses |
 |---------|-----------|----------------|--------|
 | **1. Schema declaration** | The stage's `target_state_schema` declares the shape of the architect's choice. Examples: `{wip_limit: int (1..20)}`; `{kanban_backend: enum [github-project-v2, linear, jira]}`; `{presets_chosen: list of enum [allow-pr-creation, ...]}`. Plus required-or-optional, default value, enum option list (with `introduced_in_version` per option for graceful enum-bump compat). | Stage registry entry's `target_state_schema` field (per ADR-0014). | ADR-0014 stage registry contract; ADR-0014 JSON Schema validation gate. |
-| **2. Detection** | "Has this config item already been set?" The lifecycle 4-state model answers this purely from local settings files. `never-run` / `stale` ⇒ needs eliciting; `completed` ⇒ already set; `deprecated` ⇒ ignore. | Lifecycle compute function (per ADR-0013) reads stage entries from settings files. | ADR-0013 4-state lifecycle + three-layer fingerprint. |
+| **2. Detection** | "Has this config item already been set?" The lifecycle 6-state model answers this purely from local settings files. `pending` / `drifted` ⇒ needs eliciting; `applied` ⇒ already set; `deprecated` ⇒ ignore. | Lifecycle compute function (per ADR-0013) reads stage entries from `modules.lifecycle`. | ADR-0013 6-state lifecycle + three-layer fingerprint. |
 | **3. Interaction** | How the agent prompts the architect. The stage registry's new `interactive_prompt` field declares the prompt template + kind (`single-choice` / `multi-choice` / `free-text` / `boolean` / `numeric-range`) + options-source (literal list, or computed-from-`target_state_schema.enum`, or runtime-derived). SKILL's prompt-renderer is generic — given an `interactive_prompt` declaration it generates the architect-facing question without per-stage code. | Stage registry entry's new `interactive_prompt` field. SKILL `prompt-renderer.py` is the single implementation. | The `interactive_prompt` field is added to the registry contract per this section. |
 | **4. Persistence** | "Where does the choice land on disk?" The stage's `locality` (Axis B) decides which settings file. `host-shared` → `~/.board-superpowers/settings.yml`; `repo-shared` → `~/.board-superpowers/repos/<id>/settings.yml`; `repo-git` → `<repo>/.board-superpowers/settings.yml`; `repo-clone` → `<repo>/.board-superpowers/settings.local.yml`. | Stage registry entry's `locality` field; SKILL writes the resolved settings file with atomic mktemp+mv. | Axis B locality semantics; § "Declarative state schema" partitioned files. |
-| **5. Re-prompt trigger** | When does the plugin ask again? Three triggers, all derived from the lifecycle: (a) plugin upgrade bumps the stage's `generation` int (e.g., new enum option added) → flips to `stale` → re-prompts; (b) architect manually edits the settings file in a way that no longer matches `target_state_schema` → load-time validation rejects, stage flips to `stale`; (c) architect explicitly invokes `scripts/bsp-stage-rerun.sh <stage_id>` → forces stage to `never-run`. | Lifecycle stale-detection rule + SKILL's response to stale entries. | ADR-0013 lifecycle; no new mechanism. |
+| **5. Re-prompt trigger** | When does the plugin ask again? Three triggers, all derived from the lifecycle: (a) plugin upgrade bumps the stage's `generation` int (e.g., new enum option added) → flips to `drifted` → re-prompts; (b) architect manually edits the settings file in a way that no longer matches `target_state_schema` → load-time validation rejects, stage flips to `drifted`; (c) architect explicitly invokes `scripts/bsp-stage-rerun.sh <stage_id>` → forces stage to `pending`. | Lifecycle drift-detection rule + SKILL's response to drifted entries. | ADR-0013 lifecycle; no new mechanism. |
 
 ### Future-feature inclusion procedure
 
@@ -1346,15 +1359,16 @@ Per decision: existing plumbing files are renamed to a
 unified `settings.yml` family (one per non-`external`
 locality). See § "Declarative state schema" for the rename
 table and the in-file structure (each `settings.yml` carries
-`schema_version` + `plugin_version` + `stages_completed[]` +
-optional human-readable `config_items` projection).
+`schema_version` + `plugin_version` + `modules.lifecycle` +
+`modules.<id>` config-items projection).
 
 ### Failure surfaces (architect-facing)
 
 - **Automated stage failure** (executor non-zero exit):
   SKILL records `status: failed` + `last_error` in the
-  appropriate settings file. Lifecycle treats `failed` as
-  effectively `never-run` for the next session. SKILL surfaces
+  appropriate `modules.lifecycle` entry. Lifecycle treats
+  `failed` as effectively `pending` for the next session.
+  SKILL surfaces
   a brief failure summary at end of current session: "stage X
   failed: <one-line>; will retry next session". After 3
   consecutive failed runs, SKILL emits a special
@@ -1362,7 +1376,7 @@ optional human-readable `config_items` projection).
   troubleshooting` marker on next hook tick to escalate.
 - **Agentic stage abandoned** (architect leaves session
   without responding): SKILL records
-  `status: pending-architect-input` so the next session's
+  `status: blocked` so the next session's
   hook re-emits the marker.
 - **Registry validation failure** (settings file violates
   `target_state_schema`): hook detects via load-time JSON
@@ -1426,7 +1440,7 @@ Resolved (as discussion progresses, decisions move down to the
   may select any subset, including "no presets, skip" (writes
   empty `overrides.yml` and marks completed). Plugin upgrade
   with new presets bumps the stage's `target_state`, flipping
-  the entry to `stale` and re-prompting on next session.
+  the entry to `drifted` and re-prompting on next session.
 - **Trigger model is hook-minimal (α)** — hook reads
   partitioned status, runs lifecycle diff, emits marker; SKILL
   is the single executor for all stages. Resolved by § "Trigger
@@ -1449,9 +1463,10 @@ Resolved (as discussion progresses, decisions move down to the
   UX".
 - **Skip semantics are eliminated** — an empty / null / "no
   presets selected" choice is itself a valid `target_state`
-  and produces `completed`. The 4-state lifecycle (never-run
-  / completed / stale / deprecated) covers all observable
-  architect states; no fifth "skipped" / "deferred" state is
+  and produces `applied`. The 6-state lifecycle (`pending` /
+  `applied` / `drifted` / `deprecated` / `not-applicable` +
+  transients `failed` / `blocked`) covers all observable
+  architect states; no "skipped" / "deferred" state is
   introduced. Resolved by § "Architect UX" reframe.
 - **M10 (BoardAdapter selection) is in-scope** — new module
   with stage `m10.repo.choose-kanban-backend` (agentic,
@@ -1466,13 +1481,13 @@ Resolved (as discussion progresses, decisions move down to the
   (default 5; numeric-range 1-20). Persists into
   `settings.local.yml:modules.m5_repo_configuration.wip_limit`
   per repo-clone locality.
-- **5th lifecycle state `not-applicable` introduced** —
-  alongside never-run / completed / stale / deprecated.
+- **`not-applicable` lifecycle state introduced** —
+  alongside `pending` / `applied` / `drifted` / `deprecated`.
   Triggered when a stage's `applicable_when` predicate
   evaluates false. Hook does not emit a marker; SKILL does
   not execute. Architect changing settings (e.g., kanban
   backend) re-evaluates predicates next session, flipping
-  affected stages back to never-run / completed.
+  affected stages back to `pending` / `applied`.
 - **`applicable_when` predicate field added to stage
   registry** — per § "Stage registry contract" Column /
   field semantics. Three forms: declarative
@@ -1489,10 +1504,11 @@ Resolved (as discussion progresses, decisions move down to the
   v0.4.0 stages. Per ADR-0005 (BoardAdapter contract) +
   G4 (parity) + new BoardAdapter capability dispatch ADR.
 - **Settings file internal layout uses two-section split
-  with module namespacing** — flat `stages_completed[]`
-  (machine-optimized lifecycle source of truth) +
-  `modules.<id>` (architect-readable projection). Each
-  module section carries its own independent
+  with module namespacing** — `modules.lifecycle.<stage_id>`
+  (machine-optimized lifecycle source of truth; supersedes
+  earlier `stages_completed[]` flat-list design) +
+  `modules.<id>` (architect-readable config-item projection).
+  Each module section carries its own independent
   `schema_version` for module-local schema migration.
   Mirrors VSCode settings.json / Helm values.yaml
   industry pattern. Resolved by § "Settings modular
@@ -1545,7 +1561,7 @@ Resolved (as discussion progresses, decisions move down to the
   `m7.repo.inject-block.<name>` stages depend on it and
   inherit `form` into their `target_state`, so any change
   to the repo's routing-target file structure flips every
-  M7 inject stage to `stale` and triggers full re-injection.
+  M7 inject stage to `drifted` and triggers full re-injection.
 - **Per-repo audit DB defaults to zero-config SQLite** at
   `~/.board-superpowers/repos/<repo-identity>/audit.db`. No
   prompt at first bootstrap. Architects pick PG/MySQL by
@@ -1562,12 +1578,12 @@ Resolved (as discussion progresses, decisions move down to the
   optional kinds** — required auto-injected, optional
   agent-confirmed before injection. Per-block versioning +
   hash + marker pair.
-- **Stage lifecycle is a 4-state model** (never-run /
-  completed / stale / deprecated). Three-layer fingerprint
+- **Stage lifecycle is a 6-state model** (`pending` /
+  `applied` / `drifted` / `deprecated` / `not-applicable` +
+  transients `failed` / `blocked`). Three-layer fingerprint
   comparison: `generation` int → `target_state_hash` →
-  `target_state` structural diff. Plus two transient states
-  (`failed`, `pending-architect-input`) the SKILL writes
-  mid-flow. See above "K8s-style three-layer fingerprint".
+  `target_state` structural diff. See above "K8s-style
+  three-layer fingerprint".
 - **M3 Status field validation uses TTL caching** in
   `repo-shared`'s `state.yml`, not every-session re-check.
   Default TTL 24h per § "Declarative state schema" external
@@ -1582,7 +1598,7 @@ Resolved (as discussion progresses, decisions move down to the
 1. Companion ADRs recorded under
    [`../adr/`](../adr/) — one each for: (a) unified check-script
    trigger model (absorbing `migrating-repo-version`); (b)
-   declarative state schema + 4-state lifecycle + K8s-style
+   declarative state schema + 6-state lifecycle + K8s-style
    three-layer fingerprint (generation + hash + structured
    target_state); (c) stage registry contract (YAML metadata +
    Python helpers + JSON Schema validation); (d) M4 audit
@@ -1602,7 +1618,7 @@ Resolved (as discussion progresses, decisions move down to the
    `05-bootstrap-surface.md` or `~/.board-superpowers/`
    path layout updated in the same PR as the replacement.
 3. `0005-contracts/03-config-schemas.md` schemas bumped
-   (additive fields only) — adds `stages_completed[]` to
+   (additive fields only) — adds `modules.lifecycle` to
    `state.yml` + `manifest.yml`; relocates `credentials.yml`
    from host-shared to per-repo per M4 decision.
    `07-path-conventions.md` updated for the new
@@ -1615,9 +1631,9 @@ Resolved (as discussion progresses, decisions move down to the
    stage that gains a `platforms: [codex]` constraint.
 5. Hook contract ([`../0005-contracts/02-hook-contracts.md`](../0005-contracts/02-hook-contracts.md))
    updated with the unified check-script protocol — including
-   how the hook surfaces `never-run` / `stale` lifecycle states
-   (likely as `INVOKE: bootstrap-check / REASON:` markers, but
-   exact grammar follows trigger-model decision).
+   how the hook surfaces `pending` / `drifted` lifecycle states
+   as `INVOKE: bootstrapping-repo / REASON:` markers per the
+   unified check-script protocol (ADR-0012).
 6. Pre-v1 breaking-change procedure documented — release notes
    instruct architects to delete
    `~/.board-superpowers/credentials.yml` (host-shared) +

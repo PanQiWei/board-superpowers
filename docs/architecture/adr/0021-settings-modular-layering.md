@@ -36,39 +36,57 @@ Every `settings.yml` carries **two top-level data structures
 plus file-level metadata** (`schema_version`,
 `plugin_version`, locality-specific bookkeeping):
 
-1. **`stages_completed[]`** — flat list of stage entries with
+1. **`modules.lifecycle.<stage_id>`** (canonical lifecycle
+   store, supersedes earlier `stages_completed[]` flat-list
+   design) — keyed dict of per-stage lifecycle entries with
    the three-layer fingerprint per ADR-0013. **Authoritative**
-   lifecycle source of truth. Hook reads this for the
-   `(generation, target_state_hash)` diff against the registry.
-   Machine-optimized; architects do not edit it directly.
+   lifecycle source of truth. Hook and `_lifecycle.py` read
+   `modules.lifecycle.<id>` directly (O(1) key lookup).
+   Machine-managed; architects do not edit it directly.
+   `bsp_stage_state_set` / `bsp_stage_state_get` in
+   `scripts/lib/common.sh` are the sole write path.
 2. **`modules.<id>`** — namespaced config-item projection,
    one section per Axis-C module. **Derived** view holding
    only architect-facing config items of that module's
    stages. Re-written deterministically by SKILL on stage
    completion (atomic `mktemp + mv`).
 
-Authority direction is **`stages_completed[]` → `modules.<id>`**:
-the fingerprint belongs with the lifecycle source-of-truth,
-not the projection. The projection regenerates
-deterministically on every stage completion; architect
-hand-edits to `modules.<id>` are detected on the next SKILL
-pass (projection vs. source comparison) and trigger
-validation + re-elicitation rather than direct mutation.
-Mirrors Helm `values.yaml` vs. chart-default values —
-projection editing passes through the chart's interface, not
-the values storage.
+> **Schema migration note (v0.5.0):** The earlier draft of
+> this ADR declared `stages_completed[]` as the authoritative
+> lifecycle source-of-truth and named `modules.<id>` the
+> derived projection. The implementation adopts
+> `modules.lifecycle.<stage_id>` as the authoritative store
+> instead. Rationale: O(1) key lookup vs O(N) flat-list scan;
+> natural fit under the `modules.*` namespace; consistent with
+> `common.sh` helpers and `_lifecycle.py` round-trip tests.
+> The `stages_completed[]` flat list is **deprecated**;
+> new code MUST NOT write to it. The template file
+> (`scripts/templates/settings.repo-shared.yml`) retains
+> a stub `stages_completed: []` for schema-version
+> compatibility only.
+
+Authority direction is **`modules.lifecycle.<stage_id>` →
+`modules.<config-id>`**: lifecycle fingerprint entries are the
+source of truth; the per-module config-item projection
+regenerates deterministically on every stage completion.
+Architect hand-edits to `modules.<id>` config sections are
+detected on the next SKILL pass (projection vs. source
+comparison) and trigger validation + re-elicitation rather
+than direct mutation. Mirrors Helm `values.yaml` vs.
+chart-default values — projection editing passes through the
+chart's interface, not the values storage.
 
 Each `modules.<id>` carries an independent `schema_version`
 for **module-local schema migration**, decoupled from the
-file-level `schema_version` (only changes when the flat
-`stages_completed[]` entry shape itself changes — rare,
+file-level `schema_version` (only changes when the
+`modules.lifecycle` entry shape itself changes — rare,
 additive only per
 [`../0005-contracts/03-config-schemas.md`](../0005-contracts/03-config-schemas.md))
 and from other modules (M4 bumping `m4_audit.schema_version`
 does not move `m8_autonomy.schema_version`). A module schema
 bump → that module's stages emit new `target_state` shape →
 `target_state_hash` changes → ADR-0013's lifecycle flips them
-to `stale` → SKILL re-runs with structural diff messages.
+to `drifted` → SKILL re-runs with structural diff messages.
 
 Module section keys follow `m{number}_{snake_case_name}`
 (e.g., `m4_audit`, `m7_routing`, `m8_autonomy`,
@@ -77,8 +95,9 @@ identity, snake-case suffix is architect-readable, ADR-0014's
 JSON Schema gate enforces it at load time. The per-stage
 registry field `module_section_path` (ADR-0014) names the
 dotted path under `modules.` where projection lands; SKILL
-writes both `stages_completed[].target_state` and
-`modules.<path>` synchronously on completion.
+writes both `modules.lifecycle.<stage_id>` (lifecycle entry)
+and `modules.<path>` (config projection) synchronously on
+completion.
 
 **Future-module inclusion procedure.** When plugin v(N+1)
 introduces a new module, three artifacts change and **no
@@ -98,15 +117,15 @@ bespoke per-feature UX cost the redesign exists to eliminate.
 
 - **Architect read path is clean.** `modules.<id>` surfaces
   the few knobs architects edit; lifecycle bookkeeping in
-  `stages_completed[]` sits below the fold, labeled
+  `modules.lifecycle` sits below the fold, labeled
   machine-managed. One physical file serves both roles.
 - **Module schemas evolve independently.** M4 DDL bumps move
   only `m4_audit.schema_version`; M8 autonomy evolves its
   own. No file-wide migration cascade.
 - **Single authority eliminates drift.** With
-  `stages_completed[]` authoritative, the projection cannot
+  `modules.lifecycle` authoritative, the projection cannot
   silently diverge — SKILL's next pass detects manual edits
-  to `modules.<id>` and forces resolution.
+  to `modules.<id>` config sections and forces resolution.
 - **Future-module path is registry-only.** Three artifacts
   change; SKILL bodies and hook code stay untouched. The
   pluggable-module promise becomes architecturally enforced
@@ -120,8 +139,8 @@ bespoke per-feature UX cost the redesign exists to eliminate.
 ### Negative
 
 - **Two writes per stage completion.** SKILL writes both
-  `stages_completed[]` and `modules.<id>` atomically — a few
-  extra YAML lines plus a projection-rebuild step;
+  `modules.lifecycle.<stage_id>` and `modules.<id>` atomically
+  — a few extra YAML lines plus a projection-rebuild step;
   negligible at this file size.
 - **Hand-edit divergence detection adds a SKILL step.** Every
   re-entry compares projection vs. source-of-truth and
@@ -141,13 +160,12 @@ pattern.
 
 ### β — Single flat structure (no module sections)
 
-Rejected. Mixes machine view (`stages_completed[]`
-fingerprints) with architect view (config items) — architects
-mentally filter lifecycle bookkeeping out of every read.
-Module schema migration also collapses onto the file-level
-`schema_version`, forcing co-evolution when any one bumps.
-The v0.4.0 `state.yml` carried this shape; the redesign
-exists in part to fix it.
+Rejected. Mixes machine view (lifecycle fingerprints) with
+architect view (config items) — architects mentally filter
+lifecycle bookkeeping out of every read. Module schema
+migration also collapses onto the file-level `schema_version`,
+forcing co-evolution when any one bumps. The v0.4.0 `state.yml`
+carried this shape; the redesign exists in part to fix it.
 
 ### γ — Multi-file (one settings file per module per locality)
 
@@ -159,13 +177,13 @@ aggregations instead of single-file scans.
 
 ### δ — Make `modules.<id>` authoritative + derive `stages_completed[]`
 
-Rejected. The fingerprint is lifecycle metadata —
-registry-derived machine fields, not architect-edited.
-Putting it under `modules.<id>` either pollutes the
-architect view or forces lifecycle recomputation on every
-read. Two authoritative sources (architect-edited
-`modules.<id>` + machine-recomputed lifecycle) would also
-drift the moment an architect saved an out-of-date buffer.
+Superseded by the chosen approach: `modules.lifecycle.<id>`
+IS the authoritative lifecycle store under the `modules.*`
+namespace. The earlier concern that putting fingerprints under
+`modules.<id>` would "pollute the architect view" is resolved
+by reserving the `lifecycle` key as machine-managed (not
+an Axis-C config module). The deprecated `stages_completed[]`
+flat list is the alternative this approach replaces.
 
 ## Notes
 
@@ -184,7 +202,7 @@ case where a stage projects into a sibling module's section
 
 - [ADR-0013](./0013-declarative-state-schema-and-lifecycle.md)
   — Per-stage entry shape this ADR places into
-  `stages_completed[]`.
+  `modules.lifecycle.<stage_id>`.
 - [ADR-0014](./0014-stage-registry-contract.md) — Defines
   `module_section_path` and the JSON Schema gate validating
   the module naming convention at load time.

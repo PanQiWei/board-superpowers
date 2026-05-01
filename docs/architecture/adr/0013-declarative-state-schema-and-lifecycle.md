@@ -41,39 +41,52 @@ entries in partitioned status files. Each entry carries a
 (fast-path) + derived `target_state_hash` (verification) +
 structured `target_state` (ground truth) — that the unified
 check script (ADR-0012) compares against the stage registry
-(ADR-0014) to compute one of five lifecycle states.
+(ADR-0014) to compute one of six lifecycle states.
 
-The five states (per design doc § "Stage lifecycle states"):
+The six states (per design doc § "Stage lifecycle states"):
 
-- **`never-run`** — no entry exists for this `stage_id` AND
-  the stage's `applicable_when` predicate (per ADR-0020) is
-  true (or absent).
-- **`completed`** — entry exists; recorded `generation` and
-  `target_state_hash` both match the current registry.
-- **`stale`** — entry exists; `generation` differs (maintainer
-  bumped it) OR `target_state_hash` differs (semantics changed
-  without a bump). SKILL re-runs; structural diff between
-  recorded and current `target_state` surfaces diagnostics.
+- **`pending`** (renamed from `never-run`) — no entry exists
+  for this `stage_id` AND the stage's `applicable_when`
+  predicate (per ADR-0020) is true (or absent).
+- **`applied`** (renamed from `completed`) — entry exists;
+  recorded `generation` and `target_state_hash` both match
+  the current registry.
+- **`drifted`** (renamed from `stale`) — entry exists;
+  `generation` differs (maintainer bumped it) OR
+  `target_state_hash` differs (semantics changed without a
+  bump). SKILL re-runs; structural diff between recorded and
+  current `target_state` surfaces diagnostics.
 - **`deprecated`** — recorded `stage_id` no longer appears in
   the current registry. Entry preserved as history.
 - **`not-applicable`** — the stage's `applicable_when`
   predicate evaluates false against current settings (per
   ADR-0020). Hook does not emit a marker; SKILL does not
-  execute. State flips back to `never-run` (no historical
-  entry) or `completed` (prior applicable-window entry exists)
-  when the predicate later evaluates true.
+  execute. State flips back to `pending` (no historical entry)
+  or `applied` (prior applicable-window entry exists) when the
+  predicate later evaluates true.
 
 Plus two **transient SKILL-only states** the SKILL writes
-mid-flow and the lifecycle treats as effectively `never-run`:
+mid-flow:
 `failed` (executor returned non-zero, `last_error` recorded)
-and `pending-architect-input` (agentic stage waiting for
-architect response).
+and `blocked` (renamed from `pending-architect-input`;
+agentic stage waiting for architect response).
+
+> **Vocabulary rename note (v0.5.0):** The implementation
+> adopts `pending` / `applied` / `drifted` / `blocked` as the
+> canonical names in place of the original `never-run` /
+> `completed` / `stale` / `pending-architect-input`. The
+> semantics are identical; only the names changed for
+> consistency with industry convention (`applied` matches
+> Terraform / Ansible "target was applied"; `pending` matches
+> the standard "not yet applied" meaning; `drifted` is the
+> accepted term in Terraform for "state diverged from
+> declared"). All doc references use the new names.
 
 Per design doc § "Per-stage entry shape", each entry is:
 
 ```yaml
 - stage_id: m4.repo.apply-audit-ddl
-  status: completed
+  status: applied
   completed_at: 2026-04-28T14:23:12Z
   plugin_version: v0.5.0
   generation: 7                    # Layer 1 — registry-bumped int
@@ -96,7 +109,7 @@ The three layers map onto the check loop:
    `target_state` semantics without bumping `generation`.
 3. **Layer 3 — structured `target_state` diff** (deep-equality,
    O(state size)). Never read by the hook; invoked only by
-   the SKILL when re-running a `stale` stage to produce
+   the SKILL when re-running a `drifted` stage to produce
    human-readable migration diagnostics ("audit_log needs
    column `event_uuid`").
 
@@ -114,7 +127,7 @@ Schema migration is **module-local** (per design doc
 § "Schema-migration seam" + § "Cross-version evolution"). When
 a module's `compute_target_state()` semantics change, the
 maintainer bumps that stage's `generation`; recorded entries
-flip to `stale`; the SKILL re-runs and uses Layer 3 diff for
+flip to `drifted`; the SKILL re-runs and uses Layer 3 diff for
 "what changed" messages. No central migration runner — each
 module owns its evolution through its registry entry plus its
 `stages_lib/<stage_id>.py` callables (per ADR-0014).
@@ -125,17 +138,17 @@ module owns its evolution through its registry entry plus its
 
 - **Sub-step granularity recovers cleanly from interruption.**
   A mid-bootstrap crash leaves entries for stages that ran;
-  next session sees unfinished as `never-run`, finished as
-  `completed`. No per-executor idempotency hacks.
+  next session sees unfinished as `pending`, finished as
+  `applied`. No per-executor idempotency hacks.
 - **Cross-version drift is automatically detected.** Plugin
   upgrade bumps a stage's `generation` → recorded entry no
-  longer matches → flips to `stale` → SKILL re-runs.
+  longer matches → flips to `drifted` → SKILL re-runs.
   ADR-0012's unified-trigger model relies entirely on this.
 - **Hook stays cheap.** Layer 1 absorbs the steady-state in
   O(1); Layer 2 only runs on generation match; Layer 3 never
   runs in the hook. The ≤200ms budget holds.
 - **Migration messages are architect-readable.** When a stage
-  goes `stale`, the SKILL has both old and new `target_state`
+  goes `drifted`, the SKILL has both old and new `target_state`
   and produces a concrete diff, not "version mismatch, please
   re-bootstrap." Layer 2 also backstops forgotten-generation-
   bump bugs by catching content drift.
@@ -153,7 +166,7 @@ module owns its evolution through its registry entry plus its
 - **Canonicalization discipline is non-negotiable.**
   `compute_target_state()` MUST be deterministic — embedded
   timestamps or set iteration order break hash stability and
-  produce false-`stale` on every session. CI must round-trip
+  produce false-`drifted` on every session. CI must round-trip
   each stage's output and assert hash stability (test
   placement is tracked in design doc § "Open design choices").
 - **Hash-allowlist is a per-stage maintenance burden.** Adding
@@ -190,7 +203,7 @@ are immutable: a hash mismatch means "rebuild from scratch
 into a new store path," with no "what changed" to explain.
 That does not transfer to stateful resources. Bootstrap
 stages mutate a long-lived audit DB, `manifest.yml`, and
-routing-block injection; when a stage goes `stale` the
+routing-block injection; when a stage goes `drifted` the
 architect needs to know *what specifically changed* so a delta
 migration ("add column `event_uuid`") is possible instead of a
 destructive replace. Pure-hash collapses every change into
@@ -232,10 +245,62 @@ check-mode re-derives current state from each target host on
 every invocation. board-superpowers needs persistent state
 because per-repo RDBMS schema and external GitHub state are
 too expensive to re-query on every hook tick. The two
-transient SKILL-only states (`failed`,
-`pending-architect-input`) are not part of the lifecycle's
-comparison logic; the hook treats them as effectively
-`never-run` and their purpose is operational diagnostics.
+transient SKILL-only states (`failed`, `blocked`) are not
+part of the lifecycle's comparison logic; the hook treats
+them the same as `pending` and their purpose is operational
+diagnostics.
+
+## Persistence path
+
+Lifecycle entries are stored at
+`modules.lifecycle.<stage_id>` inside the repo-shared settings
+file (`~/.board-superpowers/repos/<repo-identity>/settings.yml`
+per ADR-0024). This path supersedes the earlier
+`stages_completed[]` flat-list schema described in ADR-0021
+v1-draft.
+
+The `modules.lifecycle` sub-section is machine-managed; the
+per-stage entry shape is:
+
+```yaml
+modules:
+  lifecycle:
+    m4.repo.apply-audit-ddl:
+      status: applied
+      generation: 7
+      target_state_hash: d4e5f6...
+      last_applied_at: 2026-04-28T14:23:12Z
+      last_diff: null        # populated on drifted status
+```
+
+**Why `modules.lifecycle.<id>` over `stages_completed[]`**:
+single-stage lookup is O(1) by key vs O(N) scan of a flat
+list; aligns with ADR-0021's `modules.*` namespace convention
+(lifecycle is effectively a virtual module); `common.sh`
+helpers (`bsp_stage_state_set` / `bsp_stage_state_get`) and
+`_lifecycle.py`'s `_load_persisted()` both use this path.
+ADR-0021's earlier `stages_completed[]` authority direction is
+superseded by this section.
+
+## Cascade semantics
+
+`evaluate_all_stages` propagates a `not-applicable` state to
+dependent stages when a dependency cannot satisfy the
+precondition "prior stage was successfully applied":
+
+| Dependency state | Cascades to dependent? | Rationale |
+|------------------|------------------------|-----------|
+| `pending` | **yes** → dependent becomes `not-applicable` | Dependency was never successfully applied; dependent's precondition unmet. |
+| `failed` | **yes** → dependent becomes `not-applicable` | Last run failed; dependent cannot rely on the applied effect. |
+| `blocked` | **yes** → dependent becomes `not-applicable` | Awaiting input; dependent cannot proceed. |
+| `drifted` | **no** | Dependency was previously applied successfully; dependent ran against that applied state. Drift is the dependency's own concern; downstream evaluation continues independently. |
+| `not-applicable` | **no** | Dependency was intentionally skipped (predicate false); dependent was already conditioned on a different path. |
+| `applied` | **no** | Precondition met. |
+
+The cascade is implemented in `_lifecycle.py`'s
+`evaluate_all_stages`: `_BLOCKING = {"pending", "failed",
+"blocked"}`. Cascaded dependents record state `not-applicable`
+with reason `"cascaded: dependency '<id>' is '<state>'"`.
 
 ## Related
 

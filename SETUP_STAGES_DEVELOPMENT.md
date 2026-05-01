@@ -51,7 +51,7 @@ cover three independent runtime concerns:
 - **First-time setup** — the original "bootstrap" use case.
 - **Plugin-upgrade reconvergence** — when the registry's
   `generation` bumps or new stages are added in plugin v(N+1),
-  existing repos see those stages as `never-run` / `stale` and
+  existing repos see those stages as `pending` / `drifted` and
   the same machinery brings them current. Replaces the deferred
   `migrating-repo-version` SKILL ([ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md)).
 - **Agentic config-item elicitation (the settings UX)** —
@@ -83,7 +83,7 @@ guide.
 | Three axes (module / character / locality) — definitions | [`05-bootstrap-surface-redesign.md` § "The three axes"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#the-three-axes) |
 | Stages table (the 22-row registry view) | [§ "Stages"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#stages) |
 | Trigger model — hook flow + SKILL flow + hook–SKILL contract | [§ "Trigger model"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#trigger-model) + [ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md) |
-| 5-state lifecycle + three-layer fingerprint | [§ "Stage lifecycle states"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#stage-lifecycle-states) + [ADR-0013](./docs/architecture/adr/0013-declarative-state-schema-and-lifecycle.md) + [ADR-0020](./docs/architecture/adr/0020-stage-applicability-and-not-applicable-state.md) |
+| 6-state lifecycle + three-layer fingerprint | [§ "Stage lifecycle states"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#stage-lifecycle-states) + [ADR-0013](./docs/architecture/adr/0013-declarative-state-schema-and-lifecycle.md) + [ADR-0020](./docs/architecture/adr/0020-stage-applicability-and-not-applicable-state.md) |
 | Stage registry contract (YAML + Python + JSON Schema) | [§ "Stage registry contract"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#stage-registry-contract) + [ADR-0014](./docs/architecture/adr/0014-stage-registry-contract.md) |
 | Per-stage entry shape (what gets persisted) | [§ "Per-stage entry shape"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#per-stage-entry-shape) |
 | Settings modular layering (4 files + `modules.<id>` + per-module `schema_version`) | [§ "Settings modular layering"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#settings-modular-layering-in-file-structure) + [ADR-0021](./docs/architecture/adr/0021-settings-modular-layering.md) |
@@ -112,7 +112,7 @@ seconds.
                                          │ reads partitioned settings,
                                          │ runs lifecycle diff,
                                          │ emits INVOKE marker if
-                                         │ any stage is never-run / stale
+                                         │ any stage is pending / drifted
                                          ▼
                                ┌────────────────────────┐
                                │ bootstrapping-repo SKILL│
@@ -145,10 +145,11 @@ identify a stage. Two stages with the same `(module, character,
 locality)` triple may not coexist; that uniqueness is the
 identity invariant the registry's JSON Schema enforces.
 
-The **5-state lifecycle** (`never-run`, `completed`, `stale`,
-`deprecated`, `not-applicable`) is computed by the hook from
-the partitioned settings + the registry; the SKILL never
-guesses, it only consumes the lifecycle output.
+The **6-state lifecycle** (`pending`, `applied`, `drifted`,
+`deprecated`, `not-applicable`, `failed`/`blocked` as
+transients) is computed by the hook from the partitioned
+settings + the registry; the SKILL never guesses, it only
+consumes the lifecycle output.
 
 If you internalize one diagram, internalize the one above.
 Everything else in this guide elaborates on a piece of it.
@@ -339,7 +340,7 @@ caching at the lifecycle level, not inside the predicate).
 Trap: making `compute_target_state` non-deterministic (e.g.,
 including `datetime.now()` or random IDs). The output is
 fed to `_canonical.py` for the layer-2 hash; non-determinism
-makes the hash flap and every stage permanently `stale`.
+makes the hash flap and every stage permanently `drifted`.
 
 If you genuinely need a per-run-derived value (timestamps,
 correlation IDs), put it in `hash_excluded_fields`
@@ -350,7 +351,7 @@ correlation IDs), put it in `hash_excluded_fields`
 Trap: forgetting to bump `generation` after editing
 `compute_target_state` or `target_state_schema`. Without the
 bump, the layer-1 fast-path keeps short-circuiting to
-`completed` even though the expected target shape changed —
+`applied` even though the expected target shape changed —
 existing repos miss the migration silently.
 
 **Rule**: every PR that edits the per-stage Python module's
@@ -367,10 +368,10 @@ Agentic stages are the plugin's settings UX. The
 is mandatory for every agentic stage:
 
 1. **Schema declaration** (`target_state_schema`)
-2. **Detection** (lifecycle 5-state — see § 12)
+2. **Detection** (lifecycle 6-state — see § 12)
 3. **Interaction** (`interactive_prompt` registry field)
 4. **Persistence** (`locality` chooses the settings file)
-5. **Re-prompt trigger** (lifecycle transition to `stale`)
+5. **Re-prompt trigger** (lifecycle transition to `drifted`)
 
 See [ADR-0023](./docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md)
 for full details.
@@ -403,7 +404,7 @@ requirement before extending the protocol.
 ### Judgment: when "no choice made" is a valid `target_state`
 
 If the schema permits empty list / null / "no presets selected"
-as a valid value, an empty result is `completed`, not `skipped`.
+as a valid value, an empty result is `applied`, not `skipped`.
 There is no "skip" lifecycle state. See
 [ADR-0023 § "Skip semantics are eliminated"](./docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md).
 
@@ -503,8 +504,10 @@ Per [ADR-0021](./docs/architecture/adr/0021-settings-modular-layering.md):
   (host-shared, repo-shared, repo-clone; external is observed
   not stored).
 - **Two-section split per file**:
-  - `stages_completed[]` — machine-readable, authoritative
-    (the lifecycle reads this).
+  - `modules.lifecycle.<stage_id>` — machine-readable,
+    authoritative lifecycle store (ADR-0013; the lifecycle
+    reads this). Supersedes the earlier `stages_completed[]`
+    flat-list design from the ADR-0021 v1-draft.
   - `modules.<id>` — architect-friendly projection (read-only
     derived view, written by the SKILL on every successful
     stage completion).
@@ -538,7 +541,7 @@ Each module owns its own `schema_version`. When you bump it:
 1. Implement the migration *inside* the stage's
    `compute_target_state` (read old shape, transform to new).
 2. Bump the stage's `generation` (so existing repos see
-   `stale`).
+   `drifted`).
 3. The next hook tick → SKILL runs the stage → executor
    writes the new shape → `schema_version` bumps in the
    settings file.
@@ -622,7 +625,7 @@ Footguns specific to agents writing stage code:
   drift across pyyaml versions. Always use the shared helper.
 - **Inserting timestamps / correlation IDs into
   `target_state`** without listing them in
-  `hash_excluded_fields`. Hash flap → permanent `stale`.
+  `hash_excluded_fields`. Hash flap → permanent `drifted`.
 - **Writing `target_state` keys in non-deterministic order**.
   The canonicalizer sorts, so this *should* be safe, but if you
   bypass the canonicalizer for any reason (custom emit path,
@@ -728,7 +731,7 @@ NOT CI-gated (you must hand-test):
 - **External-locality stage observability** — RDBMS / GitHub
   query failures mid-flight (network drops, auth expiry).
   Manually simulate at least one failure mode and verify the
-  lifecycle reports `stale` rather than crashing.
+  lifecycle reports `drifted` rather than crashing.
 - **Mid-flow architect interrupt** — open a session, let the
   SKILL prompt for an agentic stage's input, abandon the
   session before answering. Reopen — the stage should be
@@ -859,7 +862,8 @@ That's the failure mode you build.
 
 Agentic stages cannot complete without architect input. In a
 CI run or scripted environment, the SKILL records
-`status: pending-architect-input` and exits cleanly. The
+`status: blocked` (the v0.5.0 canonical name; previously
+`pending-architect-input`) and exits cleanly. The
 stage stays pending until the next interactive session. This
 is a deliberate choice — see [ADR-0023 § Decision sub
 "Agentic, architect unreachable"](./docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md).
