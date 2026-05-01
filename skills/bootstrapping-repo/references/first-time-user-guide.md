@@ -87,19 +87,20 @@ Do NOT claim cards by hand — the worktree + branch + Status flip happens as a 
 
 After bootstrap, four locations matter:
 
-| Path | Layer | Tracked in git? | What's in it |
-|------|-------|-----------------|--------------|
-| `~/.board-superpowers/manifest.yml` | Host | No (per machine) | `schema_version`, `host_bootstrapped_at`, `last_seen_version`. Plugin-managed. |
-| `~/.board-superpowers/repos/<normalized>/state.yml` | Repo (host-local) | No (per `(host, repo)`) | `schema_version`, `repo_bootstrapped_at`, `last_seen_version_in_repo`, `features_enabled`, `routing_blocks` (with SHA256 hashes). Plugin-managed. |
-| `~/.board-superpowers/credentials.yml` | Host | No (chmod 0600) | Optional `audit_db_url`. Only present if you accepted BYO-RDBMS at F-B2 step 2e. |
-| `<repo>/.board-superpowers/config.yml` | Repo | **Yes** | `project: "OWNER/NUMBER"`, `wip_limit`. Hand-editable. Team-shared. |
+| Path | Locality | Tracked in git? | What's in it |
+|------|----------|-----------------|--------------|
+| `~/.board-superpowers/settings.yml` | host-shared | No (per machine) | M1 host-level stages_completed entries and host-scoped module config. Plugin-managed. |
+| `~/.board-superpowers/repos/<repo-identity>/settings.yml` | repo-shared | No (host-local per-repo) | Repo-shared stages_completed entries and repo-shared module config. Plugin-managed. |
+| `~/.board-superpowers/credentials.yml` | Host | No (chmod 0600) | Optional `audit_db_url`. Only present if you accepted BYO-RDBMS at the M4 credential-setup stage. |
+| `<repo>/.board-superpowers/settings.yml` | repo-git | **Yes** | Repo-git stages_completed entries + `modules.m10_kanban` config. Hand-editable (non-stages sections). Team-shared. |
+| `<repo>/.board-superpowers/settings.local.yml` | repo-clone | No (gitignored) | Clone-local stages_completed entries. Plugin-managed. Never committed. |
 | `<repo>/.board-superpowers/claims/` | Repo | No (gitignored) | Per-session claim markers. Forensic state, not configuration. |
 
 `<normalized>` is the repo's absolute path with leading `/` stripped and remaining `/` replaced by `-`. For `/Users/foo/proj` the normalized name is `Users-foo-proj`.
 
 ## Routing block injected into CLAUDE.md and AGENTS.md
 
-F-B2 step 4 appended a routing block to both `CLAUDE.md` (for Claude Code's auto-load) and `AGENTS.md` (for Codex CLI's auto-load). The block sits between the marker pair:
+The M7 routing-block injection stage appended a routing block to both `CLAUDE.md` (for Claude Code's auto-load) and `AGENTS.md` (for Codex CLI's auto-load). The block sits between the marker pair:
 
 ```
 <!-- board-superpowers:routing -->
@@ -107,7 +108,7 @@ F-B2 step 4 appended a routing block to both `CLAUDE.md` (for Claude Code's auto
 <!-- /board-superpowers:routing -->
 ```
 
-The block content is plugin-owned within the marker pair, user-owned outside. The plugin records a SHA256 hash of the injected content in `state.yml`; on the next plugin upgrade, the `board-superpowers:migrating-repo-version` skill compares the on-disk block to the recorded hash. Match → auto-update. Mismatch → ask you what to do (replace / merge / leave alone).
+The block content is plugin-owned within the marker pair, user-owned outside. The plugin records a SHA256 hash of the injected content in `settings.yml § stages_completed`; on the next plugin upgrade, the lifecycle diff detects a generation bump on the M7 stage. If the on-disk block matches the recorded hash, the stage is `applied` (no re-run). If modified, the stage enters `drifted` and this skill re-runs the M7 executor, which prompts you on the three-way choice (replace / merge / leave alone) before writing.
 
 Do not edit anything **between** the markers by hand — your edits will be overwritten by the next auto-update. If you need to customize the routing, edit content **outside** the markers (CLAUDE.md / AGENTS.md are otherwise yours).
 
@@ -145,7 +146,7 @@ grep -A1 'board-superpowers:routing' AGENTS.md | head -5
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/check-deps.sh"
 ```
 
-The `check-deps.sh` invocation should exit 0. If it exits 2, the routing block injection failed in some way; if it exits 3, a runtime command (`gh`, `python3`) is missing from PATH.
+The `check-deps.sh` invocation should exit 0. If it exits 2, the lifecycle state indicates pending stages; if it exits 3, a runtime command (`gh`, `python3`) is missing from PATH.
 
 ## What about audit logging
 

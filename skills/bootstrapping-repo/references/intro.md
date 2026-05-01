@@ -78,6 +78,6 @@ The `<normalized>` directory name is the repo's absolute path with leading `/` s
 
 ## What this skill does NOT do
 
-- It does not migrate state across plugin versions. When you upgrade to a newer plugin version, host manifest schema migration + per-repo state migration are the responsibility of the separate `board-superpowers:migrating-repo-version` skill where applicable.
-- It does not seed your board with cards. After bootstrap completes, your board is empty — the first card is your responsibility (use the Manager session intake routine).
-- It does not configure the BYO-RDBMS schema for you. The credential-setup step records your DSN in `credentials.yml`; the schema is applied via `scripts/audit-init.sh` at bootstrap (when DSN provided) and `board-superpowers:auditing-actions` writes use that schema thereafter.
+- It does not seed your board with cards. After all stages are applied, your board is empty — the first card is your responsibility (use the Manager session intake routine).
+- It does not configure the BYO-RDBMS schema for you. The credential-setup step records your DSN in `credentials.yml`; the schema is applied via `scripts/audit-init.sh` during the M4 audit-DDL stage and `board-superpowers:auditing-actions` writes use that schema thereafter.
+- It does not run *after* all stages are applied during a normal working session. Once lifecycle shows all stages as `applied`, the entry skill routes directly to `managing-board` or `consuming-card` without invoking this skill. Plugin upgrades that add new stages re-trigger this skill automatically through the hook's lifecycle diff.
