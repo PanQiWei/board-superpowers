@@ -35,7 +35,7 @@ Both paths arrive at the same procedure below. No re-probe is needed once contro
 
 ## Stage registry overview
 
-The stage registry lives at `scripts/stages-registry.yml` and is the single source of truth for which stages exist, their characters, locality, dependencies, and generation numbers. Stages are organized into modules (M1..M11). The SKILL does not hardcode the module list — it reads the registry dynamically via `stages_lib._registry.load_registry()`.
+The stage registry lives at `scripts/stages-registry.yml` and is the single source of truth for which stages exist, their characters, locality, dependencies, and generation numbers. Stages are organized into modules (M1..M11). The SKILL does not hardcode the module list — it reads the registry dynamically by loading `scripts/stages-registry.yml` via `yaml.safe_load()`, then passes the resulting dict to `stages_lib._lifecycle.evaluate_all_stages()`.
 
 Key fields consumed by this SKILL per stage:
 
@@ -51,7 +51,32 @@ Key fields consumed by this SKILL per stage:
 
 The `platforms[]` field is evaluated once at session start; stages excluded on the current platform are never surfaced.
 
-The `applicable_when: { kanban_projection_capability: <name> }` form is the only predicate type defined in Phase 2. Future phases may add additional predicate forms via the schema extension point in `scripts/stages-registry.schema.json`.
+Form A (`setting_path` + `equals`/`one_of`) and Form B (`kanban_projection_capability`) are the predicate types currently implemented; Form C (`python`) is reserved for stages requiring custom logic that Forms A and B cannot express.
+
+## Public API surface
+
+The following are the stable Python entry points and bash helpers that stage executors and this SKILL invoke. Do not call private helpers (`_load_persisted`, `_eval_form_a`, etc.) directly.
+
+```
+Python (invoke via uv run inside <repo>/.board-superpowers/.venv/):
+  stages_lib._lifecycle.evaluate_all_stages(registry, *, home, repo_root, repo_identity) -> list[dict]
+  stages_lib._lifecycle.evaluate_stage(stage, *, home, repo_root, repo_identity, helper_module) -> dict
+  stages_lib._lifecycle.evaluate_applicability(stage, *, home, repo_root, repo_identity) -> bool
+  stages_lib._canonical.fingerprint(obj) -> str   # sha256 hex digest of canonical YAML emit
+  stages_lib._canonical.canonicalize(obj) -> bytes
+  stages_lib._partitioned_settings.read_settings(locality, *, home, repo_root, repo_identity) -> dict
+  stages_lib._partitioned_settings.write_settings(locality, data, *, home, repo_root, repo_identity) -> None
+  stages_lib._partitioned_settings.get_module_section(locality, module_id, *, home, repo_root, repo_identity) -> dict
+  stages_lib._partitioned_settings.update_module_section(locality, module_id, section, *, home, repo_root, repo_identity) -> None
+
+Bash (source scripts/lib/common.sh first):
+  bsp_settings_path <locality> <home> <repo_root> <repo_identity>
+  bsp_stage_state_set <stage_id> <status> <generation> <target_state_hash>
+  bsp_stage_state_get <stage_id>
+
+Registry: loaded inline via yaml.safe_load(open('scripts/stages-registry.yml'))
+         No _registry module — there is no stages_lib._registry.
+```
 
 ## Lifecycle vocabulary
 
@@ -62,20 +87,19 @@ Each stage has one of the following lifecycle states. The SKILL reads these from
 | `pending` | No completed entry found for this stage. First time it will run. |
 | `applied` | Recorded generation and target-state hash match the registry. Nothing to do — skip. |
 | `drifted` | Registry generation or hash changed since last run (plugin upgrade or stage edit). Re-run needed. |
-| `blocked` | `applicable_when` predicate evaluated false (e.g., an M3 stage whose required kanban projection capability is absent from the active projection's capability set). Skip gracefully without error. |
+| `not-applicable` | `applicable_when` predicate evaluated false (e.g., an M3 stage whose required kanban projection capability is absent from the active projection's capability set), OR stage excluded by its `platforms` field on the current platform. Skipped gracefully; never surfaced as an error. |
 | `failed` | Prior executor run returned non-zero. `last_error` recorded. Retried on next SKILL invocation. |
-| `not-applicable` | Stage excluded by its `platforms` field on the current platform. Never surfaced to architect. |
 
 Two mid-flow transient states the SKILL writes:
 
 | State | When written |
 |-------|-------------|
-| `blocked` | Agentic stage awaiting architect response. Flow halts here; re-prompts on next session. |
+| `blocked` | Agentic stage where the architect response was unavailable or failed validation twice. Flow halts here; re-prompts on next session. This is distinct from `not-applicable` — `blocked` is an agentic-input-pending state, NOT a predicate-false state. |
 | `failed` | Executor returned non-zero mid-session. Retried next invocation. |
 
 ## On-disk settings layout
 
-The lifecycle diff reads four partitioned settings files. The SKILL reads and writes the same files via `bsp_settings_yml_read` / `bsp_settings_yml_write` from `scripts/lib/common.sh`:
+The lifecycle diff reads four partitioned settings files. The SKILL reads and writes the same files via Python's `_partitioned_settings.read_settings()` / `write_settings()` (Python callers) or `bsp_settings_path` + `bsp_stage_state_set` / `bsp_stage_state_get` (bash callers in `scripts/lib/common.sh`):
 
 | Locality | File path | Committed? |
 |----------|-----------|------------|
@@ -94,22 +118,23 @@ Each file has two sections:
 
 ```python
 # Invoke via uv-run inside <repo>/.board-superpowers/.venv/
-from stages_lib import _lifecycle, _partitioned_settings
+import yaml
+from pathlib import Path
+from stages_lib._lifecycle import evaluate_all_stages
 
-settings = {
-    'host-shared':  _partitioned_settings.read_settings('host-shared'),
-    'repo-shared':  _partitioned_settings.read_settings('repo-shared', repo_path=REPO_PATH),
-    'repo-git':     _partitioned_settings.read_settings('repo-git',    repo_path=REPO_PATH),
-    'repo-clone':   _partitioned_settings.read_settings('repo-clone',  repo_path=REPO_PATH),
-}
+# Load registry directly — no _registry module; just yaml.safe_load
+registry = yaml.safe_load(open('scripts/stages-registry.yml'))
 
-lifecycle = _lifecycle.compute_lifecycle(
-    registry=load_registry('scripts/stages-registry.yml'),
-    partitioned_settings=settings,
-    platform=detect_platform(),
+# evaluate_all_stages handles topological sort, cascade, and per-stage diff
+# home / repo_root / repo_identity are resolved by the calling script
+results = evaluate_all_stages(
+    registry,
+    home=Path.home(),
+    repo_root=Path(REPO_ROOT),
+    repo_identity=REPO_IDENTITY,
 )
-pending = [(sid, st) for sid, st in lifecycle if st in ('pending', 'drifted')]
-pending_sorted = topological_sort(pending, registry)
+pending = [r for r in results if r['state'] in ('pending', 'drifted')]
+# results are already topologically ordered by evaluate_all_stages
 ```
 
 If the venv is absent (fresh repo), run `uv sync` first (stage `m2.repo.sync-venv`), then retry the lifecycle computation.
@@ -134,9 +159,9 @@ For each stage in topological order:
 Announce: "▶ Running <stage_id> — <stage_name>"
 Execute:  uv run python3 -c "from stages_lib import <module>; <module>.executor(repo_path=REPO_PATH)"
 On exit 0:
-  - Compute target_state via compute_target_state()
-  - Compute target_state_hash via _canonical.canonical_sha256(target_state, hash_excluded_fields)
-  - Write completed entry to the stage's locality settings file
+  - Compute target_state via the stage's helper module's compute_target_state(ctx)
+  - Strip hash_excluded_fields from target_state, then compute target_state_hash via _canonical.fingerprint(hashable)
+  - Write completed entry to the stage's locality settings file via _partitioned_settings.write_settings()
   - Record status → applied
   - Classify via board-superpowers:classifying-actions (action_id per catalog)
   - Audit via board-superpowers:auditing-actions
@@ -177,7 +202,7 @@ M3 stages (`m3.repo.ensure-labels`, `m3.repo.validate-status-field`) carry `appl
 1. Read `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.<kanban-id>.projection` using `bsp_resolve_active_projection` (helper in `scripts/lib/common.sh`).
 2. Load `skills/operating-kanban/references/<projection-id>.md § "Setup capabilities"` — the declared capability set for the active projection.
 3. If the required capability is declared: stage enters `pending`/`drifted` and runs normally.
-4. If not declared, or if M10 has not yet been applied: stage is `blocked`. Announce "  ⊘ <stage_id> blocked — kanban projection not yet configured or does not declare <capability>. Will run after M10 stage completes."
+4. If not declared, or if M10 has not yet been applied: the lifecycle has already recorded `not-applicable` for this stage (per ADR-0020). No additional action needed — include in the "Skipped" summary bucket.
 
 M3 stage executors route board reads through `board-superpowers:operating-kanban` protocol actions (e.g., `read_board` for Status options validation). Never call `gh` commands inline — dispatch through the operating-kanban projection layer.
 
@@ -187,11 +212,11 @@ After all stages complete:
 
 ```
 Setup stages complete.
-  Applied:  <N>  (<stage_ids>)
-  Skipped:  <M>  (<stage_ids> — already applied)
-  Blocked:  <B>  (<stage_ids> — kanban projection capability unavailable)
-  Failed:   <F>  (<stage_ids> — see errors above; will retry next session)
-  Awaiting: <A>  (<stage_ids> — pending architect input; will re-prompt next session)
+  Applied:            <N>  (<stage_ids>)
+  Skipped (applied):  <M>  (<stage_ids> — already applied)
+  Skipped (not-applicable): <B>  (<stage_ids> — predicate evaluated false, e.g., kanban projection capability unavailable or platform mismatch)
+  Failed:             <F>  (<stage_ids> — see errors above; will retry next session)
+  Awaiting:           <A>  (<stage_ids> — pending architect input; will re-prompt next session)
 ```
 
 If this is a first-time setup and all stages applied, deliver the first-time user guide from `references/first-time-user-guide.md`.
@@ -240,7 +265,7 @@ For the full A/R default classification of each, consult the action-id catalog i
 | Custom Status field options on the kanban board | M3 validate-status-field stage surfaces the mismatch to the architect; waits for fix before retrying. |
 | Agentic stage with architect unreachable (CI / scripted env) | Stage records `blocked`; flow halts cleanly. Next interactive session re-prompts. |
 | Stage executor exits non-zero | Stage records `failed` + `last_error`. Downstream `depends_on` stages are skipped. All other stages continue. |
-| M10 stage not yet applied when M3 runs | M3 stages are `blocked` (not `failed`). They run automatically once M10 applies on the same or a subsequent session. |
+| M10 stage not yet applied when M3 runs | M3 stages are `not-applicable` (predicate false, not `failed` and not `blocked`). They transition to `pending` automatically once M10 applies; next session's lifecycle diff finds them and runs them. |
 
 ## Plugin-upgrade reconvergence
 

@@ -243,18 +243,41 @@
           "description": "Per ADR-0020 conditional applicability predicate. Three legal forms: (1) setting-path declarative; (2) kanban-projection-capability declarative (per ADR-0027 § 2 — supersedes the pre-#70 dispatch model); (3) Python escape hatch. Predicate evaluates false → stage returns `not-applicable`. Cheap to evaluate (hook-side); never blocks for IO.",
           "oneOf": [
             {
-              "required": ["setting_path", "equals"],
-              "additionalProperties": false,
-              "properties": {
-                "setting_path": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "Dotted path into the merged settings (e.g., `m10.repo.choose-kanban-projection.target_state.kanban_projection`)."
+              "oneOf": [
+                {
+                  "required": ["setting_path", "equals"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "setting_path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Dotted path into the merged settings (e.g., `m10.repo.choose-kanban-projection.target_state.kanban_projection`)."
+                    },
+                    "equals": {
+                      "description": "Value the setting_path must equal for the predicate to evaluate true."
+                    }
+                  }
                 },
-                "equals": {
-                  "description": "Value the setting_path must equal for the predicate to evaluate true."
+                {
+                  "required": ["setting_path", "one_of"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "setting_path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Dotted path into the merged settings (e.g., `m10.repo.choose-kanban-projection.target_state.kanban_projection`)."
+                    },
+                    "one_of": {
+                      "type": "array",
+                      "minItems": 1,
+                      "description": "List of values the setting_path may equal for the predicate to evaluate true. Per ADR-0020 Form A canonical shape.",
+                      "items": {
+                        "description": "A permitted value for the setting at setting_path."
+                      }
+                    }
+                  }
                 }
-              }
+              ]
             },
             {
               "required": ["kanban_projection_capability"],

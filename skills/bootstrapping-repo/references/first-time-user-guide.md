@@ -1,6 +1,6 @@
 # bootstrapping-repo — first-time user guide
 
-This is the "what now" content delivered immediately after F-B2 step 4 (state.yml write) completes. Surface it inline to the architect once F-B2 reports success. The guide is post-bootstrap orientation — it assumes the architect has just had F-B1 + F-B2 succeed and now needs to know what to do next.
+This is the "what now" content delivered immediately after all setup stages have applied (the bootstrap completion step). Surface it inline to the architect once all stages report `applied`. The guide is post-bootstrap orientation — it assumes the architect has just had the full stage sequence succeed and now needs to know what to do next.
 
 For pre-bootstrap conceptual orientation, see `references/intro.md`. For the GitHub Project UI walkthrough that has to happen BEFORE F-B2, see `references/project-creation-walkthrough.md`.
 
@@ -89,11 +89,11 @@ After bootstrap, four locations matter:
 
 | Path | Locality | Tracked in git? | What's in it |
 |------|----------|-----------------|--------------|
-| `~/.board-superpowers/settings.yml` | host-shared | No (per machine) | M1 host-level stages_completed entries and host-scoped module config. Plugin-managed. |
-| `~/.board-superpowers/repos/<repo-identity>/settings.yml` | repo-shared | No (host-local per-repo) | Repo-shared stages_completed entries and repo-shared module config. Plugin-managed. |
-| `~/.board-superpowers/credentials.yml` | Host | No (chmod 0600) | Optional `audit_db_url`. Only present if you accepted BYO-RDBMS at the M4 credential-setup stage. |
-| `<repo>/.board-superpowers/settings.yml` | repo-git | **Yes** | Repo-git stages_completed entries + `modules.m10_kanban` config. Hand-editable (non-stages sections). Team-shared. |
-| `<repo>/.board-superpowers/settings.local.yml` | repo-clone | No (gitignored) | Clone-local stages_completed entries. Plugin-managed. Never committed. |
+| `~/.board-superpowers/settings.yml` | host-shared | No (per machine) | M1 host-level `modules.lifecycle.*` entries and host-scoped module config. Plugin-managed. |
+| `~/.board-superpowers/repos/<repo-identity>/settings.yml` | repo-shared | No (host-local per-repo) | Repo-shared `modules.lifecycle.*` entries and repo-shared module config. Plugin-managed. |
+| `~/.board-superpowers/repos/<repo-identity>/credentials.yml` | Host per-repo | No (chmod 0600) | Optional `audit_db_url`. Only present if you accepted BYO-RDBMS at the M4 credential-setup stage. Separate from the settings.yml family. |
+| `<repo>/.board-superpowers/settings.yml` | repo-git | **Yes** | Repo-git `modules.lifecycle.*` entries + `modules.m10_kanban` config. Hand-editable (non-stages sections). Team-shared. |
+| `<repo>/.board-superpowers/settings.local.yml` | repo-clone | No (gitignored) | Clone-local `modules.lifecycle.*` entries. Plugin-managed. Never committed. |
 | `<repo>/.board-superpowers/claims/` | Repo | No (gitignored) | Per-session claim markers. Forensic state, not configuration. |
 
 `<normalized>` is the repo's absolute path with leading `/` stripped and remaining `/` replaced by `-`. For `/Users/foo/proj` the normalized name is `Users-foo-proj`.
@@ -108,11 +108,11 @@ The M7 routing-block injection stage appended a routing block to both `CLAUDE.md
 <!-- /board-superpowers:routing -->
 ```
 
-The block content is plugin-owned within the marker pair, user-owned outside. The plugin records a SHA256 hash of the injected content in `settings.yml § stages_completed`; on the next plugin upgrade, the lifecycle diff detects a generation bump on the M7 stage. If the on-disk block matches the recorded hash, the stage is `applied` (no re-run). If modified, the stage enters `drifted` and this skill re-runs the M7 executor, which prompts you on the three-way choice (replace / merge / leave alone) before writing.
+The block content is plugin-owned within the marker pair, user-owned outside. The plugin records a SHA256 hash of the injected content in `modules.lifecycle.<stage_id>.target_state_hash`; on the next plugin upgrade, the lifecycle diff detects a generation bump on the M7 stage. If the on-disk block matches the recorded hash, the stage is `applied` (no re-run). If modified, the stage enters `drifted` and this skill re-runs the M7 executor, which prompts you on the three-way choice (replace / merge / leave alone) before writing.
 
 Do not edit anything **between** the markers by hand — your edits will be overwritten by the next auto-update. If you need to customize the routing, edit content **outside** the markers (CLAUDE.md / AGENTS.md are otherwise yours).
 
-**Stub-redirect targets are skipped.** If your `CLAUDE.md` or `AGENTS.md` is a *stub redirect* (≤ 30 lines AND contains a Claude Code `@-include` line of shape `^@<file>.md$`, e.g. `@AGENTS.md`), F-B2 leaves it byte-identical and DOES NOT add a `routing_blocks[]` entry for it in `state.yml`. The other (non-stub) file still receives the routing block and the architect's session lands cleanly via the redirect. You can sanity-check this by `grep -c 'board-superpowers:routing' state.yml` — a stub-redirect setup shows fewer than two markers across the two files (typically one in AGENTS.md only).
+**Stub-redirect targets are skipped.** If your `CLAUDE.md` or `AGENTS.md` is a *stub redirect* (≤ 30 lines AND contains a Claude Code `@-include` line of shape `^@<file>.md$`, e.g. `@AGENTS.md`), the M7 stage leaves it byte-identical and DOES NOT add a routing-block entry for it in the lifecycle state. The other (non-stub) file still receives the routing block and the architect's session lands cleanly via the redirect. You can sanity-check this by `grep -c 'board-superpowers:routing' .board-superpowers/settings.yml` — a stub-redirect setup shows fewer than two markers across the two files (typically one in AGENTS.md only).
 
 ## When to invoke each skill
 

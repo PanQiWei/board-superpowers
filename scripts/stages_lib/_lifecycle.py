@@ -1,6 +1,13 @@
-"""5-state lifecycle engine — ADR-0013 K8s-style 3-layer fingerprint diff.
+# NOTE: ADR-0013 § Decision (line 46) defines SEVEN states including `deprecated`.
+# The `deprecated` state (for stages removed from the registry) is DEFERRED to v0.6.0
+# alongside the first stage removal. No v0.5.0 stage carries `deprecated_in_version`,
+# and no historical entries from a prior release exist, so the auto-prune sweep
+# has zero consumers at v0.5.0. See ADR-0013 § Negative for the deferral rationale.
+"""6-state lifecycle engine — ADR-0013 K8s-style 3-layer fingerprint diff.
 
 States: not-applicable | pending | applied | drifted | failed | blocked
+# `deprecated` state per ADR-0013 § Decision deferred to v0.6.0 (auto-prune of
+# removed-from-registry stages); no v0.5.0 stage carries `deprecated_in_version`.
 ADR refs: ADR-0013 (lifecycle), ADR-0020 (applicable_when), ADR-0027 § 2 (Form B).
 """
 

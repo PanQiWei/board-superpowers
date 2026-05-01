@@ -4,12 +4,12 @@ Reference for the SKILL body's "Sequential per-stage execution" section. Read th
 
 ## How the lifecycle diff works
 
-The lifecycle diff is computed by `stages_lib._lifecycle.compute_lifecycle(registry, partitioned_settings, platform)`. For each stage in the registry it:
+The lifecycle diff is computed by `stages_lib._lifecycle.evaluate_all_stages(registry, *, home, repo_root, repo_identity)`. For each stage in the registry (in topological order) it:
 
-1. Finds the `stages_completed` entry (if any) in the stage's `locality` settings file.
+1. Finds the `modules.lifecycle.<stage_id>` entry (if any) in the stage's `locality` settings file via `_partitioned_settings.read_settings()`.
 2. Compares the entry's `generation` to the registry's declared `generation` for that stage. If they differ → `drifted`.
-3. Compares the entry's `target_state_hash` to the SHA256 of `compute_target_state()` evaluated now. If they differ → `drifted`.
-4. If the `applicable_when` predicate evaluates false → `blocked`.
+3. Compares the entry's `target_state_hash` to the SHA256 of `compute_target_state()` evaluated now via `_canonical.fingerprint()`. If they differ → `drifted`.
+4. If the `applicable_when` predicate evaluates false → `not-applicable` (per ADR-0020; renamed from the pre-ADR-0013 term `blocked`).
 5. If the stage is excluded by `platforms[]` on the current platform → `not-applicable`.
 6. If no completed entry and none of the above → `pending`.
 7. If all checks pass (generation match + hash match) → `applied`.
@@ -51,8 +51,9 @@ function run_automated_stage(stage, repo_path, settings):
         return  # continue with next independent stage
 
     # Success path
-    target_state = stage.compute_target_state(repo_path=repo_path)
-    target_hash  = canonical_sha256(target_state, stage.hash_excluded_fields)
+    target_state = stage.compute_target_state(ctx)
+    hashable = {k: v for k, v in target_state.items() if k not in (stage.hash_excluded_fields or [])}
+    target_hash  = _canonical.fingerprint(hashable)
     state = write_stage_state(stage, "applied",
                               generation=stage.generation,
                               target_state=target_state,
@@ -74,7 +75,7 @@ function run_agentic_stage(stage, repo_path, settings, architect):
 
     response = wait_for_architect_response(timeout=session_lifetime)
     if response is None:  # architect unreachable / CI env
-        write_stage_state(stage, "pending-architect-input")
+        write_stage_state(stage, "blocked")   # renamed from `pending-architect-input` per ADR-0013
         announce("  ⏸ {stage.stage_id} awaiting architect input — will re-prompt next session")
         HALT  # do not continue — agentic stages are HALT points
 
@@ -85,15 +86,16 @@ function run_agentic_stage(stage, repo_path, settings, architect):
         validation_error = validate(response, stage.target_state_schema)
 
     if validation_error:  # second try also failed
-        write_stage_state(stage, "pending-architect-input",
+        write_stage_state(stage, "blocked",   # renamed from `pending-architect-input` per ADR-0013
                           last_error=validation_error)
         announce("  ⏸ {stage.stage_id} — invalid input; will re-prompt next session")
         HALT
 
     # Valid input — persist and record
     result = stage.executor(response, repo_path=repo_path, settings=settings)
-    target_state = stage.compute_target_state(repo_path=repo_path)
-    target_hash  = canonical_sha256(target_state, stage.hash_excluded_fields)
+    target_state = stage.compute_target_state(ctx)
+    hashable = {k: v for k, v in target_state.items() if k not in (stage.hash_excluded_fields or [])}
+    target_hash  = _canonical.fingerprint(hashable)
     state = write_stage_state(stage, "applied",
                               generation=stage.generation,
                               target_state=target_state,
@@ -106,7 +108,7 @@ Key invariant: **HALT on first agentic stage that cannot be immediately resolved
 
 ### M3 kanban-capability stages
 
-M3 stages run as automated stages once the `blocked` state clears. The lifecycle diff re-evaluates the `kanban_projection_capability` predicate on every session. When M10 applies, the next session's diff finds M3 stages as `pending` (not `blocked`) and includes them in the execution list.
+M3 stages run as automated stages once the `not-applicable` state clears (i.e., once M10 is applied and the projection declares the required capability). The lifecycle diff re-evaluates the `kanban_projection_capability` predicate on every session. When M10 applies, the next session's diff finds M3 stages as `pending` (not `not-applicable`) and includes them in the execution list.
 
 M3 executors route board reads through `board-superpowers:operating-kanban` (ADR-0027). The operating-kanban skill reads `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.<id>.projection`, loads the per-projection reference file, and dispatches the action. This indirection is mandatory — never call `gh project` commands directly in stage executor code.
 
@@ -118,9 +120,9 @@ M3 executors route board reads through `board-superpowers:operating-kanban` (ADR
 | Executor exits non-zero | `failed` + `last_error` captured | Dependent stages skipped | Remaining independent stages run |
 | DB unavailable at audit row | No stage state change; audit degrades to jsonl | None | Session continues; `mode` field in jsonl records cause |
 | Network unavailable during M3 label sync | `failed` | M3 siblings independent (no cross-M3 depends_on) | Other stages continue |
-| Status field drift on M3 validate | Executor surfaces mismatch to architect | Waits for fix, then retries; does not auto-correct | Stage blocks in `pending-architect-input` until fix confirmed |
-| Agentic stage in CI / scripted env | `pending-architect-input` | HALT at agentic stage | Remaining stages after the HALT point are not run in this session |
-| M10 not yet applied when M3 evaluated | `blocked` (not `failed`) | No downstream effect | M3 auto-clears to `pending` once M10 is `applied` on any session |
+| Status field drift on M3 validate | Executor surfaces mismatch to architect | Waits for fix, then retries; does not auto-correct | Stage records `blocked` (agentic-input pending) until fix confirmed |
+| Agentic stage in CI / scripted env | `blocked` (renamed from `pending-architect-input` per ADR-0013) | HALT at agentic stage | Remaining stages after the HALT point are not run in this session |
+| M10 not yet applied when M3 evaluated | `not-applicable` (not `failed` and not `blocked`) | No downstream effect | M3 auto-clears to `pending` once M10 is `applied` on any session |
 | Duplicate marker in CLAUDE.md (M7) | Executor surfaces duplicate; asks resolve/keep | Waits for architect choice | Does not inject second block; always prompts on ambiguity |
 
 ## Platform dispatch differences
@@ -158,6 +160,6 @@ On a fresh repo, all stages are `pending`. Topological order:
 4. `m4.repo.apply-audit-ddl` (after m2)
 5. `m7.repo.inject-routing` (after m2)
 6. `m10.repo.choose-kanban` (after m2; **agentic** — HALT if architect unavailable)
-7. `m3.repo.ensure-labels` (after m10; **blocked** until m10 `applied` and projection capability confirmed)
+7. `m3.repo.ensure-labels` (after m10; **not-applicable** until m10 `applied` and projection capability confirmed; transitions to `pending` on next session after m10 applies)
 
 After m10 applies, the next session's diff finds m3 as `pending` (predicate now evaluates true) and runs it in slot 7.

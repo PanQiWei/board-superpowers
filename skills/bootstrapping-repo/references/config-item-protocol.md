@@ -42,7 +42,7 @@ Interaction:
 
 ```
 prompt: |
-  Which kanban backend should this repo use?
+  Which kanban projection should this repo use?
   1. github-project-v2  (GitHub Project V2 — default, no extra config)
   2. linear             (Linear — requires API token; available in v1.1)
   3. none               (No kanban — audit-log-only mode)
@@ -134,26 +134,26 @@ Interaction:
 For all prompt kinds:
 
 - **Re-prompt once** on invalid input. Show the validation error message clearly.
-- **HALT after two failed attempts**. Record `pending-architect-input` with `last_error` = the second validation error message. Do not substitute defaults — the architect's explicit choice is the point.
-- **CI / scripted env**: if no response arrives within `session_lifetime`, treat as zero attempts and record `pending-architect-input` immediately. This is not an error — it is the correct behavior for non-interactive runs.
+- **HALT after two failed attempts**. Record `blocked` (renamed from `pending-architect-input` per ADR-0013) with `last_error` = the second validation error message. Do not substitute defaults — the architect's explicit choice is the point.
+- **CI / scripted env**: if no response arrives within `session_lifetime`, treat as zero attempts and record `blocked` immediately. This is not an error — it is the correct behavior for non-interactive runs.
 
 ## Persistence rules
 
 After accepting a valid response, the SKILL:
 
-1. Calls `stage.executor(validated_input, repo_path, settings)` — the executor writes to the locality settings file via `bsp_settings_yml_write`.
-2. Calls `stage.compute_target_state(repo_path)` — reads back what was just written.
-3. Computes `target_state_hash = canonical_sha256(target_state, hash_excluded_fields)`.
-4. Writes the `stages_completed` entry to the locality settings file.
-5. Calls `bsp_classify_action` + `bsp_audit_write` with the completed state.
+1. Calls `stage.executor(validated_input, repo_path, settings)` — the executor writes to the locality settings file via `_partitioned_settings.write_settings()` (Python) or `bsp_stage_state_set` (bash).
+2. Calls `stage.compute_target_state(ctx)` — reads back what was just written.
+3. Strips `hash_excluded_fields` from target_state; computes `target_state_hash = _canonical.fingerprint(hashable)`.
+4. Writes the `modules.lifecycle.<stage_id>` entry to the locality settings file.
+5. Invokes `board-superpowers:classifying-actions` + `board-superpowers:auditing-actions` with the completed state.
 
 The executor is responsible for writing exactly one conceptual change. Multi-field config items use a single executor that writes all fields atomically.
 
 ## Re-prompt trigger
 
-An agentic stage re-prompts on the next session if its `stages_completed` entry has:
+An agentic stage re-prompts on the next session if its `modules.lifecycle.<stage_id>` entry has:
 
-- `status: pending-architect-input` (explicit HALT from a prior session), OR
+- `status: blocked` (explicit HALT from a prior session — architect input was unavailable or failed validation twice), OR
 - `status: failed` (executor returned non-zero after a valid input was accepted), OR
 - `status: drifted` (generation bump detected by lifecycle diff — a new version may have changed the option set or default).
 

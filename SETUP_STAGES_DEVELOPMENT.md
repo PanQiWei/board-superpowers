@@ -31,7 +31,7 @@
 8. [`applicable_when` — when to use vs alternatives](#8-applicable_when--when-to-use-vs-alternatives)
 9. [`platforms` — when something genuinely differs across CC and Codex](#9-platforms--when-something-genuinely-differs-across-cc-and-codex)
 10. [Settings layering — where `target_state` lands](#10-settings-layering--where-target_state-lands)
-11. [BoardAdapter capability dispatch — M3-conditioning](#11-boardadapter-capability-dispatch--m3-conditioning)
+11. [Kanban projection capability dispatch — M3-conditioning](#11-kanban-projection-capability-dispatch--m3-conditioning)
 12. [Cross-version evolution — `generation` bumps & `schema_version`](#12-cross-version-evolution--generation-bumps--schema_version)
 13. [The canonicalization invariant — agent footguns](#13-the-canonicalization-invariant--agent-footguns)
 14. [Recipe — adding a new stage end-to-end](#14-recipe--adding-a-new-stage-end-to-end)
@@ -91,7 +91,7 @@ guide.
 | `platforms` field semantics | [ADR-0016](./docs/architecture/adr/0016-cross-platform-parity-contract.md) |
 | Architect UX flow + 5-element config item protocol | [§ "Architect UX"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#architect-ux) + [ADR-0023](./docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md) |
 | Repo identity scheme + I-13 cross-clone state sharing | [§ "Repo identity"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#repo-identity) + [ADR-0017](./docs/architecture/adr/0017-i13-invariant-revision-cross-clone-state-sharing.md) |
-| BoardAdapter capability dispatch (M3) + M10 backend selection | [ADR-0022](./docs/architecture/adr/0022-boardadapter-capability-dispatch.md) |
+| Kanban projection capability dispatch (M3) + M10 projection selection | [ADR-0027](./docs/architecture/adr/0027-m3-dispatch-via-kanban-protocol-projection.md) |
 | M7 multi-stage AGENTS.md / CLAUDE.md routing-block protocol | [ADR-0018](./docs/architecture/adr/0018-m7-multi-stage-routing-block-protocol.md) |
 | Zero-config SQLite default audit backend | [ADR-0019](./docs/architecture/adr/0019-zero-config-sqlite-default-audit-backend.md) + [ADR-0009](./docs/architecture/adr/0009-allow-sqlite-as-byo-audit-db.md) |
 | M4 audit per-repo locality (replaces host-shared credentials) | [ADR-0015](./docs/architecture/adr/0015-m4-audit-per-repo-locality.md) |
@@ -419,13 +419,15 @@ Three legal forms (per [ADR-0020](./docs/architecture/adr/0020-stage-applicabili
 
 ```yaml
 # Form 1: setting-path (preferred for declarative conditionals)
+# Supports both `equals` (exact match) and `one_of` (list match).
 applicable_when:
-  setting_path: m10.repo.choose-kanban-backend.target_state.backend
-  equals: github-project-v2
+  setting_path: modules.m10_kanban.target_state.kanban_projection
+  one_of: [github-project-v2, linear]
 
-# Form 2: board-capability (for M3-style capability dispatch)
+# Form 2: kanban-projection-capability (for M3-style capability dispatch)
+# Uses the active kanban projection's declared capability set (ADR-0027).
 applicable_when:
-  board_capability: pull_request_aggregate
+  kanban_projection_capability: pull_request_aggregate
 
 # Form 3: Python escape hatch (last resort)
 applicable_when:
@@ -436,8 +438,8 @@ applicable_when:
 
 | Situation | Use |
 |-----------|-----|
-| "Run this stage only if the architect chose X in stage Y" | Form 1 (setting-path). Cheapest, declarative. |
-| "Run this stage only if the chosen board adapter supports capability Z" | Form 2 (board-capability). Maps cleanly to ADR-0022 capability dispatch. |
+| "Run this stage only if the architect chose X in stage Y" | Form 1 (setting-path). Cheapest, declarative. Use `equals` for a single value match, `one_of` for a list of permitted values. |
+| "Run this stage only if the active kanban projection declares capability Z" | Form 2 (kanban-projection-capability). Reads the active projection's reference file under `skills/operating-kanban/references/<projection>.md § 'Setup capabilities'`. Maps cleanly to ADR-0027 M3-dispatch. |
 | "Run this stage based on logic Forms 1+2 cannot express" | Form 3 (python). **Last resort.** Every Form-3 use accumulates registry-side complexity. Document why Forms 1+2 don't suffice in the per-stage Python module. |
 | "Run this stage on Codex but not CC" | NOT `applicable_when` — that's the `platforms` field (see § 9). The two compose; `platforms` filters first, `applicable_when` filters second. |
 
@@ -552,32 +554,31 @@ yourself reaching for a central runner, you're probably trying
 to coordinate cross-module changes — push them through
 multiple stages with `depends_on` instead.
 
-## 11. BoardAdapter capability dispatch — M3-conditioning
+## 11. Kanban projection capability dispatch — M3-conditioning
 
-[ADR-0022](./docs/architecture/adr/0022-boardadapter-capability-dispatch.md)
-defines:
+[ADR-0027](./docs/architecture/adr/0027-m3-dispatch-via-kanban-protocol-projection.md)
+defines the current M3-dispatch model (supersedes ADR-0022 BoardAdapter dispatch):
 
-- **M10 BoardAdapter selection** — agentic stage
-  `m10.repo.choose-kanban-backend` elicits which adapter the
+- **M10 kanban projection selection** — agentic stage
+  `m10.repo.choose-kanban-projection` elicits which kanban projection the
   repo uses.
 - **M3 stages declare capability dependencies** — e.g.,
   `m3.repo.label-card-status` declares
-  `applicable_when: board_capability: card_status_label`.
-  Adapters declare which capabilities they support.
+  `applicable_when: kanban_projection_capability: card_status_label`.
+  Projections declare which capabilities they support in their reference file
+  under `skills/operating-kanban/references/<projection-id>.md § 'Setup capabilities'`.
 
 ### Judgment: adding a new capability
 
 When adding a new M3 stage:
 
 1. Decide which capability it requires.
-2. Check whether existing adapters declare that capability.
-   If only some do, the stage gets `not-applicable` for repos
-   using non-supporting adapters — verify that's the
-   intended UX.
-3. If the capability is brand-new, add it to the canonical
-   capability list in [ADR-0022](./docs/architecture/adr/0022-boardadapter-capability-dispatch.md)
-   and update every adapter's declared capability set in the
-   same PR.
+2. Check whether existing projections declare that capability in their
+   reference files. If only some do, the stage gets `not-applicable` for repos
+   using non-supporting projections — verify that's the intended UX.
+3. If the capability is brand-new, add it to the supporting projection's
+   reference file under `skills/operating-kanban/references/<projection-id>.md`
+   and update the stage's `applicable_when` in the registry in the same PR.
 
 ### When you should NOT use capability dispatch
 
@@ -771,10 +772,16 @@ prompt code. If your decision shape doesn't fit one of the
 5 prompt kinds, **push back on the requirement**, don't
 extend the protocol.
 
-### A5. "I'll put credentials in `repo-shared` because they're related to this repo."
+### A5. "I'll put credentials in `repo-shared` or `repo-clone` because they're related to this repo."
 
-No. Credentials are `repo-clone` (gitignored). The locality
-axis is about git semantics, not subject-matter.
+No. Credentials live in a separate `~/.board-superpowers/repos/<repo-identity>/credentials.yml`
+(mode 0600), HOST-side per-repo. The four-locality settings.yml family (mode 0644) MUST NOT carry
+secrets per ADR-0024 § Part A line 53-56 — the settings.yml files are committed or gitignored
+plaintext; DSNs / tokens / passwords must not appear in them.
+
+The locality axis governs the `settings.yml` family files only (`host-shared`, `repo-shared`,
+`repo-git`, `repo-clone`). Credentials are in a separate file outside this family entirely —
+not in any of the four settings.yml paths, not gitignored repo-clone, not host-shared settings.yml.
 
 ### A6. "I'll skip bumping `generation` because it's just a docstring change."
 
