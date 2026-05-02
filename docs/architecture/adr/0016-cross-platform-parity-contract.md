@@ -31,7 +31,7 @@ The status quo documents the asymmetry in prose only
 (README, `PLUGIN_DEVELOPMENT.md`); neither divergence is
 modeled in any machine-readable artifact. This is the
 failure mode flagged by
-[`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+[`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
 § "Why a redesign" item 4 — *cross-platform parity is
 ad-hoc*. G4 of the redesign promotes parity to a
 first-class design constraint and demands it be modeled.
@@ -184,12 +184,12 @@ migration logic.
   statement; ADR-0016 is the data-shape encoding.
 - ADR-0012 — Unified check-script trigger model; consumer
   of the `platforms` filter.
-- ADR-0013 — Declarative state schema + 5-state lifecycle.
+- ADR-0013 — Declarative state schema + 6-state lifecycle.
 - ADR-0014 — Stage registry contract; the JSON Schema
   that enforces `platforms`-required at load time.
 - ADR-0015, ADR-0017, ADR-0018, ADR-0019 — sibling
   redesign ADRs.
-- [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+- [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   — Living design doc; § "Why a redesign" item 4, § "Goals"
   G4, the Stages table's `platforms` column, and § "Stage
   registry contract" `platforms` row are authoritative.

@@ -19,7 +19,7 @@ would obscure which storage layer owns the data.
 |---|---------|--------------------|-----------------|
 | 1 | Board | Kanban Protocol over a backend substrate (v1: GitHub Project v2 + Issues + git refs; future: Linear / Jira via their own projections per ADR-0025) | Card · PR |
 | 2 | Session | OS processes + filesystem worktrees | ProducerSession · ConsumerLogical |
-| 3 | Bootstrap | Plugin-managed YAML files (`manifest.yml`, `state.yml`) + user-owned `config.yml` | HostBootstrap · RepoBootstrap · RepoConfig |
+| 3 | Bootstrap | Plugin-managed YAML files (`settings.yml` family) + user-owned `<repo>/.board-superpowers/settings.yml` | HostBootstrap · RepoBootstrap · RepoConfig |
 | 4 | Audit | BYO RDBMS (Postgres / MySQL / SQLite per ADR-0009) | AuditTrail |
 | 5 | Spec | User-owned `docs/` tree + third-party storage | SpecPointer (TBD-light) |
 
@@ -155,20 +155,53 @@ claim branches, never main).
 ### 3.2.3 Bootstrap context
 
 **Scope.** Everything about *plugin install, per-repo setup,
-and version transitions* — the (layer × event) matrix from
-§1.5.
+and stage-based version transitions* — the setup-stages
+mechanism from §1.5 (redesign).
 
 **Owned aggregates.**
 
-- **HostBootstrap** — `~/.board-superpowers/manifest.yml` plus
-  the host-version-transition lifecycle (F-B1, F-B3).
-- **RepoBootstrap** — `~/.board-superpowers/repos/<normalized-repo-path>/state.yml`
-  (host-local per I-13) plus the per-`(host, repo)` version-
-  transition lifecycle (F-B2, F-B4) plus the RoutingBlockTracker
-  + FeatureActivation entities inside.
-- **RepoConfig** — `<repo>/.board-superpowers/config.yml`,
-  user-editable, hand-tuned. `wip_limit`, `project`, optional
-  `autonomy_overrides:` (ADR-0006 §4 project layer).
+- **HostBootstrap** — `~/.board-superpowers/settings.yml`
+  (host-shared locality) plus the host-level setup-stages
+  lifecycle driven by `bootstrapping-repo`.
+- **RepoBootstrap** — `~/.board-superpowers/repos/<repo-identity>/settings.yml`
+  (repo-shared locality, host-local per I-13, keyed by
+  GitHub-based identity `<owner>-<repo>` per ADR-0017) plus
+  the per-`(host, repo)` setup-stages progress records
+  (`stages_completed[]` array per ADR-0013) plus the
+  RoutingBlockTracker + stage-tracking entities inside.
+  A sibling `state.yml` co-exists for `external_validated_at`
+  TTL-cache use (see ADR-0013 hash-excluded fields).
+- **RepoConfig** — `<repo>/.board-superpowers/settings.yml`
+  (repo-git locality; committed), user-editable, hand-tuned.
+  `modules.m10_kanban.backend`, `modules.m7_routing`,
+  optional `modules.m8_autonomy` overrides (ADR-0006 §4
+  project layer, folded into settings per ADR-0024).
+  Per-user overrides in `<repo>/.board-superpowers/settings.local.yml`
+  (repo-clone locality; gitignored via `*.local.*` pattern)
+  carry `modules.m5_repo_configuration.wip_limit` and
+  per-project `modules.m8_autonomy.autonomy_overrides`.
+
+**Filesystem layout (settings.yml family — ADR-0024).**
+
+The four v0.4.0 plumbing files are renamed to a uniform family
+per locality (ADR-0024; internal two-section structure per ADR-0021):
+
+| v0.4.0 path | v0.5.0+ path | Locality |
+|-------------|-------------|----------|
+| `~/.board-superpowers/manifest.yml` | `~/.board-superpowers/settings.yml` | host-shared |
+| `~/.board-superpowers/overrides.yml` | folded into `~/.board-superpowers/settings.yml` `modules.m8_autonomy` | host-shared |
+| `~/.board-superpowers/repos/<repo-identity>/state.yml` | `~/.board-superpowers/repos/<repo-identity>/settings.yml` | repo-shared |
+| `<repo>/.board-superpowers/config.yml` | `<repo>/.board-superpowers/settings.yml` | repo-git |
+| `<repo>/.board-superpowers/config.local.yml` | `<repo>/.board-superpowers/settings.local.yml` | repo-clone |
+
+`~/.board-superpowers/repos/<repo-identity>/credentials.yml` remains a
+**separate file** (mode `0600`) for secret isolation — moved from
+host-shared to per-repo locality per ADR-0015.
+
+Each `settings.yml` carries two top-level sections (per ADR-0021):
+`stages_completed[]` (machine-managed lifecycle source of truth) and
+`modules.<id>` (architect-facing config-item projection by module).
+See `0005-contracts/03-config-schemas.md` for the full schema.
 
 **Physical substrate.** Plugin-managed YAML files in fixed
 locations (per-machine `~/.board-superpowers/`, per-repo
@@ -182,17 +215,17 @@ files at
 **Talks to:**
 
 - **Board context** — performs Kanban Protocol Status-options
-  validation exactly once during F-B2 to confirm the backend
-  has all six canonical Status options (or a fold-table per
-  the protocol's custom-state folding rule). Under v1's GitHub
-  projection this is `BoardAdapter.get_status_options` per
-  ADR-0005.
+  validation exactly once during the M3 bootstrap stage to
+  confirm the backend has all six canonical Status options
+  (or a fold-table per the protocol's custom-state folding
+  rule). Under v1's GitHub projection this is
+  `BoardAdapter.get_status_options` per ADR-0005.
 - **Session context** — every Session reads `RepoConfig` and
-  `RepoState.features_enabled` at session start through
+  `modules.m8_autonomy` at session start through
   `using-board-superpowers` Step 1.
-- **Audit context** — F-B3 / F-B4 writes
-  `host_version_transition` / `routing_block_reinjected` /
-  `feature_activated` audit entries.
+- **Audit context** — M4 stages write
+  `audit_ddl_applied` / `audit_dsn_acquired` / `routing_block_injected`
+  audit entries.
 - **Spec context** — none directly. (Bootstrap does not touch
   user spec docs.)
 
@@ -200,8 +233,9 @@ files at
 between source-of-truth `agentsmd-routing.md` and downstream
 files), I-11 (plugin-owned vs user-owned region split, with
 `block_hash` as the boundary enforcer), I-12 (schema
-versioning + lazy migration), I-13 (state files in git,
-machine-state files not).
+versioning + lazy migration), I-13 (team-shared declarations
+in git, host-local state out — revised per ADR-0017 to use
+GitHub-based repo identity).
 
 ---
 
@@ -222,11 +256,12 @@ provides — the 6-scheme allowlist is `postgresql://`,
 `postgres://`, `mysql://`, `mysql+pymysql://`, `sqlite://`,
 `sqlite3://` (ADR-0006 §5 + ADR-0009). SQLite is acceptable
 when host-local under
-`~/.board-superpowers/repos/<normalized>/audit.db`; SQLite
+`~/.board-superpowers/repos/<repo-identity>/audit.db`; SQLite
 inside the project tree, bare file paths, card comments, and
 dedicated audit issues remain forbidden. Connection details
-via `~/.board-superpowers/credentials.yml` (chmod 600) or
-`BOARD_SP_AUDIT_DB_URL` env var.
+via `~/.board-superpowers/repos/<repo-identity>/credentials.yml`
+(chmod 600, per-repo per ADR-0015) or `BOARD_SP_AUDIT_DB_URL`
+env var.
 
 **Talks to:**
 

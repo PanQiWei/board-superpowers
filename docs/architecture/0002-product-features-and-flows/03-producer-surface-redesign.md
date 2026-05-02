@@ -538,7 +538,7 @@ What turns architect's idle time into productive runtime.
 Periodic cadence-driven workflows that are
 calendar-linked, not session-linked. All three rely on
 cron-job carrier per
-[ADR-0027](../adr/0027-cron-as-trigger-carrier.md).
+[ADR-0028](../adr/0028-cron-as-trigger-carrier.md).
 
 - **E1** — Retro on cadence trigger: Milestone close /
   N-cards completed / decomposition drift detection.
@@ -1110,5 +1110,5 @@ change-impact matrix walked top-to-bottom; SKILLS.md updated
 if new specific roles or skill cross-references emerge;
 cross-references audited. Mirrors the Replacement plan
 section in
-[`05-bootstrap-surface-redesign.md`](./05-bootstrap-surface-redesign.md)
+[`05-bootstrap-surface.md`](./05-bootstrap-surface.md)
 § "Replacement plan". Settled in Phase 3.]

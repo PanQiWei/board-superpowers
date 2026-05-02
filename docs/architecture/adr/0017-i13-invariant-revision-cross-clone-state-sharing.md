@@ -18,7 +18,7 @@ different paths produce two independent host-local state
 directories.
 
 The bootstrap-redesign work
-([`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md))
+([`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md))
 surfaces three structural weaknesses:
 
 1. **Architect intent is per-`(host, repo)`, not per-clone.**
@@ -234,7 +234,7 @@ prefix guarantees no accidental collision with a real
 - ADR-0019 — Pre-v1 breaking-change posture (sibling, plain text
   placeholder); makes the no-in-place-migration posture in this
   ADR's Negative consequences citable.
-- [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+- [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   — Living design doc; § "Repo identity" + § "Edge cases" +
   § "I-13 invariant revision (cross-clone state sharing)" are
   this ADR's authoritative reference.

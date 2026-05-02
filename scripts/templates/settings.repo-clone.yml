@@ -1,0 +1,61 @@
+# settings.repo-clone.yml — repo-clone locality template
+#
+# Locality:  repo-clone
+# Path:      <repo>/.board-superpowers/settings.local.yml
+# Tracked:   NO — gitignored (per m6.repo.append-gitignore: *.local.*)
+# Mode:      0644 (no secrets; audit DSN lives in credentials.yml at 0600)
+# Replaces:  v0.4.0 config.local.yml
+#
+# ADR-0024 § Part A: repo-clone locality.
+# ADR-0024 delta D8: wip_limit lives HERE (repo-clone) so per-architect
+#   customization does not pollute committed git history.
+# ADR-0021: two-section split.
+#
+# Per-clone physical file; gitignored. Allows each developer / machine
+# to override per-clone settings independently, without creating git noise.
+#
+# Stage entries here: M2 venv (per-clone physical), M5 config.local.yml
+# write + WIP limit agentic stage.
+#
+# applicable_when predicates that read this file:
+#   - m2.repo.sync-venv:       checks if .venv exists (idempotency)
+#   - m5.repo.set-wip-limit:   reads modules.m5_repo_configuration.wip_limit
+#   - bsp_resolve_autonomy_class (legacy path): reads autonomy_overrides[]
+#   - consuming-card SKILL:    reads modules.m5_repo_configuration.wip_limit
+#                              as the active WIP cap for this clone
+
+# Top-level file metadata (ADR-0021)
+setup:
+  schema_version: 1
+  generated_at: <will-be-filled-by-bootstrap>
+  plugin_version: <will-be-filled-by-bootstrap>
+
+# Section 1 — flat lifecycle source-of-truth (machine view; ADR-0013)
+stages_completed: []
+
+# Section 2 — module-namespaced config-items projection (architect view; ADR-0021)
+modules:
+
+  # M2 — Python runtime venv (per-clone; not cross-clone-shared)
+  # venv_synced_at: timestamp when uv sync last succeeded for this clone.
+  m2_python_runtime:
+    schema_version: 1
+    venv_synced_at: ""   # filled by m2.repo.sync-venv
+
+  # M5 — Repo configuration (per-clone overrides)
+  # wip_limit: concurrent active Consumer cap for this clone / architect.
+  #   Default: 5. Valid range: 1..20 (ADR-0024 Part B validation).
+  #   The agentic stage m5.repo.set-wip-limit prompts architect on first boot.
+  #   Architect may accept the default (5) to advance without typing.
+  m5_repo_configuration:
+    schema_version: 1
+    wip_limit: 5            # per ADR-0024 Part B; default 5; range 1..20
+
+  # M4 — Audit (per-clone slot reserved for ADR-0021 schema_version only)
+  # ADR-0015 § Decision lines 39-50 mandate repo-shared (per-repo,
+  # host-local, cross-clone-shared) locality for ALL M4 stages: the
+  # canonical audit DSN lives in HOST-side credentials.yml at mode 0600,
+  # written by m4.repo.acquire-dsn. No per-clone M4 config items exist
+  # at v0.5.x; the schema_version slot is retained per ADR-0021.
+  m4_audit:
+    schema_version: 1

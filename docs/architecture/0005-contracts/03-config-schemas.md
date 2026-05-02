@@ -1,14 +1,29 @@
 # 03 — Config schemas
 
 > Pin every YAML config the plugin reads or writes:
-> `~/.board-superpowers/manifest.yml`,
-> `~/.board-superpowers/repos/<normalized>/state.yml`,
-> `<repo>/.board-superpowers/config.yml`,
-> `~/.board-superpowers/overrides.yml`,
-> `~/.board-superpowers/credentials.yml`. Schemas are surfaced in
-> their canonical v1 form; this file finalizes the
-> `autonomy_overrides:` and `credentials.yml` shapes deferred from
-> ADR-0006 § 4 and §5.
+> `~/.board-superpowers/settings.yml` (host-shared),
+> `~/.board-superpowers/repos/<repo-identity>/settings.yml` (repo-shared),
+> `~/.board-superpowers/repos/<repo-identity>/credentials.yml` (per-repo audit DSN),
+> `<repo>/.board-superpowers/settings.yml` (repo-git),
+> `<repo>/.board-superpowers/settings.local.yml` (repo-clone).
+> Schemas are surfaced in their canonical v0.5.0+ form
+> per ADR-0024 (rename), ADR-0021 (two-section layout),
+> ADR-0013 (stages_completed[] fingerprint shape), and
+> ADR-0015 (per-repo credentials). Supersedes the v0.4.0
+> layout of `manifest.yml`, `state.yml`, `config.yml`,
+> `config.local.yml`, and host-shared `credentials.yml`
+> and `overrides.yml`.
+>
+> **v0.4.0 → v0.5.0+ name mapping** (ADR-0024):
+>
+> | v0.4.0 path | v0.5.0+ path | Locality |
+> |-------------|-------------|----------|
+> | `~/.board-superpowers/manifest.yml` | `~/.board-superpowers/settings.yml` | host-shared |
+> | `~/.board-superpowers/overrides.yml` | folded into `~/.board-superpowers/settings.yml` `modules.m8_autonomy` | host-shared |
+> | `~/.board-superpowers/repos/<repo-identity>/state.yml` | `~/.board-superpowers/repos/<repo-identity>/settings.yml` | repo-shared |
+> | `<repo>/.board-superpowers/config.yml` | `<repo>/.board-superpowers/settings.yml` | repo-git |
+> | `<repo>/.board-superpowers/config.local.yml` | `<repo>/.board-superpowers/settings.local.yml` | repo-clone |
+> | `~/.board-superpowers/credentials.yml` (host-shared) | `~/.board-superpowers/repos/<repo-identity>/credentials.yml` (per-repo) | repo-shared |
 
 ---
 
@@ -17,37 +32,49 @@
 These rules apply to every YAML file in this section:
 
 - **Format: YAML.** Per §1.5 cross-cutting principles. YAML over
-  TOML rationale at this scale: `config.yml` is the existing
-  precedent and gratuitous format diversity costs more than TOML's
-  modest type-safety wins.
-- **`schema_version: <int>` field on plugin-managed files only.**
-  `manifest.yml` and `state.yml` carry it; `config.yml`,
-  `overrides.yml`, `credentials.yml` do NOT (they're user-editable
-  and use commented-out placeholders for forward extension — the
-  YAGNI half of I-12). Per I-11 / I-12.
-- **Write protection.** Plugin-managed files (`manifest.yml`,
-  `state.yml`) are silently overwritten by the plugin on the next
-  state-update cycle if the user hand-edited them. User-editable
-  files (`config.yml`, `overrides.yml`, `credentials.yml`) are
-  read-only from the plugin's perspective after `bootstrap-project.sh`
-  writes the initial `config.yml`.
+  TOML rationale at this scale: `settings.yml` continues the
+  existing YAML precedent; gratuitous format diversity costs more
+  than TOML's modest type-safety wins.
+- **`schema_version: <int>` field** — every `settings.yml` file
+  carries a file-level `schema_version` (for the `stages_completed[]`
+  entry shape per ADR-0013). Each `modules.<id>` section carries an
+  independent per-module `schema_version` (for that module's
+  config-item schema per ADR-0021). `credentials.yml` does NOT carry
+  `schema_version` (user-editable, hand-editable convention). Per
+  I-11 / I-12.
+- **Two-section layout (ADR-0021).** Every `settings.yml` file
+  carries two top-level data structures:
+  1. `stages_completed[]` — machine-managed lifecycle source of
+     truth; authoritative; SKILL writes, hook reads for diff.
+  2. `modules.<id>` — architect-facing projection by module;
+     derived from `stages_completed[]`; SKILL regenerates on
+     stage completion; hand-edits detected on next SKILL pass.
+- **Write protection.** Plugin-managed `stages_completed[]`
+  section is silently overwritten by the plugin on each stage
+  completion. `modules.<id>` projection is also SKILL-managed;
+  hand-edits trigger detection + re-elicitation (not silent
+  overwrite) per ADR-0021. `credentials.yml` is written once by
+  the M4 stage; subsequently user-editable.
 - **Permissions.** `~/.board-superpowers/` is mode `0700`.
-  `~/.board-superpowers/credentials.yml` is mode `0600` — strict.
-  `<repo>/.board-superpowers/` inherits the repo's umask.
-- **`schema_version` migration policy** (per I-12): integer-bump on
-  every additive change; lazy-on-read; older plugin builds reading
+  `~/.board-superpowers/repos/<repo-identity>/credentials.yml`
+  is mode `0600` — strict (per ADR-0015). `<repo>/.board-superpowers/`
+  inherits the repo's umask.
+- **`schema_version` migration policy** (per I-12 + ADR-0013):
+  file-level `schema_version` bumps on every additive change to
+  the `stages_completed[]` entry shape; per-module `schema_version`
+  bumps independently when a module's `compute_target_state()`
+  semantics change (ADR-0021). Older plugin builds reading
   newer-than-known-schema files MUST fail loudly with a
   `please upgrade` message rather than silently dropping unknown
-  fields. Migrations are versioned-and-additive — they add fields,
-  never remove or rename. See "Migration runner" at the bottom of
-  this file.
+  fields. Versioned-and-additive only.
 
 ---
 
-## `~/.board-superpowers/manifest.yml` — HostManifest
+## `~/.board-superpowers/settings.yml` — HostManifest (host-shared)
 
 Plugin-managed; per-host. Owned by the **HostBootstrap aggregate**
-(0003 § 3.3.5).
+(0003 § 3.3.5). Replaces `manifest.yml` + `overrides.yml` from
+v0.4.0 per ADR-0024. Two-section layout per ADR-0021.
 
 ### Tracked in git? — **No** (per I-13).
 
@@ -56,220 +83,273 @@ Plugin-managed; per-host. Owned by the **HostBootstrap aggregate**
 Directory `~/.board-superpowers/` is mode `0700`. File mode
 inherits umask (typically `0644` after `umask 022`).
 
-### v2 schema (current, shipped in v0.3.0 / Card #34)
-
-```yaml
-schema_version: 2
-host_bootstrapped_at: "2026-04-26T10:30:00Z"
-last_seen_version: "0.3.0"
-uv_version: "0.5.7"
-```
-
-### Field types and defaults
-
-| Field | Type | Required? | Notes |
-|-------|------|-----------|-------|
-| `schema_version` | integer | yes | `2` as of v0.3.0; bumped per I-12 on every additive migration |
-| `host_bootstrapped_at` | string (ISO 8601, UTC, `Z` suffix) | yes | Set once at F-B1 firing; never updated |
-| `last_seen_version` | string (semver) | yes | Updated by F-B3 at every host version transition |
-| `uv_version` | string (semver) | yes (since v2) | Recorded by bootstrap-host.sh after detecting / installing uv. Updated on each bootstrap-host re-run if uv version drifted. |
-
-> **Migration note:** schema_version 2 ships in v0.3.0 / Card #34;
-> bootstrap-host.sh runs an inline mini-migration when it detects v1
-> manifests, until `migrating-repo-version` skill ships.
-
-### Origin
-
-§1.5 (the canonical sample lives in `0002-product-features-and-flows/05-bootstrap-surface.md`).
-
-### Rationale link
-
-- §1.5.1 F-B1 — first-time host bootstrap fills this file.
-- §1.5.3 F-B3 — host version-transition updates `last_seen_version`.
-- 0003 § 3.3.5 HostBootstrap aggregate — entity-level home.
-
----
-
-## `~/.board-superpowers/repos/<normalized-repo-path>/state.yml` — RepoState
-
-Plugin-managed; **host-local, per-repo**. Owned by the
-**RepoBootstrap aggregate** (0003 § 3.3.6).
-
-### Path normalization
-
-`<normalized-repo-path>` is the repo's absolute path with the
-leading `/` stripped and every remaining `/` replaced by `-`.
-
-| Repo absolute path | Normalized directory name |
-|--------------------|---------------------------|
-| `/Users/panqiwei/my-project-repo` | `Users-panqiwei-my-project-repo` |
-| `/Users/panqiwei/Dev/repos/nemori-ai/board-superpowers` | `Users-panqiwei-Dev-repos-nemori-ai-board-superpowers` |
-| `/home/alice/work/api-server` | `home-alice-work-api-server` |
-
-Each repo on each host gets exactly one `state.yml`; multiple hosts
-working on the same git remote independently maintain their own.
-
-### Tracked in git? — **No** (host-local).
-
-`state.yml` lives outside any repo and is never committed. Each
-architect's host independently runs F-B2 once per repo, writes its
-own `state.yml`, and uses it thereafter. Multi-architect symmetry
-(I-3) holds because each host is independent — there is no shared
-file to silently overwrite across collaborators. Collaboration
-visibility surfaces through `<repo>/.board-superpowers/config.yml`
-(committed) and the routing block in `CLAUDE.md` / `AGENTS.md`
-(committed); the bootstrap fact itself is local to each architect.
-
-### v1 schema
+### v1 schema (v0.5.0+)
 
 ```yaml
 schema_version: 1
-repo_bootstrapped_at: "2026-04-26T11:00:00Z"
-last_seen_version_in_repo: "0.1.0"
-features_enabled:
-  - bootstrap.host
-  - bootstrap.per_repo
-routing_blocks:
-  - target_file: "CLAUDE.md"
-    block_hash: "sha256:<64-hex-lowercase>"
-    injected_at: "2026-04-26T11:00:01Z"
-  - target_file: "AGENTS.md"
-    block_hash: "sha256:<64-hex-lowercase>"
-    injected_at: "2026-04-26T11:00:01Z"
+last_seen_plugin_version: "0.5.0"
+
+# Section 1 — machine-managed lifecycle (authoritative)
+stages_completed:
+  - stage_id: m1.host.write-settings
+    status: completed
+    completed_at: "2026-04-28T10:30:00Z"
+    plugin_version: "0.5.0"
+    generation: 1
+    target_state_hash: "d4e5f6..."
+    target_state:
+      uv_version: "0.5.7"
+    target_state_schema_version: 1
+    last_error: null
+
+# Section 2 — architect-facing projection (derived, SKILL-managed)
+modules:
+  m1_host_environment:
+    schema_version: 1
+    uv_version: "0.5.7"
+  m8_autonomy:
+    schema_version: 1
+    autonomy_overrides: []   # folded from legacy overrides.yml
+  m9_codex_hooks:
+    schema_version: 1
+    codex_hooks_registered: true
 ```
 
-### Field types and defaults
+### Field types and defaults (top-level + Section 1)
 
 | Field | Type | Required? | Notes |
 |-------|------|-----------|-------|
-| `schema_version` | integer | yes | `1` at v1 |
-| `repo_bootstrapped_at` | string (ISO 8601, UTC) | yes | Set once at F-B2 firing on this host |
-| `last_seen_version_in_repo` | string (semver) | yes | Updated by F-B4 at every per-host repo version transition |
-| `features_enabled` | list of strings | yes | Feature IDs in dotted form (`bootstrap.host`, `bootstrap.per_repo`, …). At v1 a list (on/off only); future migration converts list → map of `feature_id` → config blob |
-| `routing_blocks` | list of objects | yes | One element per file the plugin successfully injected into. F-B2 attempts both `CLAUDE.md` and `AGENTS.md`; either may be a stub-redirect target (≤ 30 lines + contains a `^@<file>.md$` line) in which case it is skipped silently and DOES NOT appear in the list. Empty list `[]` is permitted only when both files are stub-redirect (degenerate; would also leave the routing block uninjected anywhere — flagged elsewhere). List form (not map keyed by filename) so adding a new target file is an append, not a schema change |
-| `routing_blocks[].target_file` | string (repo-relative path) | yes | E.g. `CLAUDE.md`, `AGENTS.md`, future `.cursorrules` |
-| `routing_blocks[].block_hash` | string `sha256:<64 hex>` | yes | SHA256 (lowercase hex) of bytes between the marker pair, **excluding** the markers themselves |
-| `routing_blocks[].injected_at` | string (ISO 8601, UTC) | yes | Updated each time F-B4 re-injects this entry |
+| `schema_version` | integer | yes | File-level; `1` at v0.5.0; bumped per I-12 on additive changes to entry shape |
+| `last_seen_plugin_version` | string (semver) | yes | Updated on each session's SKILL pass |
+| `stages_completed[]` | list of stage entries | yes | Authoritative lifecycle source of truth; hook reads for diff (ADR-0012/ADR-0013) |
+| `stages_completed[].stage_id` | string | yes | e.g., `m1.host.write-settings`; from registry (ADR-0014) |
+| `stages_completed[].status` | enum | yes | `completed \| stale \| deprecated \| failed \| pending-architect-input` |
+| `stages_completed[].completed_at` | string (ISO 8601, UTC) | yes when status=completed | When this stage last ran successfully |
+| `stages_completed[].plugin_version` | string (semver) | yes | Plugin version at completion time |
+| `stages_completed[].generation` | integer | yes | Layer 1 fingerprint — matches registry `generation`; O(1) diff |
+| `stages_completed[].target_state_hash` | string (sha256 hex) | yes | Layer 2 fingerprint — sha256 of canonical YAML emit of `target_state` |
+| `stages_completed[].target_state` | object | yes | Layer 3 fingerprint — structured ground truth for `stale` diffs |
+| `stages_completed[].target_state_schema_version` | integer | yes | Per-stage schema version for `target_state` shape evolution |
+| `stages_completed[].last_error` | string or null | yes | Last executor error message; null when status=completed |
+
+### Section 2 — `modules.<id>` keys at host-shared locality
+
+| Module key | Schema version | Content |
+|------------|----------------|---------|
+| `m1_host_environment` | 1 | `{uv_version: str}` — from m1.host.* stages |
+| `m8_autonomy` | 1 | `{autonomy_overrides: [...]}` — folded from legacy `overrides.yml` per ADR-0024 |
+| `m9_codex_hooks` | 1 | `{codex_hooks_registered: bool}` — from m9.host.register-codex-hooks |
+
+### Rationale link
+
+- ADR-0024 — rename from `manifest.yml`; fold `overrides.yml`.
+- ADR-0021 — two-section layout + per-module `schema_version`.
+- ADR-0013 — per-stage entry shape (three-layer fingerprint).
+- 0003 § 3.3.5 HostBootstrap aggregate — entity-level home.
+- `0002-product-features-and-flows/05-bootstrap-surface.md`
+  § "Four settings files" — design authority.
+
+---
+
+## `~/.board-superpowers/repos/<repo-identity>/settings.yml` — RepoState (repo-shared)
+
+Plugin-managed; **host-local, per-repo**. Owned by the
+**RepoBootstrap aggregate** (0003 § 3.3.6). Replaces `state.yml`
+from v0.4.0 per ADR-0024. Two-section layout per ADR-0021.
+
+### Repo identity scheme (ADR-0017)
+
+`<repo-identity>` is derived from the repo's GitHub `origin` URL:
+
+```
+https://github.com/PanQiWei/board-superpowers.git → PanQiWei-board-superpowers
+git@github.com:PanQiWei/board-superpowers.git     → PanQiWei-board-superpowers
+```
+
+Strip scheme prefix + `.git` suffix; extract `<owner>/<repo>` path;
+replace `/` with `-`. HTTPS and SSH forms resolve to the same key.
+
+Fallback for local-only repos (no `origin`): `_path-<normalized>`
+where `<normalized>` is the absolute path with leading `/` stripped
+and remaining `/` replaced by `-`. The `_path-` prefix prevents
+collision with GitHub identities (GitHub usernames cannot start with
+`_`).
+
+All worktrees of the same primary repo share the same
+`<repo-identity>` (via `git rev-parse --git-common-dir`), so
+worktree-per-Consumer (ADR-0003) works correctly — one bootstrap
+per `(host, GitHub repo)`, not per path.
+
+### Tracked in git? — **No** (host-local).
+
+`settings.yml` (repo-shared) lives outside any repo and is never
+committed. Multi-architect symmetry (I-3) holds because each host is
+independent. Collaboration visibility surfaces through
+`<repo>/.board-superpowers/settings.yml` (repo-git, committed) and
+the routing block in `CLAUDE.md` / `AGENTS.md` (committed).
+
+### v1 schema (v0.5.0+)
+
+```yaml
+schema_version: 1
+last_seen_plugin_version: "0.5.0"
+
+# Section 1 — machine-managed lifecycle (authoritative)
+stages_completed:
+  - stage_id: m4.repo.acquire-dsn
+    status: completed
+    completed_at: "2026-04-28T11:00:00Z"
+    plugin_version: "0.5.0"
+    generation: 3
+    target_state_hash: "a1b2c3..."
+    target_state:
+      audit_dsn_configured: true
+      dsn_scheme: sqlite
+    target_state_schema_version: 1
+    last_error: null
+  - stage_id: m7.repo.inject-routing-block
+    status: completed
+    completed_at: "2026-04-28T11:00:01Z"
+    plugin_version: "0.5.0"
+    generation: 2
+    target_state_hash: "e5f6a7..."
+    target_state:
+      routing_blocks:
+        - target_file: "CLAUDE.md"
+          block_hash: "sha256:<64-hex-lowercase>"
+          injected_at: "2026-04-28T11:00:01Z"
+        - target_file: "AGENTS.md"
+          block_hash: "sha256:<64-hex-lowercase>"
+          injected_at: "2026-04-28T11:00:01Z"
+    target_state_schema_version: 1
+    last_error: null
+
+# Section 2 — architect-facing projection (derived, SKILL-managed)
+modules:
+  m4_audit:
+    schema_version: 1
+    audit_dsn_configured: true
+    dsn_scheme: sqlite
+  m7_routing:
+    schema_version: 1
+    routing_blocks:
+      - target_file: "CLAUDE.md"
+        block_hash: "sha256:<64-hex-lowercase>"
+        injected_at: "2026-04-28T11:00:01Z"
+      - target_file: "AGENTS.md"
+        block_hash: "sha256:<64-hex-lowercase>"
+        injected_at: "2026-04-28T11:00:01Z"
+```
+
+### Field types and defaults (Section 1 — same shape as host-shared)
+
+Same per-stage entry shape as host-shared `settings.yml` above
+(`stage_id`, `status`, `completed_at`, `plugin_version`,
+`generation`, `target_state_hash`, `target_state`,
+`target_state_schema_version`, `last_error`). Per ADR-0013.
 
 ### `block_hash` exact format
 
 `sha256:` (literal prefix) + 64 lowercase hex characters. Total
-length: 71 characters. Per F-B2 + F-B4 pin in §1.5.5 / I-11.
+length: 71 characters. The hash is computed over **bytes between**
+the marker pair `<!-- board-superpowers:routing -->` /
+`<!-- /board-superpowers:routing -->`, **excluding** the markers
+themselves. Trailing newline included; deterministic form (one blank
+line above and below the block within the markers). Per I-11.
 
-The hash is computed over **bytes between** the marker pair,
-**excluding** `<!-- board-superpowers:routing -->` and
-`<!-- /board-superpowers:routing -->` themselves. Trailing newline
-inclusion: include the final `\n` before the closing marker (so
-"block content" matches what the SoT file at
-`skills/using-board-superpowers/references/agentsmd-routing.md`
-emits). Whitespace between the markers and the block content is
-also part of the hashed region — re-injection writes a deterministic
-form (one blank line above and below the block within the markers).
+### Section 2 — `modules.<id>` keys at repo-shared locality
+
+| Module key | Schema version | Content |
+|------------|----------------|---------|
+| `m4_audit` | 1 | `{audit_dsn_configured: bool, dsn_scheme: str}` — from M4 stages |
+| `m7_routing` | 1 | `{routing_blocks: [{target_file, block_hash, injected_at}]}` — from routing-block injection stage |
+
+### Sibling `state.yml` (TTL cache — co-exists with settings.yml)
+
+A separate `~/.board-superpowers/repos/<repo-identity>/state.yml`
+co-exists alongside `settings.yml` for fields that are
+**hash-excluded** per ADR-0013 (non-deterministic / frequently
+updated values must not pollute the fingerprint):
+
+```yaml
+# TTL cache — excluded from fingerprint hash (ADR-0013)
+external_validated_at: "2026-04-28T11:05:00Z"
+external_ttl_seconds: 3600
+```
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `external_validated_at` | string (ISO 8601, UTC) | Timestamp of last successful external validation (e.g., GitHub API reachability, Status field check) |
+| `external_ttl_seconds` | integer | TTL in seconds; external validation is skipped if `now - external_validated_at < external_ttl_seconds` |
 
 ### Rationale link
 
-- §1.5.2 F-B2 — initial write (incl. `block_hash` first computation).
-- §1.5.4 F-B4 — `block_hash` re-check + 3-way prompt on mismatch.
+- ADR-0024 — rename from `state.yml`.
+- ADR-0017 — GitHub-based repo identity scheme.
+- ADR-0021 — two-section layout + per-module `schema_version`.
+- ADR-0013 — per-stage entry shape + hash-excluded TTL fields.
 - I-10 (mirror rule), I-11 (plugin-owned vs user-owned region),
-  I-12 (schema versioning), I-13 (state.yml host-local, never in git).
+  I-12 (schema versioning), I-13 (repo-shared, host-local, never in git).
 - 0003 § 3.3.6 RepoBootstrap aggregate — entity home.
 - [`07-path-conventions.md`](./07-path-conventions.md) "Per-host
   layout — `~/.board-superpowers/`" — directory structure +
-  normalization rule canonical home.
+  identity scheme canonical home.
 
 ---
 
-## `<repo>/.board-superpowers/config.yml` — RepoConfig (team-shared)
+## `<repo>/.board-superpowers/settings.yml` — RepoConfig (repo-git / team-shared)
 
 User-editable; per-repo. Owned by the **RepoConfig aggregate**
-(0003 § 3.3.7). Holds only the **team-shared** subset of project
-config — fields whose value should be identical for every
-collaborator on this repo. Per-user fields (`wip_limit`,
-`autonomy_overrides`) live in the sibling `config.local.yml`
-(see next section).
+(0003 § 3.3.7). Replaces `config.yml` from v0.4.0 per ADR-0024.
+Holds the **team-shared** subset of project config — fields whose
+value should be identical for every collaborator on this repo. Two-
+section layout per ADR-0021; only the `modules.<id>` section carries
+architect-editable config items; `stages_completed[]` is absent
+(repo-git locality has no machine-managed stages at v1; it is present
+as an empty list for schema consistency).
 
 ### Tracked in git? — **Yes** (per I-13). Team-shared.
 
-### v1 schema
+### v1 schema (v0.5.0+)
 
 ```yaml
-# board-superpowers project config.
-# Managed by using-board-superpowers. Safe to edit by hand.
-#
-# Per-user fields (wip_limit, autonomy_overrides) live in
-# config.local.yml — gitignored via the *.local.* pattern.
+schema_version: 1
+last_seen_plugin_version: "0.5.0"
 
-project: "OWNER/NUMBER"
+# Section 1 — lifecycle (empty for repo-git locality at v1)
+stages_completed: []
 
-# Future team-shared fields (not yet consumed):
-#   base_branch: main
-#   default_execution_skill: superpowers:subagent-driven-development
+# Section 2 — architect-facing config items (team-shared)
+modules:
+  m3_board:
+    schema_version: 1
+    project: "OWNER/NUMBER"
+  m10_kanban:
+    schema_version: 1
+    projection: github-project-v2
+  m6_post_merge:
+    schema_version: 1
+    auto_cron: false
+    poll_interval_minutes: 15
+    timeout_hours: 48
 ```
 
-> **Note (Kanban Protocol layering, per ADR-0025).** The top-level
-> `project:` field is the v1 GitHubProjectAdapter projection's
-> shape — it carries a GitHub-specific `OWNER/NUMBER` string. v0.5.0
-> introduces a forward-looking `kanban:` block (see "v0.5.0 planned
-> schema" below) where backend selection becomes explicit and
-> `project:` is rephrased as `project_ref:` (an opaque, backend-shaped
-> string). Until v0.5.0 lands and `operating-kanban` ships, the
-> top-level `project:` field is the only consumed source.
+### Field types and defaults (`modules.<id>`)
 
-### Field types and defaults
+| Module field | Type | Required? | Default | Notes |
+|--------------|------|-----------|---------|-------|
+| `modules.m3_board.project` | string in `OWNER/NUMBER` form | yes | — | Round-trip stable per ADR-0005's v1 GitHubProjectAdapter projection (`parse / serialize`). The example `project: "OWNER/NUMBER"` is YAML-quoted only to avoid the `/` parser quirk; `project: OWNER/NUMBER` is also valid. Reads as a deprecated alias for `modules.m10_kanban.project_ref` when the active projection is `github-project-v2` (per ADR-0026 + ADR-0027). |
+| `modules.m10_kanban.projection` | enum string | yes | `github-project-v2` | Per ADR-0027 vocabulary anchor (`projection`, not `backend`). v0.5.0 ships `github-project-v2` only; future `linear` / `jira` options added via registry-only enum extension per ADR-0024 + the same-PR `operating-kanban/references/<projection>.md` contract. The full v0.5.0 `modules.m10_kanban` schema (with `project_ref`, `compliance`, multi-kanban `kanbans[]` list) is documented in the dedicated section below. |
+| `modules.m6_post_merge.auto_cron` | boolean | no | `false` | Opt-in. When `true`, `install-post-merge-cron.sh --card <N>` is called at PR-submit time |
+| `modules.m6_post_merge.poll_interval_minutes` | positive integer | no | `15` | Poll interval for cron-driven post-merge cleanup |
+| `modules.m6_post_merge.timeout_hours` | positive integer | no | `48` | Cron self-uninstalls if PR still OPEN past this threshold |
 
-| Field | Type | Required? | Default | Notes |
-|-------|------|-----------|---------|-------|
-| `project` | string in `OWNER/NUMBER` form (YAML quoting is stylistic; the value is the bare string) | yes | — | Round-trip stable per ADR-0005's v1 GitHubProjectAdapter projection (`parse / serialize`). The example `project: "OWNER/NUMBER"` is YAML-quoted only to avoid the `/` parser quirk; `project: OWNER/NUMBER` is also valid. Once v0.5.0's `kanban:` block lands, this top-level field reads as a deprecated alias for `kanban.project_ref` when the backend is `github-project-v2`. |
-| `base_branch` | string (branch name) | no (commented placeholder) | `main` (auto-detected from `origin/HEAD`) | Future; not yet read by `claim-card.sh` |
-| `default_execution_skill` | string | no (commented placeholder) | `superpowers:subagent-driven-development` | Future |
+### `block_hash` preservation
 
-### `post_merge_cleanup` — opt-in auto cron for post-merge cleanup
-
-This block is written as a commented-out section by
-`bootstrap-project.sh` at step 2c. The architect uncomments it and
-sets `auto_cron: true` to enable the OS-level cron / launchd polling
-path. When the block is absent or fully commented out, the plugin
-treats `auto_cron: false` (no cron installed).
-
-```yaml
-# post_merge_cleanup:
-#   auto_cron: false              # Opt-in. Default false. When true,
-#                                 # install-post-merge-cron.sh installs an
-#                                 # OS-level cron / launchd entry that polls
-#                                 # PR merge state at poll_interval_minutes
-#                                 # and runs post-merge-cleanup.sh on MERGED.
-#   poll_interval_minutes: 15     # How often the cron / launchd entry fires.
-#   timeout_hours: 48             # Cron self-uninstalls if PR still OPEN
-#                                 # past this threshold; surfaces to architect.
-```
-
-#### `post_merge_cleanup` field types and defaults
-
-| Field | Type | Required? | Default | Notes |
-|-------|------|-----------|---------|-------|
-| `post_merge_cleanup.auto_cron` | boolean | no | `false` | Opt-in only. When `false` (or block absent), the Consumer handles cleanup in the interactive session. When `true`, `install-post-merge-cron.sh --card <N>` is called at PR-submit time and the cron drives cleanup. |
-| `post_merge_cleanup.poll_interval_minutes` | positive integer | no | `15` | How many minutes between each `gh pr view --json state` poll cycle. Effective only when `auto_cron: true`. |
-| `post_merge_cleanup.timeout_hours` | positive integer | no | `48` | If the PR is still `OPEN` past this many hours, the cron entry self-uninstalls and surfaces a notice to the architect. Prevents indefinite cron accumulation on abandoned PRs. |
-
-#### Migration note
-
-`post_merge_cleanup` is an additive opt-in block appended to an
-existing `config.yml`. No `schema_version` bump is required — the
-file is not schema-versioned (per I-11 / I-12 cross-cutting rule
-above), and a plugin that does not recognise the block simply
-ignores it. Architects who upgrade from an earlier version of the
-plugin may add the block by hand or re-run
-`bootstrap-project.sh --force` to regenerate `config.yml` with the
-commented-out placeholder included.
-
-### No `schema_version` field
-
-Per I-11 / I-12 / §1.5 cross-cutting: `config.yml` is **not**
-schema-versioned. Future fields appear as commented-out placeholders
-rather than schema-version migrations, deliberately matching the
-existing hand-editable convention. Editing `config.yml` is the
-architect's prerogative; the plugin reads it and never rewrites it
-beyond the initial `bootstrap-project.sh` write.
+The `modules.m7_routing.routing_blocks` entries (routing block
+hashes) are stored in the repo-shared `settings.yml`, NOT in the
+repo-git file. The repo-git file does not carry routing block state
+— that is host-local, per ADR-0017.
 
 ### `modules.m10_kanban` block — v0.5.0 planned schema (NOT YET SHIPPED)
 
@@ -277,7 +357,7 @@ beyond the initial `bootstrap-project.sh` write.
 > `<repo>/.board-superpowers/settings.yml` (per ADR-0024 settings
 > rename) under main's M10 module key (per ADR-0021 settings
 > modular layering). Bootstrap writes happen via the M10 config-
-> item stage `m10.repo.choose-kanban-backend` (ADR-0024 § Part B);
+> item stage `m10.repo.choose-kanban-projection` (ADR-0024 § Part B);
 > runtime reads happen via the v0.5.0 `operating-kanban` atomic
 > skill (ADR-0025 + [`00-kanban-protocol.md`](./00-kanban-protocol.md)).
 > Documented here so consuming code authored against v0.5.0 has a
@@ -321,7 +401,7 @@ modules:
 | `modules.m10_kanban.project_ref` | string (opaque, backend-shaped) | yes (M10 shorthand) | — | Parsed and round-trip-stable per the active backend's projection, NOT per the protocol. For `github-project-v2`: `OWNER/PROJECT_NUMBER` (same shape the legacy top-level `project:` field carried). Per [`00-kanban-protocol.md`](./00-kanban-protocol.md) `Card.key` / identity rules: `project_ref` is opaque to the agent — never parsed past what the backend reference declares. |
 | `modules.m10_kanban.compliance` | string enum `L0` \| `L1` \| `L2` \| `L3` | yes | `L1` (when omitted; subject to v0.5.0 finalization) | Advertised compliance level. Authoritative semantics live in [`00-kanban-protocol.md`](./00-kanban-protocol.md). The `operating-kanban` skill reads this field to decide which actions are guaranteed available on this backend / this repo. |
 | `modules.m10_kanban.kanbans` | list (objects) | no (v0.5.0); yes (v1.x multi-kanban) | derived from M10 shorthand | List-shaped projection of the kanban registry per ADR-0026. v1.0 runtime hard-fails on length > 1 (ADR-0026 v1.0 carve-out). When omitted, runtime synthesizes a length-1 list from the M10 shorthand fields. |
-| `modules.m10_kanban.legacy_claims` | list (mapping) | no | `[]` | Migration register written by `migrating-repo-version` (per ADR-0026 § Branch naming Migration). Stores v0.4.x claim branch metadata bound to the primary kanban's id during the legacy-parser transition window. |
+| `modules.m10_kanban.legacy_claims` | list (mapping) | no | `[]` | Migration register written by the unified setup-stages flow inside `bootstrapping-repo` (per [ADR-0012](../adr/0012-unified-check-script-trigger-model.md), which absorbed the formerly deferred `migrating-repo-version` scope; per ADR-0026 § Branch naming Migration). Stores v0.4.x claim branch metadata bound to the primary kanban's id during the legacy-parser transition window. |
 
 #### Migration from the v0.4.x top-level `project:` field
 
@@ -353,7 +433,8 @@ shorthand fields stay valid for the primary kanban's projection.
 
 ### Rationale link
 
-- §1.5.2 F-B2 — initial write by `bootstrap-project.sh`.
+- ADR-0024 — rename from `config.yml`; two-section layout.
+- ADR-0021 — `modules.<id>` config-item projection.
 - I-11, I-13.
 - ADR-0005 — v1 GitHubProjectAdapter projection (round-trip
   stability of `project:` / `project_ref:` for the GitHub backend).
@@ -363,23 +444,24 @@ shorthand fields stay valid for the primary kanban's projection.
 - 0003 § 3.3.7 RepoConfig aggregate — entity home.
 - [`06-audit-log-schema.md`](./06-audit-log-schema.md) —
   action_id 113 (post-merge cleanup audit row) that
-  `post_merge_cleanup.auto_cron: true` triggers on each cron run.
+  `modules.m6_post_merge.auto_cron: true` triggers on each cron run.
 
 ---
 
-## `<repo>/.board-superpowers/config.local.yml` — LocalRepoConfig (per-user)
+## `<repo>/.board-superpowers/settings.local.yml` — LocalRepoConfig (repo-clone / per-user)
 
 User-editable; per-repo, per-architect. Owned by the **RepoConfig
-aggregate** at the per-user layer (0003 § 3.3.7). Holds the
+aggregate** at the per-user layer (0003 § 3.3.7). Replaces
+`config.local.yml` from v0.4.0 per ADR-0024. Holds the
 fields that should NOT be team-coordinated:
 
-- `wip_limit` — personal capacity / parallelism choice.
-  Alice running 5 parallel Consumer agents and Bob running 1
-  is not a team-coordination decision; it is each architect's
-  local capacity preference.
-- `autonomy_overrides` (per-project layer) — personal
-  risk-tolerance choice. Per ADR-0006 §4, each architect may
-  promote different R-class actions to A-class without
+- `modules.m5_repo_configuration.wip_limit` — personal capacity /
+  parallelism choice. Alice running 5 parallel Consumer agents and
+  Bob running 1 is not a team-coordination decision; it is each
+  architect's local capacity preference (ADR-0024, new stage).
+- `modules.m8_autonomy.autonomy_overrides` (per-project layer) —
+  personal risk-tolerance choice. Per ADR-0006 §4, each architect
+  may promote different R-class actions to A-class without
   imposing that promotion on collaborators.
 
 ### Tracked in git? — **No**. Gitignored via the project-wide `*.local.*` pattern.
@@ -390,138 +472,119 @@ regardless of directory. This generalizes the per-user override
 file convention beyond board-superpowers — any future per-user
 file in any directory follows the same rule.
 
-### v1 schema
+### v1 schema (v0.5.0+)
 
 ```yaml
-# board-superpowers per-user override config.
-# This file is GITIGNORED via the *.local.* pattern in .gitignore.
-# Each architect on this repo may have different values here.
+schema_version: 1
+last_seen_plugin_version: "0.5.0"
 
-wip_limit: 5
+# Section 1 — lifecycle (empty for repo-clone at v1)
+stages_completed: []
 
-# Per-project autonomy overrides (per ADR-0006 §4).
-# Merged with ~/.board-superpowers/overrides.yml; this file's
-# entries take precedence on conflict.
-# autonomy_overrides:
-#   - action_id: 5
-#     class: A
-#     since: "2026-05-15T09:00:00Z"
-#     evolved_by: "github_username"
+# Section 2 — per-user config items (gitignored)
+modules:
+  m5_repo_configuration:
+    schema_version: 1
+    wip_limit: 5
+  m8_autonomy:
+    schema_version: 1
+    # Per-project autonomy overrides (per ADR-0006 §4).
+    # Merge precedence: this file's entries beat host-shared
+    # settings.yml entries on conflict (project-specific beats
+    # user-global).
+    autonomy_overrides: []
+    #   - action_id: 5
+    #     class: A
+    #     since: "2026-05-15T09:00:00Z"
+    #     evolved_by: "github_username"
+    #     note: "..."
 ```
 
 ### Field types and defaults
 
-| Field | Type | Required? | Default | Notes |
-|-------|------|-----------|---------|-------|
-| `wip_limit` | positive integer | no | `5` | Soft limit; counted as `In Progress + In Review`; `Blocked` does NOT count (I-6). Each architect sets their own value to reflect personal-machine parallelism capacity. |
-| `autonomy_overrides` | list of objects | no | `[]` | Per-project layer of the autonomy-override schema. Merge precedence: `config.local.yml` entries beat `~/.board-superpowers/overrides.yml` entries on conflict (project-specific beats user-global). Per ADR-0006 §4. |
-
-### No `schema_version` field
-
-Same convention as `config.yml`: not schema-versioned;
-hand-editable; future fields appear as commented placeholders.
+| Module field | Type | Required? | Default | Notes |
+|--------------|------|-----------|---------|-------|
+| `modules.m5_repo_configuration.wip_limit` | positive integer | no | `5` | Soft limit; counted as `In Progress + In Review`; `Blocked` does NOT count (I-6). Each architect sets their own value. |
+| `modules.m8_autonomy.autonomy_overrides` | list of objects | no | `[]` | Per-project layer. Merge precedence: this file beats host-shared `~/.board-superpowers/settings.yml:modules.m8_autonomy` on conflict. Per ADR-0006 §4. |
 
 ### Bootstrap behavior
 
-`bootstrap-project.sh` step 2c writes both `config.yml` (the
-team-shared subset) AND `config.local.yml` (the per-user subset
-with sensible defaults). `config.local.yml` is gitignored before
-the first commit, so subsequent collaborators running F-B2 will
-each generate their own.
+The `m5.repo.set-wip-limit` stage (ADR-0024) writes the initial
+`settings.local.yml` with sensible defaults, including the
+`wip_limit` prompt. The file is gitignored before the first commit,
+so subsequent collaborators running the setup stages will each
+generate their own.
 
 ### Rationale link
 
+- ADR-0024 — rename from `config.local.yml`; new `m5.repo.set-wip-limit` stage.
+- ADR-0021 — two-section layout + per-module `schema_version`.
 - I-6 (WIP limit), I-11, I-13 (per-user state not in git).
 - ADR-0006 §4 (autonomy overrides — project / user layers).
 - 0003 § 3.3.7 RepoConfig aggregate — per-user layer.
 
 ---
 
-## `~/.board-superpowers/overrides.yml` — user-layer autonomy overrides
+## Autonomy overrides — folded into `settings.yml` (ADR-0024)
 
-User-editable; per-host (applies to every project on this machine).
-Optional: only present if the architect chose to promote at least
-one R-class action across all projects.
+> **`~/.board-superpowers/overrides.yml` is superseded.** In
+> v0.5.0+ the user-layer autonomy overrides are folded into
+> `~/.board-superpowers/settings.yml:modules.m8_autonomy`
+> (host-shared locality). The per-project layer moves to
+> `<repo>/.board-superpowers/settings.local.yml:modules.m8_autonomy`
+> (repo-clone locality). The standalone `overrides.yml` file is
+> no longer written or read by v0.5.0+ plugin.
 
-### Tracked in git? — **No** (lives at `~/.board-superpowers/`).
-
-### v1 schema
-
-```yaml
-# board-superpowers user-level autonomy overrides.
-# Hand-editable. Applies to every project on this host.
-# Per-project overrides in <repo>/.board-superpowers/config.yml take precedence.
-
-autonomy_overrides:
-  - action_id: 5             # ADR-0006 §3 matrix row id
-    class: A                 # A | R | N (per ADR-0006 §1)
-    since: "2026-05-15T09:00:00Z"
-    evolved_by: "github_username"
-    note: "Backlog → Ready promotion approved after 2 months stable use"
-```
-
-### Project-layer mirror
-
-The same schema lives under `autonomy_overrides:` in
-`<repo>/.board-superpowers/config.yml`. The two layers merge per
-"Merge semantics" below.
-
-### Field types and defaults
+The `autonomy_overrides[]` entry shape is unchanged from v0.4.0:
 
 | Field | Type | Required? | Notes |
 |-------|------|-----------|-------|
-| `autonomy_overrides` | list of objects | yes (top-level key) | Empty list `[]` = no overrides |
-| `autonomy_overrides[].action_id` | integer | yes | Matrix row id from ADR-0006 §3 (`1`–`14` for Producer rows; `100`–`105` for Consumer rows per [`06-audit-log-schema.md`](./06-audit-log-schema.md)) |
-| `autonomy_overrides[].class` | string `A` \| `R` \| `N` | yes | The desired class. v1 supports R → A promotion and (future) A → R demotion. `N` is reserved (no v1 use case; v1 has `N=0` per ADR-0006 §3) |
-| `autonomy_overrides[].since` | string (ISO 8601, UTC) | yes | When the override took effect — appears in the AuditEntry that records the override write |
-| `autonomy_overrides[].evolved_by` | string | yes | GitHub username (or other architect-identity string) of the person who made the change. Audit purpose. |
-| `autonomy_overrides[].note` | string | no | Free-form one-liner explaining the rationale |
+| `action_id` | integer | yes | Matrix row id from ADR-0006 §3 (`1`–`14` for Producer; `100`–`113` for Consumer; `200`–`208` for Bootstrap) |
+| `class` | string `A` \| `R` \| `N` | yes | Desired class. v1 supports R → A promotion and (future) A → R demotion |
+| `since` | string (ISO 8601, UTC) | yes | When the override took effect |
+| `evolved_by` | string | yes | GitHub username of the person who made the change |
+| `note` | string | no | Free-form one-liner explaining the rationale |
 
-### Merge semantics
-
-Project layer **overrides** user layer for any matching `action_id`.
-
-Merge algorithm at action-id resolution time:
+### Merge semantics (unchanged)
 
 1. Start with ADR-0006 §3 matrix defaults.
-2. Apply each entry from `~/.board-superpowers/overrides.yml`'s
-   `autonomy_overrides` (user layer).
-3. Apply each entry from `<repo>/.board-superpowers/config.yml`'s
-   `autonomy_overrides` (project layer) — **wins on collision**.
+2. Apply `~/.board-superpowers/settings.yml:modules.m8_autonomy.autonomy_overrides`
+   (user layer, host-shared).
+3. Apply `<repo>/.board-superpowers/settings.local.yml:modules.m8_autonomy.autonomy_overrides`
+   (project layer, repo-clone) — **wins on collision**.
 4. Result: effective class for this `action_id` on this project on
    this host.
 
-A missing key at any layer falls through to the next; a missing
-key at all layers means use the ADR-0006 default for that
-`action_id`.
+### Audit gate (unchanged)
 
-### Audit gate
-
-Writing or modifying any `autonomy_overrides` entry in
-`config.yml` is itself an R-class action (matrix row 10 — modifies
-SoT `.board-superpowers/config.yml`). Writing to the user-layer
-`overrides.yml` is also an R-class action (the user layer is a
-SoT mirror of the per-project SoT — both have identical scrutiny).
-Per ADR-0006 §4.
+Writing or modifying any `autonomy_overrides` entry is itself an
+R-class action (matrix row 10 — modifies SoT). Per ADR-0006 §4.
 
 ### Rationale link
 
-- ADR-0006 §4 (trust evolution clause; schema deferred to 0005).
+- ADR-0024 — fold `overrides.yml` into host-shared `settings.yml`.
+- ADR-0006 §4 (trust evolution clause).
 - I-4 / P8 (default + override + accountability).
-- 0003 § 3.3.7 RepoConfig aggregate — `AutonomyOverride` value
-  object.
+- 0003 § 3.3.7 RepoConfig aggregate — `AutonomyOverride` value object.
 
 ---
 
-## `~/.board-superpowers/credentials.yml` — audit-DB credentials
+## `~/.board-superpowers/repos/<repo-identity>/credentials.yml` — audit-DB credentials (per-repo)
 
-User-editable; per-host. Optional: only required if the architect
-opted to use a file rather than the `BOARD_SP_AUDIT_DB_URL` env
-var. Owned by the **AuditTrail aggregate** at the credential layer
-(0003 § 3.3.8).
+User-editable; **per-repo** (not per-host). Optional: only required
+if the architect opted to use a file rather than the
+`BOARD_SP_AUDIT_DB_URL` env var. Owned by the **AuditTrail
+aggregate** at the credential layer (0003 § 3.3.8). Moved from
+host-shared `~/.board-superpowers/credentials.yml` to per-repo
+per ADR-0015.
 
-### Tracked in git? — **No** (lives at `~/.board-superpowers/`,
-which is itself outside any repo).
+**Why per-repo (ADR-0015):** the host-shared file caused all repos
+on the host to share one audit DB, defeating per-repo isolation.
+`credentials.yml` now lives alongside `settings.yml` and `audit.db`
+in the same `<repo-identity>` directory — one audit backend per
+repo, by construction.
+
+### Tracked in git? — **No** (lives outside any repo).
 
 ### Permissions: **`0600`** (strict — read+write owner only).
 
@@ -569,26 +632,27 @@ scheme prefix to this table in the same PR; no implicit driver
 discovery.
 
 **SQLite default path suggestion.** When the architect picks
-SQLite during F-B2 step 2e interactive UX,
-`bootstrap-project.sh` suggests:
+SQLite during the `m4.repo.acquire-dsn` agentic stage,
+the SKILL suggests:
 
 ```
-~/.board-superpowers/repos/<normalized>/audit.db
+~/.board-superpowers/repos/<repo-identity>/audit.db
 ```
 
-Co-locating with `state.yml` keeps every per-`(host, repo)`
-artifact under the same `0700` parent. Other locations under
-`~/.board-superpowers/` are accepted; SQLite paths INSIDE the
-project tree (e.g., `<repo>/.board-superpowers/audit.db`)
+Co-locating with `settings.yml` and `credentials.yml` keeps every
+per-`(host, repo)` artifact under the same `0700` parent. Other
+locations under `~/.board-superpowers/` are accepted; SQLite paths
+INSIDE the project tree (e.g., `<repo>/.board-superpowers/audit.db`)
 remain forbidden — the default suggestion deliberately steers
-the architect away from project-tree files. Per ADR-0009 +
-[`07-path-conventions.md`](./07-path-conventions.md) "Per-repo
-layout — `~/.board-superpowers/repos/<normalized-repo-path>/`".
+the architect away from project-tree files. Per ADR-0009 + ADR-0015 +
+[`07-path-conventions.md`](./07-path-conventions.md) "Per-host
+layout — `~/.board-superpowers/`".
 
 ### Resolution priority (env var vs file)
 
 1. `BOARD_SP_AUDIT_DB_URL` env var if set (highest precedence).
-2. `~/.board-superpowers/credentials.yml:audit_db_url`.
+2. `~/.board-superpowers/repos/<repo-identity>/credentials.yml:audit_db_url`
+   (per-repo, per ADR-0015).
 3. None → audit DB unavailable → all A-class actions degrade to
    R-class until configured (per ADR-0006 §5 fallback rule).
 
@@ -623,53 +687,69 @@ hints). Not landed at v1.
   credential mechanism) — finalization deferred to 0005, landing
   here.
 - ADR-0009 (allow SQLite as a 6th scheme; default path under
-  `~/.board-superpowers/repos/<normalized>/audit.db`) —
+  `~/.board-superpowers/repos/<repo-identity>/audit.db`) —
   partially supersedes ADR-0006 §5's backend constraint.
+- ADR-0015 (per-repo credentials.yml locality — replaces
+  host-shared location from v0.4.0).
 - I-13 (state files in git, machine-state files not).
 - 0003 § 3.3.8 AuditTrail aggregate (credentials value object,
   invariant block).
 
 ---
 
-## Migration runner
+## Schema migration model (v0.5.0+)
 
-Per I-12. Lives at:
+Per I-12 + ADR-0013. The v0.5.0 setup-stages redesign replaces
+the v0.4.0 shell-script migration runner with a lifecycle-based
+approach:
 
-```
-${CLAUDE_PLUGIN_ROOT}/scripts/migrations/<file>-v<N>-to-v<N+1>.sh
-```
+### Trigger semantics (setup-stages model)
 
-Where `<file>` is `manifest`, `state`, or (future) any new
-plugin-managed file.
+**Generation-based drift detection.** A stage re-runs when:
+- The stage's recorded `generation` in `stages_completed[]` differs
+  from the current registry entry's `generation` (fast-path, O(1)).
+- The stage's recorded `target_state_hash` differs from the hash
+  of the current `compute_target_state()` output (backstop for
+  forgotten-generation-bump bugs).
 
-### Trigger semantics
-
-**Lazy-on-read.** A migration fires the first time a session opens
-the file for a write that needs the newer fields, NOT eager-on-
-startup. Reads of the file in unchanged shape do not trigger a
-migration. Per §1.5.5 cross-cutting principles + Confluent Schema
-Registry pattern.
+No explicit "migration runner" script. Each module's
+`compute_target_state()` IS the migration spec — when a module
+evolves, the maintainer bumps `generation` in the registry; the
+lifecycle diff sees `stale` and the SKILL re-runs with structural
+diff messages.
 
 ### Execution rules
 
-- **Versioned-and-additive only** — migrations add fields. They do
-  NOT remove, rename, or reshape existing fields. Removing /
-  renaming requires a new ADR + a multi-version deprecation window.
+- **Versioned-and-additive only** — `stages_completed[]` entry
+  shape changes bump the file-level `schema_version`. Module
+  schema changes bump the per-module `schema_version` under
+  `modules.<id>`.
 - **Older plugin reading newer file → fail loudly.** When a
-  session loads a file with `schema_version` higher than the
-  plugin's known max, the plugin refuses to operate on that file
-  and emits: `"this state file was written by plugin v<X>;
-  you're on v<Y>; please upgrade".` Silently dropping unknown
-  fields is forbidden (per I-12).
-- **One migration script per (file, source-version) pair.** Chained
-  application supports multi-version upgrades.
+  session loads a `settings.yml` with `schema_version` higher than
+  the plugin's known max, the plugin refuses to operate and emits:
+  `"this settings file was written by plugin v<X>; you're on v<Y>;
+  please upgrade".` Silently dropping unknown fields is forbidden
+  (per I-12).
+- **Module-local migration.** Each module's stage(s) re-run when
+  `generation` or `target_state_hash` drifts. No central migration
+  script directory.
+
+### Pre-v1 breaking change posture
+
+v0.4.0 → v0.5.0 is a **pre-v1 breaking rename**. No in-place
+migration logic ships. Architects upgrading from v0.4.0:
+1. Delete `~/.board-superpowers/` (or relevant per-repo dirs).
+2. Re-bootstrap. The unified check-script (ADR-0012) sees all
+   stages as `never-run` and triggers `bootstrapping-repo`.
 
 ### Cited rationale
 
 - I-12 (canonical invariant).
-- §1.5.5 TBD-Notes "Migration runner timing" — lazy-on-read decision.
-- §1.5.4 F-B4 step 2 — when migrations actually fire.
-- §1.5.3 F-B3 — manifest migration mirror.
+- ADR-0012 — unified check-script trigger model.
+- ADR-0013 — three-layer fingerprint + 6-state lifecycle.
+- ADR-0014 — stage registry `generation` / `compute_target_state()`.
+- `0002-product-features-and-flows/05-bootstrap-surface.md`
+  § "Schema-migration seam" + § "Cross-version evolution".
 
 ---
 
@@ -680,10 +760,11 @@ Registry pattern.
   active backend projection and its compliance level.
 - [`05-github-artifact-schemas.md`](./05-github-artifact-schemas.md) —
   routing-block marker pair format; `block_hash` is the bridge
-  between this file and `state.yml`. The artifact schemas in 05
-  are specifically the v1 GitHubProjectAdapter projection's
-  contracts; under the `kanban:` block they apply when
-  `kanban.backend = github-project-v2`.
+  between this file and `settings.yml` (repo-shared). The artifact
+  schemas in 05 are specifically the v1 GitHubProjectAdapter
+  projection's contracts; under the `modules.m10_kanban` block they
+  apply when `modules.m10_kanban.projection = github-project-v2`
+  (per ADR-0026 + ADR-0027 vocabulary anchor).
 - [`06-audit-log-schema.md`](./06-audit-log-schema.md) — the
   `action_id` numbers `autonomy_overrides[].action_id` references.
 - [`07-path-conventions.md`](./07-path-conventions.md) — the
@@ -691,11 +772,24 @@ Registry pattern.
   `<repo>/.board-superpowers/`.
 - [`08-environment-variables.md`](./08-environment-variables.md) —
   `BOARD_SP_AUDIT_DB_URL` definition.
+- ADR-0012 — unified check-script trigger model; reads `stages_completed[]`
+  from this file's format on every SessionStart.
+- ADR-0013 — per-stage entry shape (three-layer fingerprint); the
+  canonical authority for `stages_completed[]` field semantics.
+- ADR-0014 — stage registry contract; the `generation` and
+  `compute_target_state()` fields that this file's `stages_completed[]`
+  entries are compared against.
+- ADR-0015 — per-repo `credentials.yml` locality.
+- ADR-0017 — GitHub-based repo identity; the `<repo-identity>` key in
+  `~/.board-superpowers/repos/<repo-identity>/`.
+- ADR-0021 — two-section layout + per-module `schema_version`.
+- ADR-0024 — settings.yml rename; fold `overrides.yml`.
 - ADR-0006 (autonomy boundary, audit-log persistence; `autonomy_overrides:`
-  schema previously deferred here, finalized above).
+  schema folded into `settings.yml:modules.m8_autonomy`).
 - ADR-0007 C-PLUGIN-1/-2/-3 (constrains which contracts are even
   allowed).
-- §1.5 (the canonical schemas this file normalizes).
+- `0002-product-features-and-flows/05-bootstrap-surface.md`
+  — design authority for the four settings files.
 - 0003 § 3.3.5–3.3.8 (entity-level homes for each file).
 - I-10, I-11, I-12, I-13 (the four invariants this file
   operationalizes).

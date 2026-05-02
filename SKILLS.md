@@ -1,4 +1,4 @@
-# Skills system — board-superpowers v1 catalog (11 skills total: 10 shipped + 1 deferred to v1-complete, 3 layers)
+# Skills system — board-superpowers v1 catalog (10 skills total, all shipped, 3 layers)
 
 > **Always loaded.** This document is referenced from
 > [`AGENTS.md`](./AGENTS.md) via `@SKILLS.md` and rides into
@@ -31,7 +31,7 @@ The reverse also holds: an edit to this document without the
 matching `skills/` change makes the spec drift. Both halves
 land together.
 
-The skills system has three layers, eleven skills, and a fixed set
+The skills system has three layers, ten skills, and a fixed set
 of cross-plugin edges. None of these numbers should change
 without an explicit decision recorded here first.
 
@@ -106,16 +106,20 @@ rationale that motivates the split.
 
 ## v1 minimum vs v1 complete
 
-The full v1 catalog defines **11 skills**. As of `v0.5.0`,
-**10 skills ship** — enough to make the plugin self-hostable on
-this very repo AND to bootstrap a fresh consuming repo from zero
-AND to govern every mutating action through classifying-actions +
-auditing-actions AND to decompose design artifacts into
-INVEST-compliant vertically-sliced cards via decomposing-into-milestones
-AND to dispatch the eight Kanban Protocol actions through the
-active projection via operating-kanban. The remaining **1 is
-deferred to v1-complete** and ships in a follow-up PR once
-unblocked.
+The full v1 catalog defines **10 skills**. As of `v0.6.0`
+(post-#67-merge), **all 10 ship** — enough to make the plugin
+self-hostable on this very repo AND to bootstrap a fresh
+consuming repo from zero AND to govern every mutating action
+through classifying-actions + auditing-actions AND to decompose
+design artifacts into INVEST-compliant vertically-sliced cards
+via decomposing-into-milestones AND to dispatch the eight Kanban
+Protocol actions through the active projection via
+operating-kanban. The `migrating-repo-version` molecular SKILL
+that v0.5.0 carried as deferred has been **absorbed into
+`bootstrapping-repo`** per
+[ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md)
+(single sole-executor for setup-stages, including version-
+transition migrations). No separate migration SKILL ships.
 
 | Skill | Layer | v1 status | Why this scoping |
 |-------|-------|-----------|-------------------|
@@ -123,8 +127,7 @@ unblocked.
 | `managing-board` | Molecular | **v1-minimum** | Producer surface — required for "what should I work on" / Review Queue / intake on this repo. v1 ships F-01 + F-02 + F-08 only; F-03..F-07 + F-10..F-15 deferred to v1.x per ADR-0011 (pending demand pull). |
 | `consuming-card` | Molecular | **v1-minimum** | Consumer surface — required for the F-C0..F-C14 lifecycle that delivers each card's PR. |
 | `decomposing-into-milestones` | Molecular | **v1-complete** (shipped v0.4.0) | F-09 + §1.6 INVEST + vertical-slicing + card schema + size calibration engine. Lands alongside the schema-drift double-collapse (board-canon ↔ spec § 1.6.3) so the converged terminal Card body schema becomes architecturally authoritative. |
-| `bootstrapping-repo` | Molecular | **v1-minimum** (shipped in v0.2.0) | F-B1 (host bootstrap) + F-B2 (per-repo bootstrap, including step 4 routing-block injection) — the entry-skill state probe routes here on first session. |
-| `migrating-repo-version` | Molecular | deferred to v1-complete | Migration becomes meaningful starting from v0.2.x → v0.3.x transitions; the v0.2.0 ship establishes the baseline. |
+| `bootstrapping-repo` | Molecular | **v1-minimum** (shipped in v0.2.0; rebased v0.6.0) | Sole executor for setup-stages (per [ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md), [ADR-0023](./docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md), [ADR-0024](./docs/architecture/adr/0024-settings-rename-and-config-item-stages.md), [ADR-0027](./docs/architecture/adr/0027-board-projection-routes-through-operating-kanban.md)) — first-time setup, plugin-upgrade reconvergence (absorbs the formerly deferred `migrating-repo-version` scope), and agentic config-item elicitation. The entry-skill state probe routes here on first session and on every subsequent session that surfaces a never-run / stale stage. |
 | `board-canon` | Atomic | **v1-minimum** | True SPOT — every other v1-minimum skill consumes its state machine + schema + WIP rules. |
 | `enforcing-pr-contract` | Atomic | **v1-minimum** | True SPOT — Consumer's F-C12 PR submit + Manager's F-02 Review Queue both depend on it. |
 | `operating-kanban` | Atomic | shipped (v0.5.0) | True SPOT shipped in v0.5.0 — every molecular SKILL routes the eight Kanban Protocol actions (per ADR-0025) and the bootstrap-side setup capabilities (per ADR-0027) through this skill's per-projection reference files. |
@@ -145,10 +148,9 @@ means for board-superpowers" #3 for the full rationale.
 
 > Per-skill `layer`, `type`, `mode`, `bounded-context` live in
 > `<skill-dir>/.skill-meta.yaml`. The catalog below tags each
-> skill name as `(shipped vX)` once it has landed, or
-> `(deferred to v1-complete)` while still on the roadmap.
-> Tier 2 frontmatter recommendations are listed for every
-> shipped skill.
+> skill name as `(shipped vX)` for every skill in the catalog —
+> all 10 ship as of v0.6.0 (post-#67-merge). Tier 2 frontmatter
+> recommendations are listed for every skill.
 
 ### Entry layer (1 skill)
 
@@ -184,7 +186,7 @@ means for board-superpowers" #3 for the full rationale.
 - **Tier 2 frontmatter**: `when_to_use` (extended trigger
   vocabulary outside the primary `description`).
 
-### Molecular layer (5 skills: 4 shipped + 1 deferred)
+### Molecular layer (4 skills, all shipped)
 
 #### `managing-board` (v1-minimum)
 
@@ -285,19 +287,26 @@ means for board-superpowers" #3 for the full rationale.
   `arguments: [artifact_path]` (Step 1 dispatches by argument
   type — file / dir / freeform stdin).
 
-#### `bootstrapping-repo` (v1-minimum, shipped v0.2.0)
+#### `bootstrapping-repo` (v1-minimum, shipped v0.2.0; rebased v0.6.0)
 
-- **Role**: F-B1 (host bootstrap) + F-B2 (per-repo bootstrap with
-  7 sub-capabilities — standard labels, Status validation,
-  `config.yml` write, `.gitignore` entry, BYO-RDBMS credential
-  setup, per-repo venv via `uv`, audit DDL dispatch) + step 4
-  routing-block injection into `AGENTS.md` +
-  `CLAUDE.md` + initial host-local `state.yml` write. Drives
-  `scripts/bootstrap-host.sh` and `scripts/bootstrap-project.sh`
-  end-to-end and orchestrates the architect's first-session UX.
+- **Role**: Sole executor for setup-stages — automated + agentic
+  per [ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md)
+  (absorbs `migrating-repo-version`'s old scope — version-
+  transition migrations are now expressed as `generation:` bumps
+  within stage callables) + [ADR-0023](./docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md)
+  (5-element config item protocol) + [ADR-0024](./docs/architecture/adr/0024-settings-rename-and-config-item-stages.md)
+  (settings.yml family). Drives the sequential per-stage flow
+  defined in design doc § "Architect UX". Board reads route
+  through `board-superpowers:operating-kanban` actions per
+  [ADR-0027](./docs/architecture/adr/0027-board-projection-routes-through-operating-kanban.md)
+  (paired with #68's atomic SKILL ship).
 - **Body target**: 250-450 lines (molecular budget).
-- **References folder**: `references/{intro,first-time-user-guide}.md`
-  + `references/changelog/v0.2.0.md`.
+- **References folder**: `references/{intro,first-time-user-guide,stage-execution-flow,config-item-protocol,architect-ux-failure-surfaces}.md`
+  + `references/changelog/v0.2.0.md`. (`stage-execution-flow` /
+  `config-item-protocol` / `architect-ux-failure-surfaces` land
+  in Phase 2 alongside the SKILL body rebase.)
+- **Spec authority list**: ADR-0012, ADR-0013, ADR-0014,
+  ADR-0021, ADR-0023, ADR-0024, ADR-0027.
 - **Composes (atomic)**: `board-canon` (read schema invariants for
   Status validation), `classifying-actions` + `auditing-actions`
   (every mutating action).
@@ -314,24 +323,6 @@ means for board-superpowers" #3 for the full rationale.
   vocabulary covering the architect-spoken fallback phrases plus
   the entry-skill state-probe trigger).
 
-#### `migrating-repo-version` (deferred to v1-complete)
-
-- **Role**: F-B3 (host version transition) + F-B4 (per-repo
-  version transition with schema migration, new-feature
-  opt-out, routing-block re-injection with three-way prompt on
-  user modification).
-- **Body target**: 250-350 lines.
-- **References folder**:
-  `references/{changelog/v<X>.md,tamper-prompt,migration-runner}.md`.
-- **Composes (atomic)**: `board-canon` (when a new version
-  changes the state machine), `auditing-actions`.
-- **Composes (cross-plugin)**: none.
-- **Trigger model**: `INVOKE: migrating-repo-version` marker
-  injected by `SessionStart` when
-  `state.yml:last_seen_version_in_repo` ≠
-  `plugin.json:version` (fast path), OR architect says
-  "what's new in this version" (fallback path).
-
 ### Atomic layer (5 skills, all shipped)
 
 #### `board-canon` (v1-minimum)
@@ -346,9 +337,9 @@ means for board-superpowers" #3 for the full rationale.
 - **Body target**: 200-300 lines.
 - **References folder**:
   `references/{state-machine,card-body-schema,claim-protocol,wip-counting,branch-naming}.md`.
-- **Called by**: every molecular skill (5 of them in
-  v1-complete; 2 of them in v1-minimum: `managing-board` +
-  `consuming-card`).
+- **Called by**: every molecular skill (all 4 of them —
+  `managing-board`, `consuming-card`,
+  `decomposing-into-milestones`, `bootstrapping-repo`).
 - **Calls**: nothing. Atomic = reflexive.
 - **Tier 2 frontmatter**: `user-invocable: false` (atomic
   reflex, never user-driven directly).
@@ -429,11 +420,13 @@ means for board-superpowers" #3 for the full rationale.
 - **Body target**: ≤ 200 lines (frequently-loaded atomic; current 81).
 - **References folder**:
   `references/{matrix,triage-rule,override-parsing,action-id-catalog}.md`.
-- **Called by**: every mutating skill (5 of them).
+- **Called by**: every mutating skill (all 4 molecular —
+  `managing-board`, `consuming-card`,
+  `decomposing-into-milestones`, `bootstrapping-repo`).
 - **Calls**: nothing.
 - **SPOT consolidates**: ADR-0006 matrix would otherwise be
-  inlined 5 times — Producer 14 rows + Consumer 14 rows +
-  Bootstrap 9 rows = 37 rows × 5 callers = 185 lines of
+  inlined 4 times — Producer 14 rows + Consumer 14 rows +
+  Bootstrap 9 rows = 37 rows × 4 callers = 148 lines of
   duplicated rule encoding drifting independently.
 - **Tier 2 frontmatter**: `user-invocable: false` (atomic
   reflex, never user-driven directly).
@@ -448,12 +441,12 @@ means for board-superpowers" #3 for the full rationale.
 - **Body target**: ≤ 200 lines (frequently-loaded atomic; current 84).
 - **References folder**:
   `references/{schema,two-entry-rule,db-write-conventions,degradation-mode}.md`.
-- **Called by**: every mutating skill (5 of them) — invoked
+- **Called by**: every mutating skill (all 4 molecular) — invoked
   immediately after `classifying-actions` returns A or R.
 - **Calls**: external RDBMS via
   `${CLAUDE_PLUGIN_ROOT}/scripts/audit-log-write.sh`.
 - **SPOT consolidates**: ADR-0006 §5 schema would otherwise be
-  inlined 5 times.
+  inlined 4 times.
 - **Tier 2 frontmatter**: `user-invocable: false` (atomic
   reflex, never user-driven directly).
 
@@ -467,19 +460,18 @@ means for board-superpowers" #3 for the full rationale.
                          │ routes│         │        │
             ┌────────────┘       │         │        └──────────────┐
             │                    │         │                       │
-            │           ┌────────┼─────────┼────────┐              │
-            ▼           ▼        ▼         ▼        ▼              ▼
-      ┌─────────────┐ ┌──────┐ ┌──────┐ ┌──────────┐ ┌────────────────┐
-      │ managing-   │ │consu-│ │decom-│ │bootstrap-│ │ migrating-     │
-      │   board     │ │ ming-│ │posing│ │ ping-repo│ │  repo-version  │
-      │ (Producer)  │ │ card │ │      │ │          │ │                │
-      └──┬───┬───┬──┘ └─┬──┬─┘ └──┬───┘ └────┬─────┘ └────────┬───────┘
-         │   │   │      │  │      │          │                │
-         │   │   │  (cross-plugin: 见 § "Cross-plugin edges") │
-         │   │   │      │  │      │          │                │
-   ┌─────┼───┼───┼──────┼──┼──────┼──────────┼────────────────┘
-   │     │   │   │      │  │      │          │
-   ▼     ▼   ▼   ▼      ▼  ▼      ▼          ▼              (Atomic — 反射弧)
+            ▼                    ▼         ▼                       ▼   (Molecular — 4 skills)
+      ┌─────────────┐ ┌──────┐ ┌──────┐ ┌──────────┐
+      │ managing-   │ │consu-│ │decom-│ │bootstrap-│
+      │   board     │ │ ming-│ │posing│ │ ping-repo│
+      │ (Producer)  │ │ card │ │      │ │          │
+      └──┬───┬───┬──┘ └─┬──┬─┘ └──┬───┘ └────┬─────┘
+         │   │   │      │  │      │          │
+         │   │   │  (cross-plugin: 见 § "Cross-plugin edges")
+         │   │   │      │  │      │          │
+   ┌─────┼───┼───┼──────┼──┼──────┼──────────┘
+   │     │   │   │      │  │      │
+   ▼     ▼   ▼   ▼      ▼  ▼      ▼              (Atomic — 反射弧 — 5 skills)
    ┌────────────┐  ┌─────────────────┐  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────┐
    │ board-canon│  │enforcing-pr-    │  │ operating-   │  │classifying-      │  │ auditing-actions │
    │ (read-only │  │   contract      │  │   kanban     │  │   actions        │  │ (audit schema +  │
@@ -501,11 +493,11 @@ candidate that MUST be promoted to atomic. v1 census:
 
 | Contract | Without atomic, inlined by | Atomic that consolidates |
 |----------|---------------------------|--------------------------|
-| State machine + Card schema + branch naming + WIP rules | All 5 molecular | `board-canon` |
+| State machine + Card schema + branch naming + WIP rules | All 4 molecular | `board-canon` |
 | PR three-section shape + filler detection | `consuming-card` (write) + `managing-board` (validate) | `enforcing-pr-contract` |
-| 8-action protocol dispatch + projection routing + setup-capability registry | All 4 board-touching molecular (`managing-board`, `consuming-card`, `decomposing-into-milestones`, `bootstrapping-repo` once #67 lands) | `operating-kanban` |
-| D-AUTONOMY-1 matrix + override parsing | All 5 mutating molecular | `classifying-actions` |
-| Audit log schema + two-entry rule | All 5 mutating molecular | `auditing-actions` |
+| 8-action protocol dispatch + projection routing + setup-capability registry | All 4 board-touching molecular (`managing-board`, `consuming-card`, `decomposing-into-milestones`, `bootstrapping-repo`) | `operating-kanban` |
+| D-AUTONOMY-1 matrix + override parsing | All 4 mutating molecular | `classifying-actions` |
+| Audit log schema + two-entry rule | All 4 mutating molecular | `auditing-actions` |
 
 Contracts that would NOT meet the SPOT threshold (only 1
 molecular inlines) stay inline:
@@ -527,7 +519,7 @@ Per
 |-----------------|--------------|------------------------|
 | **Board** | Card + PR aggregates; GitHub Project + Issues + git refs | `managing-board` (R), `consuming-card` (R + W own card), `decomposing-into-milestones` (W new cards), `bootstrapping-repo` (R Status field), `board-canon` (schema authority), `operating-kanban` (per-projection dispatch authority) |
 | **Session** | ProducerSession + ConsumerLogical aggregates; OS processes + worktrees | `managing-board` (R lifecycle), `consuming-card` (own session) |
-| **Bootstrap** | HostBootstrap + RepoBootstrap + RepoConfig | `bootstrapping-repo` (R + W), `migrating-repo-version` (R + W), `using-board-superpowers` (R for state checks) |
+| **Bootstrap** | HostBootstrap + RepoBootstrap + RepoConfig | `bootstrapping-repo` (R + W — sole executor for first-time setup AND plugin-upgrade reconvergence per ADR-0012), `using-board-superpowers` (R for state checks) |
 | **Audit** | AuditTrail aggregate; BYO RDBMS | `auditing-actions` (W via DB script) |
 | **Spec** | SpecPointer (thin) | `consuming-card` (R via thin pointer in F-C2) |
 

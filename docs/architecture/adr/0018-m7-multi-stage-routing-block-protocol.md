@@ -209,7 +209,7 @@ future-ADR question; first cut errs safe.
   fingerprint comparison this ADR exploits.
 - ADR-0014 — Stage registry contract. The YAML row shape
   this ADR's three new M7 rows occupy.
-- [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+- [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   — Living design doc; § "Functional modules" → M7 +
   § "Stages" M7 rows + § "Decided" entries on M7 are this
   ADR's authoritative reference.

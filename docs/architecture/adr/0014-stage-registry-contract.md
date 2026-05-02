@@ -12,7 +12,7 @@ registry every `SessionStart` and emits an
 model (ADR-0013) reports as `never-run` or `stale`. The registry
 is the single declaration of every bootstrap stage — its
 `(module, character, locality)` 3-tuple identity (per
-[`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+[`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
 § "The three axes"), dependencies, executor, and the five
 callables the lifecycle requires from each stage.
 
@@ -120,6 +120,18 @@ Each stage MAY additionally provide (per ADR-0020 / ADR-0021):
   `modules.<derived>` projection target if the stage's
   `target_state` should be visible to architects under a
   custom path in the settings file's modular layering.
+- An `apply_choice(ctx, validated_value) -> dict` callable
+  (optional 5th callable for stages with `character: agentic`)
+  — invoked by the SKILL after the architect provides input and
+  `target_state_predicate` confirms the value's shape. The
+  helper persists to the stage's locality settings file via
+  `_partitioned_settings.update_module_section` and returns
+  `{applied: True, message: ..., side_effects: [...]}`. This
+  split ensures agentic stages use a prompt-mediated
+  persistence path: `executor(ctx)` signals `requires_input`
+  (never writes); `apply_choice` writes (never prompts). The
+  four standard callables remain mandatory; `apply_choice` is
+  opt-in for agentic stages only.
 
 The schema validates declarative fields; CI round-trip-tests
 each callable to validate the dynamic contract.
@@ -221,14 +233,14 @@ schema gates the gap.
   through it.
 - ADR-0012 — unified check-script trigger model; hook consumes
   this registry every `SessionStart`.
-- ADR-0013 — 5-state lifecycle + three-layer fingerprint;
+- ADR-0013 — 6-state lifecycle + three-layer fingerprint;
   defines what the lifecycle asks, this ADR specifies how it
   is stored.
 - ADR-0015..ADR-0019 — companion bootstrap-redesign ADRs (audit
   per-repo locality, repo identity, M7 routing-block protocol,
   M8 autonomy presets, M9 hook registration); each adds stages
   this contract describes.
-- [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+- [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   § "Stage registry contract" — authoritative reference for
   column semantics, canonicalization invariant, five-callable
   contract.

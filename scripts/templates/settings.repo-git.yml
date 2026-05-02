@@ -1,0 +1,80 @@
+# settings.repo-git.yml — repo-git locality template
+#
+# Locality:  repo-git
+# Path:      <repo>/.board-superpowers/settings.yml
+# Tracked:   YES — committed into repo git history
+# Mode:      0644
+# Replaces:  v0.4.0 config.yml
+#
+# ADR-0024 § Part A: repo-git locality.
+# ADR-0021: two-section split.
+#
+# Committed into git so every clone of this repo agrees on:
+#   - M2 template versions (pyproject.toml + uv.lock in git)
+#   - M5 board configuration (board owner, project number)
+#   - M6 gitignore entries (recorded completion only)
+#   - M7 routing-block injection (block hashes + detected form)
+#   - M10 kanban backend choice (ADR-0022 dispatch input)
+#
+# Stage entries here: M2 copy-uv-templates, M5 config.yml write,
+# M6 gitignore append, M7 routing-block injection stages,
+# M10 kanban backend choice.
+#
+# applicable_when predicates that read this file:
+#   - m2.repo.copy-uv-templates: reads modules.m2_python_runtime.templates_version
+#   - m5.repo.write-config-yml:  reads modules.m5_repo_configuration.board_owner etc.
+#   - m6.repo.append-gitignore:  reads stages_completed[] for idempotency check
+#   - m7.repo.inject-block.*:    reads modules.m7_routing.routing_blocks[].block_hash
+#   - m10.repo.choose-kanban-projection: reads modules.m10_kanban.backend
+#   - bsp_resolve_active_projection: reads modules.m10_kanban directly (v0.5.0+)
+
+# Top-level file metadata (ADR-0021)
+setup:
+  schema_version: 1
+  generated_at: <will-be-filled-by-bootstrap>
+  plugin_version: <will-be-filled-by-bootstrap>
+
+# Section 1 — flat lifecycle source-of-truth (machine view; ADR-0013)
+stages_completed: []
+
+# Section 2 — module-namespaced config-items projection (architect view; ADR-0021)
+modules:
+
+  # M2 — Python runtime templates (committed into repo)
+  # templates_copied_at: timestamp when pyproject.toml + uv.lock were copied.
+  m2_python_runtime:
+    schema_version: 1
+    templates_copied_at: ""  # filled by m2.repo.copy-uv-templates
+
+  # M5 — Repo configuration (board owner, project number, etc.)
+  # These fields are the committed-into-git, non-sensitive project config.
+  # wip_limit lives in repo-clone (per ADR-0024 delta D8) to allow per-architect
+  # customization without polluting git history.
+  m5_repo_configuration:
+    schema_version: 1
+    board_owner: ""       # GitHub org or user owning the Project (e.g. "PanQiWei")
+    project_number: 0     # GitHub Project number (e.g. 1)
+    default_branch: main
+
+  # M6 — Gitignore management
+  # No architect-facing knobs; section records completion metadata.
+  m6_gitignore:
+    schema_version: 1
+    entries_appended: false
+
+  # M7 — AGENTS.md / CLAUDE.md routing-block injection
+  # routing_blocks: list of injected blocks with their SHA-256 hashes.
+  # ADR-0018: block_hash used to detect stale injections needing re-run.
+  m7_routing:
+    schema_version: 1
+    routing_blocks: []   # [{target_file, block_hash}]
+
+  # M10 — Kanban backend selection (ADR-0022 dispatch input)
+  # backend: enum from ADR-0005 v0.5.0 = [github-project-v2]
+  # kanbans list (multi-kanban per ADR-0026): length=1 at v1.
+  # bsp_resolve_active_projection reads this section directly.
+  # applicable_when: m10.repo.choose-kanban-projection reads backend.
+  m10_kanban:
+    schema_version: 1
+    backend: ""           # filled by m10.repo.choose-kanban-projection
+    kanbans: []           # [{id, projection, project_ref}] — v0.5.0 length=1

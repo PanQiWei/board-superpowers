@@ -92,10 +92,12 @@ REASON: First time using board-superpowers on this (host, repo)
 ```
 
 ```
-INVOKE: migrating-repo-version
-REASON: Plugin version v0.2.0 detected; state.yml records
-        last_seen_version_in_repo=v0.1.0. Routing block may need
-        re-injection.
+INVOKE: bootstrapping-repo
+REASON: 2 stages need running (m7.repo.inject-routing-blocks
+        stale, m4.repo.write-credentials stale). Plugin upgrade
+        bumped a stage's target_state_hash; the unified
+        setup-stages flow inside bootstrapping-repo (per
+        ADR-0012) treats this the same as first-time setup.
 ```
 
 The `MISSING_DEPS:` payload is a separate (existing) advisory

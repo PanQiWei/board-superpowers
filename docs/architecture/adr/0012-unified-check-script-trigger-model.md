@@ -36,7 +36,7 @@ v0.4.0 ship and the #43 bootstrap-audit-contract drift work:
    what `bootstrapping-repo` already needs internally.
 3. **Hook is observation-blind to version drift.** At v0.4.0
    `hooks/session-start.sh` checks file *presence* only
-   (`manifest.yml` exists; `state.yml` exists). It does not
+   (host-shared `settings.yml` exists; repo-shared `settings.yml` exists). It does not
    compare the recorded `last_seen_version` against the current
    `plugin.json:version`. Architects upgrading the plugin rely
    on out-of-band release notes or manual re-bootstrap.
@@ -48,7 +48,7 @@ a stateless **check script** runs on every `SessionStart` hook,
 computes the diff between the current plugin's stage registry
 and the recorded per-stage status entries, and emits an
 `INVOKE: bootstrapping-repo` marker if any stage is `never-run`
-or `stale` (per the 5-state lifecycle defined in ADR-0013).
+or `stale` (per the 6-state lifecycle defined in ADR-0013).
 
 Concretely:
 
@@ -68,7 +68,7 @@ Concretely:
   logic is one.
 
 The hook's pseudo-code is captured in
-[`05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+[`05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
 § "Trigger model" → "Hook flow (pseudocode)".
 
 ## Consequences
@@ -117,7 +117,7 @@ The hook's pseudo-code is captured in
   Per the design doc's "Pre-v1 breaking changes accepted"
   Decided item, architects delete existing host-local state
   (`~/.board-superpowers/credentials.yml` + any
-  `~/.board-superpowers/repos/*/state.yml`) on upgrade and
+  `~/.board-superpowers/repos/*/settings.yml`) on upgrade and
   re-bootstrap. No in-place migration logic ships.
 
 ## Alternatives considered
@@ -175,7 +175,7 @@ Invariants 1-3.
 
 ## Related
 
-- ADR-0013 — Declarative state schema + 5-state lifecycle +
+- ADR-0013 — Declarative state schema + 6-state lifecycle +
   K8s-style three-layer fingerprint (the lifecycle model this
   trigger consults).
 - ADR-0014 — Stage registry contract (the source of truth
@@ -186,7 +186,7 @@ Invariants 1-3.
 - ADR-0011 — Defer Producer routines to v1.x; this ADR removes
   `migrating-repo-version` from the deferred list (absorbed,
   not deferred).
-- [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+- [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   — Living design doc carrying the full context;
   § "Trigger model" is this ADR's authoritative reference.
 - [`../0005-contracts/02-hook-contracts.md`](../0005-contracts/02-hook-contracts.md)

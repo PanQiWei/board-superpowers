@@ -6,37 +6,36 @@ user-facing overview.
 
 @SKILLS.md
 
-## Project status — v1 catalog 10/11 shipped
+## Project status — v1 catalog 10/10 shipped
 
 > **The plugin is loadable at runtime.** `hooks/`,
 > `scripts/`, and `skills/` directories exist at the repo root.
 > `SessionStart` fires. The 10 v1-catalog skills auto-match.
 > The plugin dogfoods itself for any new skill / script / hook.
 
-**v1 catalog = 10 of 11 skills shipped** (11 once `migrating-repo-version` ships), per [`SKILLS.md`](./SKILLS.md):
+**v1 catalog = 10 of 10 skills shipped** (post-#67 —
+`migrating-repo-version` absorbed into `bootstrapping-repo` per
+[ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md);
+no separate SKILL ships), per [`SKILLS.md`](./SKILLS.md):
 
 - **Shipped**: `using-board-superpowers` (entry),
   `managing-board` + `consuming-card` + `bootstrapping-repo` +
   `decomposing-into-milestones` (molecular), `board-canon` +
   `enforcing-pr-contract` + `classifying-actions` +
   `auditing-actions` + `operating-kanban` (atomic).
-- **Roadmap (pending shipment)**: `migrating-repo-version`.
-  Reason lives in the SKILLS.md table.
 
-**Remaining degraded behavior**:
-
-- **No `migrating-repo-version` skill yet** — current plugin
-  version is `v0.5.0`; the schema-aware migration runner lands
-  starting from the v0.5.x → v0.6.x transition. The hook never
-  injects `INVOKE: migrating-repo-version` in v0.5.0.
+**Remaining degraded behavior**: v1 catalog complete; no
+remaining v1-minimum workarounds. Plugin-upgrade reconvergence
+(formerly the `migrating-repo-version` scope) is now driven by
+the unified setup-stages mechanism inside `bootstrapping-repo`
+— the hook emits a single `INVOKE: bootstrapping-repo` marker
+whenever any stage is `never-run` or `stale`.
 
 The single source of truth for v1 design remains
 [`docs/architecture/`](./docs/architecture/) — read
 `0001-positioning.md` first; the
 [`docs/architecture/README.md`](./docs/architecture/README.md)
-index lists everything else in canonical order. The 10 shipped
-skills are the operating substrate; the 1 deferred skill is a
-roadmap item, not a gate on day-to-day work.
+index lists everything else in canonical order.
 
 ## Subdirectory contracts
 
@@ -168,7 +167,7 @@ it does four things:
    a local jsonl trace and the entry's `mode` field records the
    degradation cause (see spec 06 § "jsonl fallback mode-field").
 
-### Skills system — the v1 catalog (11 skills, 3 layers)
+### Skills system — the v1 catalog (10 skills, 3 layers)
 
 The `skills/` directory **is** the agent's action system. It is
 designed as a graph of nodes (skills) and edges (cross-skill
@@ -182,13 +181,17 @@ Entry layer (1) — first-touch router, routes only, never works
   using-board-superpowers     reliable dep gate + role routing
                               (consumes hook-injected INVOKE: markers)
 
-Molecular layer (5) — business workflows, state-machine-shaped
+Molecular layer (4) — business workflows, state-machine-shaped
 ─────────────────────────────────────────────────────────────────
   managing-board              Producer (F-01..F-08, F-10..F-15)
   consuming-card              Consumer (F-C0..F-C14 lifecycle)
   decomposing-into-milestones F-09 + INVEST + vertical slicing
-  bootstrapping-repo          F-B1 + F-B2 (first-time setup)
-  migrating-repo-version      F-B3 + F-B4 (upgrade migration)
+  bootstrapping-repo          sole executor for setup-stages —
+                              first-time setup + plugin-upgrade
+                              reconvergence (absorbs the formerly
+                              deferred migrating-repo-version per
+                              ADR-0012) + agentic config-item
+                              elicitation
 
 Atomic layer (5) — single-purpose primitives, reflexive (no upward calls)
 ─────────────────────────────────────────────────────────────────
@@ -216,20 +219,20 @@ with an edit to `SKILLS.md` (per its Source-of-truth contract).
 ### Hook intent injection — the v1 dispatch optimization
 
 `hooks/session-start.sh` is **intent-injecting**, not just
-advisory. On every session start it reads on-disk state and may
-emit one of:
+advisory. On every session start it reads on-disk state, runs
+the lifecycle diff against the stage registry (per
+[ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md)),
+and emits the marker when any stage is `never-run` or `stale`:
 
 ```
 INVOKE: bootstrapping-repo
-REASON: First time using board-superpowers on this (host, repo)
-        — manifest.yml absent.
+REASON: <N> stages need running (<list>)
 ```
 
-```
-INVOKE: migrating-repo-version
-REASON: Plugin version v0.5.0 detected; state.yml records
-        last_seen_version_in_repo=v0.4.x.
-```
+The same marker covers both first-time setup (every stage
+`never-run`) and plugin-upgrade reconvergence (some stages
+`stale`) — there is no separate `INVOKE: migrating-repo-version`
+marker; that scope is absorbed into `bootstrapping-repo`.
 
 The marker fast-paths the entry skill's routing decision. The
 entry skill ALSO does the same state check itself (CC

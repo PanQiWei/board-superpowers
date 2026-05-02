@@ -39,7 +39,8 @@ These rules apply to every path in this section:
   [`08-environment-variables.md`](./08-environment-variables.md) +
   `PLUGIN_DEVELOPMENT.md` "Claude Code → `${CLAUDE_PLUGIN_ROOT}`".
 - **Permissions.** `~/.board-superpowers/` is mode `0700`;
-  `~/.board-superpowers/credentials.yml` is mode `0600`. Per
+  `~/.board-superpowers/repos/<repo-identity>/credentials.yml`
+  is mode `0600` (per ADR-0015 per-repo location). Per
   [`03-config-schemas.md`](./03-config-schemas.md) "Cross-config
   conventions". `<repo>/.board-superpowers/` inherits the repo's
   umask.
@@ -138,63 +139,84 @@ sub-directory, plus the **AuditTrail aggregate** at the credential
 layer (0003 § 3.3.8). Mode `0700`. Lives outside any repo by
 design — none of these files are tracked in git (per I-13).
 
+**v0.5.0+ layout** (settings.yml family per ADR-0024; per-repo
+identity per ADR-0017):
+
 | Path | Tracked in git? | Mode | Owner | Purpose |
 |------|-----------------|------|-------|---------|
 | `~/.board-superpowers/` | n/a | `0700` | HostBootstrap | Per-host plugin state root |
-| `~/.board-superpowers/manifest.yml` | no | inherits umask (typically `0644`) | HostBootstrap | Plugin-managed `HostManifest` (per [`03-config-schemas.md`](./03-config-schemas.md)) |
-| `~/.board-superpowers/overrides.yml` | no | inherits umask | RepoConfig (user-layer) | User-level autonomy overrides (per [`03-config-schemas.md`](./03-config-schemas.md)) |
-| `~/.board-superpowers/credentials.yml` | no | **`0600` strict** | AuditTrail | Audit-DB connection string (per [`03-config-schemas.md`](./03-config-schemas.md) + ADR-0006 §5) |
+| `~/.board-superpowers/settings.yml` | no | inherits umask (typically `0644`) | HostBootstrap | Plugin-managed `HostManifest` — two-section settings per ADR-0021 (replaces `manifest.yml` from v0.4.0 per ADR-0024) |
 | `~/.board-superpowers/repos/` | n/a | inherits `0700` | RepoBootstrap | Container for every per-`(host, repo)` directory this host has bootstrapped |
-| `~/.board-superpowers/repos/<normalized-repo-path>/` | n/a | inherits | RepoBootstrap | One sub-directory per repo bootstrapped on this host; name is the repo's absolute path with leading `/` stripped and remaining `/` replaced by `-`. Houses the three per-`(host, repo)` siblings below |
-| `~/.board-superpowers/repos/<normalized-repo-path>/state.yml` | no | inherits | RepoBootstrap | Plugin-managed `RepoState` for this (host, repo) pair (per [`03-config-schemas.md`](./03-config-schemas.md)) |
-| `~/.board-superpowers/repos/<normalized-repo-path>/audit-local.jsonl` | no | inherits | AuditTrail (degraded mode) | Per-`(host, repo)` jsonl trace written when audit DB is unavailable. **Legacy v0.1.0-minimum** wrote this at `~/.board-superpowers/<host>/<repo>/audit-local.jsonl`; Card 1's plumbing migrates the legacy path into the canonical normalized location |
-| `~/.board-superpowers/repos/<normalized-repo-path>/audit.db` | no | inherits | AuditTrail (SQLite scheme) | **Optional.** Default SQLite database path suggested by `bootstrap-project.sh` step 2e when the architect picks `sqlite://` / `sqlite3://` (per ADR-0009). Absent when BYO scheme is Postgres / MySQL or audit DB is not configured |
+| `~/.board-superpowers/repos/<repo-identity>/` | n/a | inherits | RepoBootstrap | One sub-directory per repo bootstrapped on this host; `<repo-identity>` derived from GitHub `origin` URL as `<owner>-<repo>` per ADR-0017 (fallback: `_path-<normalized>` for local-only repos). Houses per-`(host, repo)` siblings below |
+| `~/.board-superpowers/repos/<repo-identity>/settings.yml` | no | inherits | RepoBootstrap | Plugin-managed `RepoState` — two-section settings per ADR-0021 (replaces `state.yml` from v0.4.0 per ADR-0024); `stages_completed[]` source of truth per ADR-0013 |
+| `~/.board-superpowers/repos/<repo-identity>/state.yml` | no | inherits | RepoBootstrap (TTL cache) | Sibling TTL-cache file for `external_validated_at` / `external_ttl_seconds` (hash-excluded fields per ADR-0013). NOT a replacement for `settings.yml` — co-exists alongside it |
+| `~/.board-superpowers/repos/<repo-identity>/credentials.yml` | no | **`0600` strict** | AuditTrail | Per-repo audit-DB connection string (per [`03-config-schemas.md`](./03-config-schemas.md) + ADR-0015; replaces host-shared `credentials.yml` from v0.4.0) |
+| `~/.board-superpowers/repos/<repo-identity>/audit-local.jsonl` | no | inherits | AuditTrail (degraded mode) | Per-`(host, repo)` jsonl trace written when audit DB is unavailable |
+| `~/.board-superpowers/repos/<repo-identity>/audit.db` | no | inherits | AuditTrail (SQLite scheme) | **Optional.** Default SQLite database path suggested when the architect picks `sqlite://` / `sqlite3://` (per ADR-0009). Absent when BYO scheme is Postgres / MySQL or audit DB is not configured |
 
-### Path-normalization rule for the per-repo sub-directory
+### Repo identity scheme (ADR-0017)
 
-Given a repo's absolute path on the host, the canonical
-sub-directory name is computed as:
+Given a repo's GitHub `origin` URL, the canonical sub-directory
+name is computed as:
 
-1. Strip the leading `/`.
-2. Replace every remaining `/` with `-`.
+```
+bsp_compute_repo_identity()
+  git remote get-url origin
+    → https://github.com/PanQiWei/board-superpowers.git
+    → git@github.com:PanQiWei/board-superpowers.git
+  strip scheme prefix + .git suffix
+  extract <owner>/<repo> path component
+  replace / with -
+  → "PanQiWei-board-superpowers"
+```
 
-Examples:
+**Fallback for local-only repos (no `origin`):** `_path-<normalized>`
+where `<normalized>` is the repo's absolute path with leading `/`
+stripped and remaining `/` replaced by `-`. The `_path-` prefix
+prevents collision with GitHub identities (GitHub usernames cannot
+start with `_`).
 
-| Repo absolute path | Sub-directory name |
-|--------------------|---------------------|
-| `/Users/panqiwei/my-project-repo` | `Users-panqiwei-my-project-repo` |
-| `/Users/panqiwei/Dev/repos/nemori-ai/board-superpowers` | `Users-panqiwei-Dev-repos-nemori-ai-board-superpowers` |
-| `/home/alice/work/api-server` | `home-alice-work-api-server` |
+**Cross-clone sharing (I-13 revised per ADR-0017):** All clones and
+worktrees of the same `(host, GitHub repo)` share the same
+`<repo-identity>` directory. `git rev-parse --git-common-dir`
+resolves any worktree to the primary repo, where `origin` lives.
 
-This is the canonical name `bootstrap-project.sh` writes and every
-session's preflight reads. The mapping is one-way (we never decode
-back to the original path); collisions across distinct paths sharing
-the same normalized form are not addressed at v1 — out of scope per
-P3 (solo / small-team scale). Note this scheme deliberately differs
-from Claude Code's leading-`-` form (`-Users-panqiwei-...`); the
-absence of the leading dash makes the directory listing read more
-naturally with no semantic loss.
+**HTTPS vs SSH:** both `https://github.com/A/B.git` and
+`git@github.com:A/B.git` resolve to identity `A-B`.
 
-### Per-`(host, repo)` directory contents — three siblings
+**Edge cases:**
+- Fork: fork's `origin` points to the fork → separate identity
+  from upstream. Correct — a fork is a different coordination
+  object.
+- Repo rename on GitHub: run `bsp-relocate-repo.sh <old> <new>`
+  once after the rename to `mv` the state directory.
 
-Each `~/.board-superpowers/repos/<normalized-repo-path>/` directory
-houses up to three sibling files, one per concern, all owned by
-distinct aggregates but co-located so a single `(host, repo)` pair
-has exactly one canonical filesystem footprint:
+| Example `origin` URL | Sub-directory name |
+|----------------------|---------------------|
+| `https://github.com/PanQiWei/board-superpowers.git` | `PanQiWei-board-superpowers` |
+| `git@github.com:acme/api-server.git` | `acme-api-server` |
+| (local-only, path `/Users/alice/my-project`) | `_path-Users-alice-my-project` |
+
+### Per-`(host, repo)` directory contents — siblings
+
+Each `~/.board-superpowers/repos/<repo-identity>/` directory
+houses up to four sibling files, all owned by distinct aggregates
+but co-located so a single `(host, GitHub repo)` pair has exactly
+one canonical filesystem footprint:
 
 | Sibling | Always present? | Owner | Lifecycle |
 |---------|-----------------|-------|-----------|
-| `state.yml` | Yes (after F-B2) | RepoBootstrap | Created at F-B2 first run; updated by F-B4 on version transitions; schema-versioned per I-12 |
-| `audit-local.jsonl` | Yes during R-class degradation; absent once a BYO audit DB is configured AND reachable | AuditTrail (degraded mode) | Append-only jsonl trace written when `audit_db_url` is unset OR the configured DB is unreachable. **Legacy v0.1.0-minimum location** was `~/.board-superpowers/<host>/<repo>/audit-local.jsonl`; Card 1's plumbing migrates that path forward into the canonical normalized location |
-| `audit.db` | Only when BYO scheme is `sqlite://` / `sqlite3://` AND the architect accepted the default path suggestion | AuditTrail (SQLite scheme) | Created on the first audit write after F-B2 step 2e selects SQLite; lives for the project's lifetime (no rollover); WAL mode enabled on first connection |
+| `settings.yml` | Yes (after first setup stage) | RepoBootstrap | Created at first repo-shared stage; updated by SKILL on each stage completion; two-section per ADR-0021 |
+| `state.yml` | Yes (after first external validation) | RepoBootstrap (TTL cache) | Append-only TTL cache for external validation timestamps; co-exists with settings.yml |
+| `credentials.yml` | Yes (after m4.repo.acquire-dsn stage) | AuditTrail | Written by M4 agentic stage; mode 0600; per ADR-0015 |
+| `audit-local.jsonl` | Yes during R-class degradation; absent once a BYO audit DB is configured AND reachable | AuditTrail (degraded mode) | Append-only jsonl trace written when `audit_db_url` is unset OR the configured DB is unreachable |
+| `audit.db` | Only when BYO scheme is `sqlite://` / `sqlite3://` AND the architect accepted the default path suggestion | AuditTrail (SQLite scheme) | Created on the first audit write after the m4.repo.acquire-dsn stage selects SQLite; WAL mode enabled on first connection |
 
-**One normalized dir per `(host, repo)` pair.** The directory name
-is fully determined by the host's view of the repo's absolute path
-(per the normalization rule above); no two distinct
-`(host, repo)` pairs share a directory under any architect's `$HOME`.
-The three siblings stay in lockstep — when the architect runs the
-deferred `bootstrap-rollback.sh`, every sibling under this directory
-gets cleaned up symmetrically.
+**One identity-keyed dir per `(host, GitHub repo)` pair** (per
+ADR-0017). Multiple clones or worktrees of the same repo share this
+directory — one audit trail, one credentials file, one bootstrap
+progress record per `(host, GitHub repo)`, regardless of how many
+physical clones exist.
 
 The `audit.db` sibling is **forbidden inside the project tree**
 (e.g., `<repo>/.board-superpowers/audit.db`). Per ADR-0009 the
@@ -206,12 +228,12 @@ project-tree location is rejected.
 ### Why `~/.board-superpowers/` and not `~/.config/board-superpowers/`
 
 ADR-0003 already places the global-default worktree dir under
-`~/.config/superpowers/worktrees/...`. Plugin state (manifest +
-overrides + credentials) lives under `~/.board-superpowers/` to
-keep config files deliberately distinct from the working-tree
-storage that may be `rm -rf`'d to reclaim disk. The two are owned
-by different aggregates and have different lifecycles; co-locating
-them would confuse the cleanup story.
+`~/.config/superpowers/worktrees/...`. Plugin state
+(`settings.yml` + `credentials.yml` + `audit.db`) lives under
+`~/.board-superpowers/` to keep config files deliberately distinct
+from the working-tree storage that may be `rm -rf`'d to reclaim
+disk. The two are owned by different aggregates and have different
+lifecycles; co-locating them would confuse the cleanup story.
 
 ### Forward-extension placeholder
 
@@ -223,15 +245,20 @@ parent dir guards anything new by default.
 ### Cited rationale
 
 - 0003 § 3.3.5 HostBootstrap aggregate — entity-level home for
-  `manifest.yml`.
-- 0003 § 3.3.7 RepoConfig aggregate — `overrides.yml` user layer.
+  host-shared `settings.yml`.
+- 0003 § 3.3.6 RepoBootstrap aggregate — entity-level home for
+  repo-shared `settings.yml`.
 - 0003 § 3.3.8 AuditTrail aggregate — `credentials.yml` location +
   permission rules.
 - ADR-0006 §5 (BYO RDBMS — credential-file location finalization).
 - ADR-0009 — `audit.db` sibling location finalization for the
   SQLite scheme; default path suggestion under
-  `~/.board-superpowers/repos/<normalized-repo-path>/audit.db`.
-- I-13 (state files in git, machine-state files not).
+  `~/.board-superpowers/repos/<repo-identity>/audit.db`.
+- ADR-0015 — per-repo `credentials.yml` locality.
+- ADR-0017 — GitHub-based repo identity scheme + cross-clone sharing.
+- ADR-0024 — rename from `manifest.yml` / `state.yml`.
+- I-13 (revised per ADR-0017: host-local state out of git, cross-clone
+  sharing via GitHub identity).
 - [`03-config-schemas.md`](./03-config-schemas.md) — schemas for
   every file in this table.
 
@@ -243,30 +270,32 @@ Owned by the **RepoConfig aggregate** (0003 § 3.3.7) plus the
 **ConsumerLogical aggregate** at the claim-marker layer (0003
 § 3.3.3). Lives inside the repo; mode inherits the repo's umask.
 The split between tracked and untracked is load-bearing:
-`config.yml` holds the **team-shared** subset of project config
-and is tracked; `config.local.yml` holds the **per-user**
-subset (host-/architect-specific overrides like `wip_limit`)
-and is gitignored via the project-wide `*.local.*` pattern; the
-per-session `claims/` subdirectory is gitignored locally — but
-individual claim markers are force-added onto their own claim
-branch (per ADR-0002 + I-13).
+`settings.yml` (repo-git) holds the **team-shared** subset of
+project config and is tracked; `settings.local.yml` (repo-clone)
+holds the **per-user** subset (host-/architect-specific overrides
+like `wip_limit`) and is gitignored via the project-wide
+`*.local.*` pattern; the per-session `claims/` subdirectory is
+gitignored locally — but individual claim markers are force-added
+onto their own claim branch (per ADR-0002 + I-13).
 
-Note: per-repo plugin state (`state.yml`) does **not** live here.
-It lives at `~/.board-superpowers/repos/<normalized-repo-path>/state.yml`
+Note: per-repo plugin state does **not** live here.
+It lives at `~/.board-superpowers/repos/<repo-identity>/settings.yml`
 (per "Per-host layout" above) so collaborators on the same git
 remote do not silently overwrite each other's host-local bootstrap
-state.
+state. Same `(host, GitHub repo)` across multiple clones/worktrees
+shares one identity-keyed directory (per ADR-0017 cross-clone
+sharing — I-13 revised).
 
 | Path | Tracked in git? | Owner | Purpose |
 |------|-----------------|-------|---------|
 | `<repo>/.board-superpowers/` | yes (directory) | RepoConfig | Per-repo plugin config root |
-| `<repo>/.board-superpowers/config.yml` | **yes** | RepoConfig | User-editable team-shared project config (per [`03-config-schemas.md`](./03-config-schemas.md) § "config.yml") |
-| `<repo>/.board-superpowers/config.local.yml` | **no** (gitignored via `*.local.*` pattern) | RepoConfig (per-user layer) | Per-user override of team-shared config — `wip_limit`, `autonomy_overrides`, etc. (per [`03-config-schemas.md`](./03-config-schemas.md) § "config.local.yml") |
+| `<repo>/.board-superpowers/settings.yml` | **yes** | RepoConfig | User-editable team-shared project config (repo-git locality; replaces `config.yml` per ADR-0024; per [`03-config-schemas.md`](./03-config-schemas.md) § "settings.yml repo-git") |
+| `<repo>/.board-superpowers/settings.local.yml` | **no** (gitignored via `*.local.*` pattern) | RepoConfig (per-user layer) | Per-user override — `modules.m5_repo_configuration.wip_limit`, `modules.m8_autonomy.autonomy_overrides` (repo-clone locality; replaces `config.local.yml` per ADR-0024; per [`03-config-schemas.md`](./03-config-schemas.md) § "settings.local.yml") |
 | `<repo>/.board-superpowers/claims/` | **no** (gitignored locally) | ConsumerLogical | Per-session claim markers; force-committed to claim branch only |
 | `<repo>/.board-superpowers/claims/<key>.claim` | gitignored locally; **force-added on the claim branch** | ConsumerLogical | One marker per claimed card; `<key>` = `Card.key` per [`00-kanban-protocol.md`](./00-kanban-protocol.md) (v1 GitHub form: the Issue number); YAML payload per [`05-github-artifact-schemas.md`](./05-github-artifact-schemas.md) |
-| `<repo>/.board-superpowers/pyproject.toml` | **yes** (plugin-managed) | RepoConfig | Copied by `bootstrap-project.sh` F-B2 sub-cap 6 from plugin template; declares per-repo Python venv deps (`pyyaml + pymysql`). Committed for reproducibility — each repo pins its own deps version |
-| `<repo>/.board-superpowers/uv.lock` | **yes** (plugin-managed) | RepoConfig | uv lockfile; committed alongside `pyproject.toml` for reproducible `uv sync` runs. Updated by `bootstrap-project.sh` on re-run if the plugin ships a newer lockfile |
-| `<repo>/.board-superpowers/.venv/` | **no** (gitignored; uv-managed) | AuditTrail | Per-repo Python venv created by `uv sync` during F-B2 sub-cap 6. Recreated automatically by `bsp_ensure_venv` if absent or corrupt |
+| `<repo>/.board-superpowers/pyproject.toml` | **yes** (plugin-managed) | RepoConfig | Copied by bootstrap stage from plugin template; declares per-repo Python venv deps (`pyyaml + pymysql`). Committed for reproducibility — each repo pins its own deps version |
+| `<repo>/.board-superpowers/uv.lock` | **yes** (plugin-managed) | RepoConfig | uv lockfile; committed alongside `pyproject.toml` for reproducible `uv sync` runs. Updated by bootstrap re-run if the plugin ships a newer lockfile |
+| `<repo>/.board-superpowers/.venv/` | **no** (gitignored; uv-managed) | AuditTrail | Per-repo Python venv created by `uv sync` during the venv bootstrap stage. Recreated automatically by `bsp_ensure_venv` if absent or corrupt |
 
 ### Claim marker — locally gitignored, branch-committed
 
@@ -287,31 +316,28 @@ Manager during triage). Per
 
 ### Tracked-vs-untracked rationale
 
-`config.yml` is tracked because a collaborator joining the repo
-MUST see it in their clone — without `config.yml` the routing
-block has no project to point at. It carries only the
-**team-shared** subset of project config (today: `project`;
-future: `base_branch`, `default_execution_skill`). Per I-13 +
+`settings.yml` (repo-git) is tracked because a collaborator joining
+the repo MUST see it in their clone — without it the routing block
+has no project to point at and the kanban backend choice is lost.
+It carries only the **team-shared** subset (today: `modules.m3_board.project`,
+`modules.m10_kanban.backend`, `modules.m6_post_merge.*`). Per I-13 +
 0003 § 3.3.7.
 
-`config.local.yml` is **not** tracked because it carries the
-**per-user** subset (today: `wip_limit`; future:
-`autonomy_overrides`). These fields are personal-capacity or
-personal-risk-tolerance choices, not team-coordination decisions
-— Alice's parallel-session capacity has no contractual claim on
-Bob's. Tracking `wip_limit` would silently force one architect's
-preference onto every collaborator's clone. The `*.local.*`
-gitignore pattern is project-wide, generalizing the convention
-beyond just `config.local.yml`: any future per-user file in any
-directory that follows `<name>.local.<ext>` naming is automatically
-gitignored. Per I-13 + 0003 § 3.3.7 (per-user layer).
+`settings.local.yml` (repo-clone) is **not** tracked because it
+carries the **per-user** subset (today:
+`modules.m5_repo_configuration.wip_limit`,
+`modules.m8_autonomy.autonomy_overrides`). These fields are
+personal-capacity or personal-risk-tolerance choices, not
+team-coordination decisions. The `*.local.*` gitignore pattern is
+project-wide, generalizing the convention beyond just
+`settings.local.yml`. Per I-13 + ADR-0024 + 0003 § 3.3.7.
 
-`state.yml` is **not** here at all — it lives at
-`~/.board-superpowers/repos/<normalized>/state.yml`, host-local.
-Each architect's host independently runs F-B2 once per repo and
-maintains its own `state.yml`; nothing crosses git. This eliminates
-the "plugin silently overwrites a collaborator's hand-edit on the
-next push" round-trip. Per I-13 (current form) + 0003 § 3.3.6.
+Per-repo plugin state (`settings.yml` repo-shared) is **not** here
+at all — it lives at
+`~/.board-superpowers/repos/<repo-identity>/settings.yml`,
+host-local. Two clones of the same repo on the same host share one
+identity-keyed directory (ADR-0017); no state crosses git. Per
+I-13 (revised per ADR-0017) + 0003 § 3.3.6.
 
 `claims/` is gitignored locally because the claim markers are
 per-session ephemera that must NEVER appear on `main` — they are
@@ -320,10 +346,13 @@ proof-of-claim only on the claim branch. Per
 
 ### Cited rationale
 
-- 0003 § 3.3.6 RepoBootstrap aggregate — `state.yml` home (now
-  host-local at `~/.board-superpowers/repos/<normalized>/`).
-- 0003 § 3.3.7 RepoConfig aggregate — `config.yml` home.
-- I-13 (state.yml host-local, machine-state files not in git).
+- 0003 § 3.3.6 RepoBootstrap aggregate — `settings.yml` (repo-shared)
+  home at `~/.board-superpowers/repos/<repo-identity>/`.
+- 0003 § 3.3.7 RepoConfig aggregate — `settings.yml` (repo-git) home.
+- ADR-0017 — GitHub-based repo identity (I-13 revised for cross-clone
+  sharing).
+- ADR-0024 — rename from `config.yml` / `config.local.yml`.
+- I-13 (settings.yml repo-shared: host-local, never in git).
 - ADR-0002 (atomic claim via remote branch push — the marker file
   is the lock-payload).
 - `AGENTS.md` "`.board-superpowers/claims/` is gitignored" —
@@ -539,12 +568,12 @@ project. Out-of-scope per P3.
   Kanban Protocol; the claim-marker path uses `Card.key` per the
   protocol's identity rule.
 - [`01-script-contracts.md`](./01-script-contracts.md) — every
-  script that writes one of these paths (`bootstrap-project.sh`
-  for `.gitignore` + `<repo>/.board-superpowers/`; `claim-card.sh`
+  script that writes one of these paths (bootstrap stages for
+  `.gitignore` + `<repo>/.board-superpowers/`; `claim-card.sh`
   for the worktree + claim marker).
 - [`02-hook-contracts.md`](./02-hook-contracts.md) — `hooks/session-start.sh`
-  reads `${CLAUDE_PLUGIN_ROOT}` to find `check-deps.sh`; that env
-  var is the only path-resolution contract the hook depends on.
+  reads the four partitioned settings files from paths documented
+  here to compute the lifecycle diff (ADR-0012).
 - [`03-config-schemas.md`](./03-config-schemas.md) — schemas for
   every file in the per-host and per-repo layouts above.
 - [`05-github-artifact-schemas.md`](./05-github-artifact-schemas.md) —
@@ -563,6 +592,11 @@ project. Out-of-scope per P3.
   sibling default path).
 - ADR-0007 C-PLUGIN-2 (no daemon — session-log paths are read,
   never written).
+- ADR-0015 (per-repo `credentials.yml` locality).
+- ADR-0017 (GitHub-based repo identity — I-13 revised; cross-clone
+  sharing; `bsp-relocate-repo.sh` for repo renames).
+- ADR-0024 (settings.yml rename from manifest.yml / state.yml /
+  config.yml / config.local.yml).
 - `MULTI_AGENT_DEVELOPMENT.md` — session-log path canonical home
   (CC + Codex variants).
 - `AGENTS.md` "Worktree default path", "`.board-superpowers/`",

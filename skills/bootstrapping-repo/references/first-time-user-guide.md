@@ -1,6 +1,6 @@
 # bootstrapping-repo — first-time user guide
 
-This is the "what now" content delivered immediately after F-B2 step 4 (state.yml write) completes. Surface it inline to the architect once F-B2 reports success. The guide is post-bootstrap orientation — it assumes the architect has just had F-B1 + F-B2 succeed and now needs to know what to do next.
+This is the "what now" content delivered immediately after all setup stages have applied (the bootstrap completion step). Surface it inline to the architect once all stages report `applied`. The guide is post-bootstrap orientation — it assumes the architect has just had the full stage sequence succeed and now needs to know what to do next.
 
 For pre-bootstrap conceptual orientation, see `references/intro.md`. For the GitHub Project UI walkthrough that has to happen BEFORE F-B2, see `references/project-creation-walkthrough.md`.
 
@@ -87,19 +87,20 @@ Do NOT claim cards by hand — the worktree + branch + Status flip happens as a 
 
 After bootstrap, four locations matter:
 
-| Path | Layer | Tracked in git? | What's in it |
-|------|-------|-----------------|--------------|
-| `~/.board-superpowers/manifest.yml` | Host | No (per machine) | `schema_version`, `host_bootstrapped_at`, `last_seen_version`. Plugin-managed. |
-| `~/.board-superpowers/repos/<normalized>/state.yml` | Repo (host-local) | No (per `(host, repo)`) | `schema_version`, `repo_bootstrapped_at`, `last_seen_version_in_repo`, `features_enabled`, `routing_blocks` (with SHA256 hashes). Plugin-managed. |
-| `~/.board-superpowers/credentials.yml` | Host | No (chmod 0600) | Optional `audit_db_url`. Only present if you accepted BYO-RDBMS at F-B2 step 2e. |
-| `<repo>/.board-superpowers/config.yml` | Repo | **Yes** | `project: "OWNER/NUMBER"`, `wip_limit`. Hand-editable. Team-shared. |
+| Path | Locality | Tracked in git? | What's in it |
+|------|----------|-----------------|--------------|
+| `~/.board-superpowers/settings.yml` | host-shared | No (per machine) | M1 host-level `modules.lifecycle.*` entries and host-scoped module config. Plugin-managed. |
+| `~/.board-superpowers/repos/<repo-identity>/settings.yml` | repo-shared | No (host-local per-repo) | Repo-shared `modules.lifecycle.*` entries and repo-shared module config. Plugin-managed. |
+| `~/.board-superpowers/repos/<repo-identity>/credentials.yml` | Host per-repo | No (chmod 0600) | Optional `audit_db_url`. Only present if you accepted BYO-RDBMS at the M4 credential-setup stage. Separate from the settings.yml family. |
+| `<repo>/.board-superpowers/settings.yml` | repo-git | **Yes** | Repo-git `modules.lifecycle.*` entries + `modules.m10_kanban` config. Hand-editable (non-stages sections). Team-shared. |
+| `<repo>/.board-superpowers/settings.local.yml` | repo-clone | No (gitignored) | Clone-local `modules.lifecycle.*` entries. Plugin-managed. Never committed. |
 | `<repo>/.board-superpowers/claims/` | Repo | No (gitignored) | Per-session claim markers. Forensic state, not configuration. |
 
 `<normalized>` is the repo's absolute path with leading `/` stripped and remaining `/` replaced by `-`. For `/Users/foo/proj` the normalized name is `Users-foo-proj`.
 
 ## Routing block injected into CLAUDE.md and AGENTS.md
 
-F-B2 step 4 appended a routing block to both `CLAUDE.md` (for Claude Code's auto-load) and `AGENTS.md` (for Codex CLI's auto-load). The block sits between the marker pair:
+The M7 routing-block injection stage appended a routing block to both `CLAUDE.md` (for Claude Code's auto-load) and `AGENTS.md` (for Codex CLI's auto-load). The block sits between the marker pair:
 
 ```
 <!-- board-superpowers:routing -->
@@ -107,11 +108,11 @@ F-B2 step 4 appended a routing block to both `CLAUDE.md` (for Claude Code's auto
 <!-- /board-superpowers:routing -->
 ```
 
-The block content is plugin-owned within the marker pair, user-owned outside. The plugin records a SHA256 hash of the injected content in `state.yml`; on the next plugin upgrade, the `board-superpowers:migrating-repo-version` skill compares the on-disk block to the recorded hash. Match → auto-update. Mismatch → ask you what to do (replace / merge / leave alone).
+The block content is plugin-owned within the marker pair, user-owned outside. The plugin records a SHA256 hash of the injected content in `modules.lifecycle.<stage_id>.target_state_hash`; on the next plugin upgrade, the lifecycle diff detects a generation bump on the M7 stage. If the on-disk block matches the recorded hash, the stage is `applied` (no re-run). If modified, the stage enters `drifted` and this skill re-runs the M7 executor, which prompts you on the three-way choice (replace / merge / leave alone) before writing.
 
 Do not edit anything **between** the markers by hand — your edits will be overwritten by the next auto-update. If you need to customize the routing, edit content **outside** the markers (CLAUDE.md / AGENTS.md are otherwise yours).
 
-**Stub-redirect targets are skipped.** If your `CLAUDE.md` or `AGENTS.md` is a *stub redirect* (≤ 30 lines AND contains a Claude Code `@-include` line of shape `^@<file>.md$`, e.g. `@AGENTS.md`), F-B2 leaves it byte-identical and DOES NOT add a `routing_blocks[]` entry for it in `state.yml`. The other (non-stub) file still receives the routing block and the architect's session lands cleanly via the redirect. You can sanity-check this by `grep -c 'board-superpowers:routing' state.yml` — a stub-redirect setup shows fewer than two markers across the two files (typically one in AGENTS.md only).
+**Stub-redirect targets are skipped.** If your `CLAUDE.md` or `AGENTS.md` is a *stub redirect* (≤ 30 lines AND contains a Claude Code `@-include` line of shape `^@<file>.md$`, e.g. `@AGENTS.md`), the M7 stage leaves it byte-identical and DOES NOT add a routing-block entry for it in the lifecycle state. The other (non-stub) file still receives the routing block and the architect's session lands cleanly via the redirect. You can sanity-check this by `grep -c 'board-superpowers:routing' .board-superpowers/settings.yml` — a stub-redirect setup shows fewer than two markers across the two files (typically one in AGENTS.md only).
 
 ## When to invoke each skill
 
@@ -145,7 +146,7 @@ grep -A1 'board-superpowers:routing' AGENTS.md | head -5
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/check-deps.sh"
 ```
 
-The `check-deps.sh` invocation should exit 0. If it exits 2, the routing block injection failed in some way; if it exits 3, a runtime command (`gh`, `python3`) is missing from PATH.
+The `check-deps.sh` invocation should exit 0. If it exits 2, the lifecycle state indicates pending stages; if it exits 3, a runtime command (`gh`, `python3`) is missing from PATH.
 
 ## What about audit logging
 

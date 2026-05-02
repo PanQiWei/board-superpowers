@@ -94,3 +94,4 @@ Omit if no such notes apply.
 | [0025](./0025-kanban-protocol-as-top-contract.md) | Kanban Protocol as top-level contract; ADR-0005 rescoped to v1 GitHubProjectAdapter projection | accepted |
 | [0026](./0026-multi-kanban-lifecycle-and-flat-card-hierarchy.md) | Multi-kanban support + lifecycle states + flat-Card hierarchy stance | accepted |
 | [0027](./0027-m3-dispatch-via-kanban-protocol-projection.md) | M3 capability dispatch via Kanban Protocol projection (supersedes ADR-0022 § M3; renames ADR-0024 § Part B's M10 stage canonical name) | accepted |
+| [0028](./0028-cron-as-trigger-carrier.md) | Cron as a trigger carrier — external schedulers as a first-class plugin entry mechanism (complement to ADR-0007; closes the J2 `cron-job` Open / TBD in `0005-contracts/09-session-agent-protocol.md`) | accepted |

@@ -1,0 +1,896 @@
+# board-superpowers stage registry — 22 stages.
+#
+# Authoritative reference: docs/architecture/0002-product-features-and-flows/
+# 05-bootstrap-surface.md § "Stages" (the 22-row table). M3 + M10 rows
+# follow ADR-0027 vocabulary (kanban_projection_capability predicate +
+# m10.repo.choose-kanban-projection canonical name) — NOT the pre-#70 wording
+# in the design-doc table itself (Phase 4 cutover updates the design-doc table).
+# M5 set-wip-limit row follows delta D8; M10 row follows delta D9.
+#
+# Validated by: scripts/stages-registry.schema.json (CI gate).
+# Cross-stage dependency / DAG-acyclicity validation lives in
+# scripts/stages_lib/_lifecycle.py (JSON Schema cannot easily express).
+#
+# Per-stage Python helpers live at scripts/stages_lib/<stage_id_slug>.py
+# (slug = stage_id with `.` and `-` replaced by `_`). The 5 callables (per
+# ADR-0014): generation (declarative, in this YAML), executor,
+# idempotency_check, target_state_predicate, compute_target_state.
+
+meta:
+  schema_version: 1
+  description: |
+    v0.5.0 stage registry. 22 stages across 10 modules. Vocabulary anchored to:
+    ADR-0014 (3-artifact contract); ADR-0013 (5-state lifecycle + 3-layer
+    fingerprint); ADR-0023 (5-element config item protocol); ADR-0024 (settings.yml
+    family rename); ADR-0027 (M3 capability dispatch via Kanban Protocol projection +
+    M10 stage canonical name).
+
+stages:
+  # =========================================================================
+  # M1 — plugin runtime infra (3 stages, host-level + repo-level)
+  # =========================================================================
+
+  - stage_id: m1.host.create-state-dir
+    stage_name: host state dir
+    description: >-
+      Create `~/.board-superpowers/` (mode 0700) + `__host__/` sentinel subdir.
+    module: M1
+    character: automated
+    locality: host-shared
+    platforms: both
+    flags: []
+    introduced_in_version: v0.1.0-minimum
+    executor: scripts/bootstrap-host.sh
+    generation: 1
+    depends_on: []
+    target_state_schema:
+      type: object
+      required: [host_state_dir, mode]
+      properties:
+        host_state_dir:
+          type: string
+        mode:
+          type: string
+          pattern: "^[0-7]{4}$"
+        sentinel_subdir:
+          type: string
+    target_state_schema_version: 1
+
+  - stage_id: m1.host.write-manifest
+    stage_name: settings.yml (host-shared)
+    description: >-
+      Atomic write of host-level settings.yml family file at
+      `~/.board-superpowers/settings.yml` (`schema_version`, `last_seen_version`,
+      `uv_version`). Replaces the v0.4.0 `manifest.yml` per ADR-0024 § Part A.
+    module: M1
+    character: automated
+    locality: host-shared
+    platforms: both
+    flags: []
+    introduced_in_version: v0.1.0-minimum
+    executor: scripts/bootstrap-host.sh
+    generation: 1
+    depends_on:
+      - m1.host.create-state-dir
+    target_state_schema:
+      type: object
+      required: [path, schema_version, last_seen_version]
+      properties:
+        path:
+          type: string
+        schema_version:
+          type: integer
+          minimum: 1
+        last_seen_version:
+          type: string
+          pattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+(-[a-zA-Z0-9.-]+)?$"
+        uv_version:
+          type: string
+        host_bootstrapped_at:
+          type: string
+    target_state_schema_version: 1
+    hash_excluded_fields:
+      - host_bootstrapped_at
+
+  - stage_id: m1.repo.write-state-yml
+    stage_name: settings.yml (repo-shared)
+    description: >-
+      Atomic write of per-repo settings.yml family file at
+      `~/.board-superpowers/repos/<repo-identity>/settings.yml`
+      (`schema_version`, `stages_completed[]`, `routing_blocks[]`).
+      Replaces the v0.4.0 `state.yml` per ADR-0024 § Part A.
+    module: M1
+    character: automated
+    locality: repo-shared
+    platforms: both
+    flags: []
+    introduced_in_version: v0.1.0-minimum
+    executor: scripts/bootstrap-project.sh
+    generation: 1
+    depends_on:
+      - m1.host.write-manifest
+    target_state_schema:
+      type: object
+      required: [path, schema_version]
+      properties:
+        path:
+          type: string
+        schema_version:
+          type: integer
+          minimum: 1
+        repo_identity:
+          type: string
+        stages_completed_present:
+          type: boolean
+        routing_blocks_present:
+          type: boolean
+    target_state_schema_version: 1
+
+  # =========================================================================
+  # M2 — uv runtime (3 stages, mixed host + repo)
+  # =========================================================================
+
+  - stage_id: m2.host.install-uv
+    stage_name: uv installer
+    description: >-
+      Detect / install `uv` Python tool host-wide via `astral.sh/uv/install.sh`
+      or PATH probe.
+    module: M2
+    character: automated
+    locality: host-shared
+    platforms: both
+    flags:
+      - heavy
+      - network-required
+    introduced_in_version: v0.3.0
+    executor: scripts/bootstrap-host.sh
+    generation: 1
+    depends_on: []
+    target_state_schema:
+      type: object
+      required: [uv_present, uv_version]
+      properties:
+        uv_present:
+          type: boolean
+        uv_version:
+          type: ["string", "null"]
+          description: "uv version string (e.g., '0.4.18') when present; null when uv is not installed on the host"
+        uv_path:
+          type: ["string", "null"]
+          description: "absolute path to uv binary when present; null when uv is not installed on the host"
+    target_state_schema_version: 1
+
+  - stage_id: m2.repo.copy-uv-templates
+    stage_name: uv templates
+    description: >-
+      Copy plugin's `pyproject.toml` + `uv.lock` from `<plugin>/scripts/templates/`
+      into `<repo>/.board-superpowers/`.
+    module: M2
+    character: automated
+    locality: repo-git
+    platforms: both
+    flags: []
+    introduced_in_version: v0.3.0
+    executor: scripts/bootstrap-project.sh
+    generation: 1
+    depends_on:
+      - m1.repo.write-state-yml
+    target_state_schema:
+      type: object
+      required: [pyproject_path, uv_lock_path]
+      properties:
+        pyproject_path:
+          type: string
+        uv_lock_path:
+          type: string
+        pyproject_sha256:
+          type: string
+        uv_lock_sha256:
+          type: string
+    target_state_schema_version: 1
+
+  - stage_id: m2.repo.sync-venv
+    stage_name: venv sync
+    description: >-
+      Run `uv sync` to materialize `<repo>/.board-superpowers/.venv/` from the
+      copied lock.
+    module: M2
+    character: automated
+    locality: repo-clone
+    platforms: both
+    flags:
+      - heavy
+    introduced_in_version: v0.3.0
+    executor: scripts/bootstrap-project.sh
+    generation: 1
+    depends_on:
+      - m2.host.install-uv
+      - m2.repo.copy-uv-templates
+    target_state_schema:
+      type: object
+      required: [venv_path, uv_lock_hash]
+      properties:
+        venv_path:
+          type: string
+          description: "Absolute path to <repo>/.board-superpowers/.venv/"
+        uv_lock_hash:
+          type: string
+          description: "sha256 hex of the uv.lock used to materialize the venv; idempotency key"
+          pattern: '^[0-9a-f]{64}$'
+    target_state_schema_version: 1
+
+  # =========================================================================
+  # M10 — kanban projection selection (1 stage; runs before M3 so M3's
+  # applicable_when predicate has a projection to consult)
+  # =========================================================================
+
+  - stage_id: m10.repo.choose-kanban-projection
+    stage_name: kanban projection
+    description: >-
+      Prompt architect to choose the kanban projection used in this repo
+      (per ADR-0027 § 4 + ADR-0024 Part B). At v0.5.0 the enum has only
+      `github-project-v2`. Persists to settings.yml § modules.m10_kanban.projection
+      (ADR-0026 v1.0 shorthand flat form — 4-space indented directly under m10_kanban,
+      readable by bsp_resolve_active_projection awk parser). The multi-kanban
+      kanbans-list form is reserved for v0.6.x.
+      Future Linear / Jira projections add enum options carrying
+      `introduced_in_version` per ADR-0023 so additive enum bumps don't
+      gratuitously re-prompt repos that already picked an extant option.
+    module: M10
+    character: agentic
+    locality: repo-git
+    platforms: both
+    flags:
+      - confirm-only
+      - single-choice-currently
+    introduced_in_version: v0.5.0
+    executor: "SKILL: bootstrapping-repo"
+    generation: 1
+    depends_on:
+      - m1.repo.write-state-yml
+    target_state_schema:
+      type: object
+      required: [kanban_projection]
+      properties:
+        kanban_projection:
+          type: string
+          enum:
+            - github-project-v2
+        project_ref:
+          type: string
+          description: "owner/<project-number> reference (per-projection-specific identity)."
+    target_state_schema_version: 1
+    default_value: github-project-v2
+    validation_kind: single-choice
+    interactive_prompt:
+      kind: single-choice
+      prompt: >-
+        Choose the kanban projection used in this repo: [github-project-v2] (default).
+        Future v1.x ships add Linear / Jira / others.
+      options_source: computed-from-schema-enum
+    re_prompt_trigger: >-
+      Per ADR-0013 lifecycle (generation bump) + ADR-0023 enum-bump rule
+      (new option added with introduced_in_version).
+    module_section_path: modules.m10_kanban
+
+  # =========================================================================
+  # M3 — board provisioning (2 stages; both gated by ADR-0027 § 2 predicate
+  # `kanban_projection_capability` against the active projection's reference
+  # file `skills/operating-kanban/references/<projection-id>.md`
+  # § "Setup capabilities". v0.5.0 github-project-v2 declares both: see
+  # skills/operating-kanban/references/github-project-v2.md.)
+  # =========================================================================
+
+  - stage_id: m3.repo.ensure-labels
+    stage_name: standard labels
+    description: >-
+      Ensure the canonical board-superpowers label set exists on the repo
+      backing the active kanban projection. Stage executor reads
+      `skills/operating-kanban/references/<projection-id>.md § "Setup
+      capabilities" § ensure-labels` and dispatches per Form A bash CLI /
+      Form B MCP / Form C REST (per ADR-0027 § 3). v0.5.0
+      github-project-v2 dispatches to `scripts/setup-labels.sh`.
+    module: M3
+    character: automated
+    locality: external
+    platforms: both
+    flags: []
+    introduced_in_version: v0.1.0-minimum
+    executor: scripts/setup-labels.sh
+    generation: 1
+    depends_on:
+      - m10.repo.choose-kanban-projection
+    target_state_schema:
+      type: object
+      required: [canonical_labels_present]
+      properties:
+        canonical_labels_present:
+          type: boolean
+        labels_canon:
+          type: array
+          items:
+            type: object
+            required: [name, color]
+            properties:
+              name: { type: string }
+              color: { type: string }
+              description: { type: string }
+        last_validated_at:
+          type: string
+    target_state_schema_version: 1
+    external_ttl_seconds: 86400
+    hash_excluded_fields:
+      - last_validated_at
+    applicable_when:
+      kanban_projection_capability: ensure-labels
+
+  - stage_id: m3.repo.validate-status-field
+    stage_name: status field validation
+    description: >-
+      Validate the active kanban projection's Status field schema against
+      the canonical 6-state set. Stage executor reads
+      `skills/operating-kanban/references/<projection-id>.md § "Setup
+      capabilities" § validate-status-field` and dispatches per
+      ADR-0027 § 3. Read-path is automated (exit 0 = canonical-already-present,
+      silent success); on missing-canonical-option (exit 2) the stage elicits
+      architect resolution (add the missing options in the projection UI, or
+      accept custom-state folding). `canonical-already-present` is the
+      non-interactive success state — the interactive_prompt fires only on
+      exit 2.
+    module: M3
+    character: agentic
+    locality: external
+    platforms: both
+    flags:
+      - confirm-only
+      - agentic-on-failure
+    introduced_in_version: v0.1.0-minimum
+    executor: "SKILL: bootstrapping-repo (failure path) / scripts/stages_lib/m3_repo_validate_status_field.py (read path)"
+    generation: 1
+    depends_on:
+      - m10.repo.choose-kanban-projection
+    target_state_schema:
+      type: object
+      required: [status_options_canonical_present]
+      properties:
+        status_options_canonical_present:
+          type: boolean
+        canonical_status_options:
+          type: array
+          items:
+            type: string
+            enum:
+              - Backlog
+              - Ready
+              - In Progress
+              - In Review
+              - Done
+              - Blocked
+        custom_options_present:
+          type: array
+          items:
+            type: string
+        resolution:
+          type: string
+          enum:
+            - canonical-already-present
+            - architect-added-missing
+            - architect-accepted-custom-state-folding
+        last_validated_at:
+          type: string
+    target_state_schema_version: 1
+    external_ttl_seconds: 86400
+    hash_excluded_fields:
+      - last_validated_at
+    default_value: canonical-already-present
+    validation_kind: single-choice
+    interactive_prompt:
+      kind: single-choice
+      prompt: >-
+        The kanban projection's Status field is missing one or more canonical
+        options (Backlog / Ready / In Progress / In Review / Done / Blocked).
+        Choose your resolution:
+      options_source: literal
+      options:
+        - value: architect-added-missing
+          label: "I added the missing options in the projection UI — re-validate now"
+          description: "Select after manually adding the missing Status options in the GitHub Project settings. The stage will re-check the projection's live Status field."
+        - value: architect-accepted-custom-state-folding
+          label: "Accept custom-state folding (extra options fold to Backlog at runtime)"
+          description: "Extra Status options beyond the canonical 6-state set will be treated as Backlog by the board-superpowers runtime. The canonical options are still required."
+    re_prompt_trigger: >-
+      Per ADR-0013 lifecycle. external_ttl_seconds expiry re-validates the
+      projection's live Status field; if a canonical option is removed (or
+      the projection is migrated to a backend with a different status schema)
+      the stage re-elicits.
+    applicable_when:
+      kanban_projection_capability: validate-status-field
+
+  # =========================================================================
+  # M4 — audit (4 stages, mostly external)
+  # =========================================================================
+
+  - stage_id: m4.repo.acquire-dsn
+    stage_name: audit DSN
+    description: >-
+      Acquire BYO RDBMS DSN; write per-repo `credentials.yml` (chmod 0600).
+      Auto-applies SQLite zero-config default on first bootstrap per
+      ADR-0019; architect override via env-var DSN or manual `credentials.yml`
+      edit. Per ADR-0015 (M4 audit per-repo locality) and ADR-0009 (6 DSN
+      schemes).
+    module: M4
+    character: automated
+    locality: repo-shared
+    platforms: both
+    flags: []
+    introduced_in_version: v0.3.0
+    executor: "SKILL: bootstrapping-repo / scripts/bootstrap-project.sh"
+    generation: 1
+    depends_on:
+      - m1.repo.write-state-yml
+    target_state_schema:
+      type: object
+      required: [dsn_scheme]
+      properties:
+        dsn_scheme:
+          type: string
+          enum:
+            - postgresql
+            - postgres
+            - mysql
+            - mysql+pymysql
+            - sqlite
+            - sqlite3
+        credentials_path:
+          type: string
+        credentials_mode:
+          type: string
+          pattern: "^[0-7]{4}$"
+    target_state_schema_version: 1
+    re_prompt_trigger: >-
+      Per ADR-0013 lifecycle (generation bump). Architect can force
+      re-acquire by deleting `credentials.yml` (file-presence-driven
+      re-evaluation via lifecycle stale).
+    module_section_path: modules.m4_audit
+
+  - stage_id: m4.repo.apply-audit-ddl
+    stage_name: audit DDL
+    description: >-
+      Apply audit-log DDL to the resolved DB (3-dialect dispatch via
+      `audit-init.sh` — sqlite / postgres / mysql per ADR-0009).
+    module: M4
+    character: automated
+    locality: external
+    platforms: both
+    flags: []
+    introduced_in_version: v0.3.0
+    executor: scripts/audit-init.sh
+    generation: 1
+    depends_on:
+      - m4.repo.acquire-dsn
+    target_state_schema:
+      type: object
+      required: [audit_log, audit_outbox, audit_schema_meta]
+      properties:
+        audit_log:
+          type: object
+          required: [schema_version, columns_required, indexes_required]
+          properties:
+            schema_version: { type: integer, minimum: 1 }
+            columns_required:
+              type: array
+              items: { type: string }
+            indexes_required:
+              type: array
+              items: { type: string }
+        audit_outbox:
+          type: object
+          required: [columns_required]
+          properties:
+            columns_required:
+              type: array
+              items: { type: string }
+        audit_schema_meta:
+          type: object
+          required: [columns_required]
+          properties:
+            columns_required:
+              type: array
+              items: { type: string }
+        last_validated_at:
+          type: string
+    target_state_schema_version: 1
+    external_ttl_seconds: 86400
+    hash_excluded_fields:
+      - last_validated_at
+
+  - stage_id: m4.repo.flush-pending-audit
+    stage_name: audit flush
+    description: >-
+      Replay `mode=bootstrap-pending` rows from jsonl into DB (idempotent via
+      UNIQUE event_uuid).
+    module: M4
+    character: automated
+    locality: external
+    platforms: both
+    flags: []
+    introduced_in_version: v0.3.0
+    executor: scripts/audit-flush-pending.sh
+    generation: 1
+    depends_on:
+      - m4.repo.apply-audit-ddl
+    target_state_schema:
+      type: object
+      required: [pending_replayed]
+      properties:
+        pending_replayed:
+          type: boolean
+        rows_inserted:
+          type: integer
+          minimum: 0
+        rows_skipped_duplicate:
+          type: integer
+          minimum: 0
+        last_run_id:
+          type: string
+        last_validated_at:
+          type: string
+    target_state_schema_version: 1
+    external_ttl_seconds: 86400
+    hash_excluded_fields:
+      - last_validated_at
+      - last_run_id
+      - rows_inserted
+      - rows_skipped_duplicate
+
+  - stage_id: m4.repo.audit-health-check
+    stage_name: audit health
+    description: >-
+      Print stderr summary of audit-row landing count vs jsonl pending count.
+    module: M4
+    character: automated
+    locality: repo-shared
+    platforms: both
+    flags: []
+    introduced_in_version: v0.3.0
+    executor: scripts/bootstrap-project.sh
+    generation: 1
+    depends_on:
+      - m4.repo.flush-pending-audit
+    target_state_schema:
+      type: object
+      required: [health_summary_emitted]
+      properties:
+        health_summary_emitted:
+          type: boolean
+        db_row_count:
+          type: integer
+          minimum: 0
+        jsonl_pending_count:
+          type: integer
+          minimum: 0
+        last_validated_at:
+          type: string
+    target_state_schema_version: 1
+    hash_excluded_fields:
+      - last_validated_at
+      - db_row_count
+      - jsonl_pending_count
+
+  # =========================================================================
+  # M5 — repo configuration (3 stages; set-wip-limit per delta D8 spec)
+  # =========================================================================
+
+  - stage_id: m5.repo.write-config-yml
+    stage_name: settings.yml (repo-git)
+    description: >-
+      Write `<repo>/.board-superpowers/settings.yml` with project default knobs
+      (committed to git). Replaces v0.4.0 `config.yml` per ADR-0024 § Part A.
+    module: M5
+    character: automated
+    locality: repo-git
+    platforms: both
+    flags: []
+    introduced_in_version: v0.1.0-minimum
+    executor: scripts/bootstrap-project.sh
+    generation: 1
+    depends_on: []
+    target_state_schema:
+      type: object
+      required: [path, schema_version]
+      properties:
+        path:
+          type: string
+        schema_version:
+          type: integer
+          minimum: 1
+        defaults_present:
+          type: boolean
+    target_state_schema_version: 1
+
+  - stage_id: m5.repo.write-config-local-yml
+    stage_name: settings.local.yml (repo-clone)
+    description: >-
+      Write `<repo>/.board-superpowers/settings.local.yml` with per-architect
+      knobs (gitignored). Replaces v0.4.0 `config.local.yml` per ADR-0024
+      § Part A.
+    module: M5
+    character: automated
+    locality: repo-clone
+    platforms: both
+    flags: []
+    introduced_in_version: v0.1.0-minimum
+    executor: scripts/bootstrap-project.sh
+    generation: 1
+    depends_on: []
+    target_state_schema:
+      type: object
+      required: [path, schema_version]
+      properties:
+        path:
+          type: string
+        schema_version:
+          type: integer
+          minimum: 1
+    target_state_schema_version: 1
+
+  - stage_id: m5.repo.set-wip-limit
+    stage_name: wip limit
+    description: >-
+      Prompt architect for `wip_limit` (concurrent active Consumer cap) per
+      repo; default 5; persist into
+      `settings.local.yml § modules.m5_repo_configuration.wip_limit`.
+      Architect may accept default to advance. Per ADR-0024 § Part B + delta D8.
+    module: M5
+    character: agentic
+    locality: repo-clone
+    platforms: both
+    flags:
+      - confirm-only
+    introduced_in_version: v0.5.0
+    executor: "SKILL: bootstrapping-repo"
+    generation: 1
+    depends_on: []
+    target_state_schema:
+      type: object
+      required: [wip_limit]
+      properties:
+        wip_limit:
+          type: integer
+          minimum: 1
+          maximum: 20
+    target_state_schema_version: 1
+    default_value: 5
+    validation_kind: numeric-range
+    interactive_prompt:
+      kind: numeric-range
+      prompt: >-
+        Set the WIP limit (concurrent active Consumer cap) for this repo.
+        Default: 5. Range: 1..20.
+      min: 1
+      max: 20
+    re_prompt_trigger: >-
+      Per ADR-0013 lifecycle (generation bump or schema_version bump);
+      architect may force re-prompt via `scripts/bsp-stage-rerun.sh
+      m5.repo.set-wip-limit`.
+    module_section_path: modules.m5_repo_configuration
+
+  # =========================================================================
+  # M6 — gitignore entries (1 stage; the Phase 2 walking-skeleton stage)
+  # =========================================================================
+
+  - stage_id: m6.repo.append-gitignore
+    stage_name: gitignore entries
+    description: >-
+      Append three protective entries (`*.local.*`, `claims/`, `.venv/`) to
+      `<repo>/.gitignore` (idempotent).
+    module: M6
+    character: automated
+    locality: repo-git
+    platforms: both
+    flags: []
+    introduced_in_version: v0.1.0-minimum
+    executor: scripts/bootstrap-project.sh
+    generation: 1
+    depends_on: []
+    target_state_schema:
+      type: object
+      required: [required_entries]
+      properties:
+        required_entries:
+          type: array
+          items:
+            type: string
+          minItems: 1
+    target_state_schema_version: 1
+
+  # =========================================================================
+  # M7 — agent routing (3 stages: detect + 2 inject-block per ADR-0018)
+  # =========================================================================
+
+  - stage_id: m7.repo.detect-agentsmd-form
+    stage_name: agentsmd form
+    description: >-
+      Detect repo's routing-target form (`cc-only` / `codex-only` / `dual` /
+      `neither`) by scanning AGENTS.md + CLAUDE.md presence; cache result in
+      repo-shared settings.yml.
+    module: M7
+    character: automated
+    locality: repo-shared
+    platforms: both
+    flags: []
+    introduced_in_version: v0.5.0
+    executor: scripts/bootstrap-project.sh
+    generation: 1
+    depends_on:
+      - m1.repo.write-state-yml
+    target_state_schema:
+      type: object
+      required: [form]
+      properties:
+        form:
+          type: string
+          enum:
+            - cc-only
+            - codex-only
+            - dual
+            - neither
+        agentsmd_present:
+          type: boolean
+        claudemd_present:
+          type: boolean
+    target_state_schema_version: 1
+
+  - stage_id: m7.repo.inject-block.routing-rule
+    stage_name: routing-rule block
+    description: >-
+      Inject `routing-rule` required block (skill-routing trigger) into target
+      file(s) per detected form; check 4 KiB single-block size cap; honor 32 KiB
+      total Codex AGENTS.md budget. Per ADR-0018 multi-stage routing-block
+      protocol.
+    module: M7
+    character: automated
+    locality: repo-git
+    platforms: both
+    flags:
+      - block-size-capped
+    introduced_in_version: v0.5.0
+    executor: scripts/bootstrap-project.sh
+    generation: 1
+    depends_on:
+      - m7.repo.detect-agentsmd-form
+    target_state_schema:
+      type: object
+      required: [block_name, block_present_in_targets]
+      properties:
+        block_name:
+          type: string
+          enum:
+            - routing-rule
+        block_present_in_targets:
+          type: array
+          items:
+            type: string
+        block_bytes:
+          type: integer
+          minimum: 0
+    target_state_schema_version: 1
+    kind: required
+    block_max_bytes: 4096
+
+  - stage_id: m7.repo.inject-block.skill-routing
+    stage_name: skill-routing block
+    description: >-
+      Inject `skill-routing` required block (Manager / Consumer dispatch rules)
+      into target file(s) per detected form. Per ADR-0018 multi-stage
+      routing-block protocol.
+    module: M7
+    character: automated
+    locality: repo-git
+    platforms: both
+    flags:
+      - block-size-capped
+    introduced_in_version: v0.5.0
+    executor: scripts/bootstrap-project.sh
+    generation: 1
+    depends_on:
+      - m7.repo.detect-agentsmd-form
+    target_state_schema:
+      type: object
+      required: [block_name, block_present_in_targets]
+      properties:
+        block_name:
+          type: string
+          enum:
+            - skill-routing
+        block_present_in_targets:
+          type: array
+          items:
+            type: string
+        block_bytes:
+          type: integer
+          minimum: 0
+    target_state_schema_version: 1
+    kind: required
+    block_max_bytes: 4096
+
+  # =========================================================================
+  # M8 — autonomy presets (1 stage; agentic, host-shared)
+  # =========================================================================
+
+  - stage_id: m8.host.bootstrap-overrides-yml
+    stage_name: autonomy overrides
+    description: >-
+      Prompt architect with curated autonomy-override presets; persist selected
+      subset into the host-shared settings.yml under `modules.m8_autonomy`
+      (per ADR-0024 § Part A — `overrides.yml` folded into host-shared
+      settings.yml). Empty selection is a valid completed state.
+    module: M8
+    character: agentic
+    locality: host-shared
+    platforms: both
+    flags:
+      - confirm-only
+    introduced_in_version: v0.5.0
+    executor: "SKILL: bootstrapping-repo"
+    generation: 1
+    depends_on:
+      - m1.host.write-manifest
+    target_state_schema:
+      type: object
+      required: [presets_selected]
+      properties:
+        presets_selected:
+          type: array
+          items:
+            type: string
+        presets_canon_known:
+          type: array
+          items:
+            type: string
+    target_state_schema_version: 1
+    default_value: []
+    validation_kind: multi-choice
+    interactive_prompt:
+      kind: multi-choice
+      prompt: >-
+        Select autonomy-override presets to apply to this host. Empty selection
+        is valid (no host-level overrides). Per ADR-0006 + ADR-0023.
+      options_source: runtime-derived
+    re_prompt_trigger: >-
+      Per ADR-0013 lifecycle (generation bump when presets catalog changes
+      across plugin upgrades).
+    module_section_path: modules.m8_autonomy
+
+  # =========================================================================
+  # M9 — hook registration (1 stage; codex-only — CC auto-discovers)
+  # =========================================================================
+
+  - stage_id: m9.host.register-codex-hooks
+    stage_name: codex hook registration
+    description: >-
+      Register `~/.codex/config.toml` `[hooks]` table to wire `SessionStart` to
+      `hooks/session-start.sh`. CC auto-discovers `hooks/hooks.json` so this
+      stage is codex-only.
+    module: M9
+    character: automated
+    locality: host-shared
+    platforms: codex-only
+    flags:
+      - platform-specific
+    introduced_in_version: v0.5.0
+    executor: scripts/register-codex-hooks.sh
+    generation: 1
+    depends_on:
+      - m1.host.write-manifest
+    target_state_schema:
+      type: object
+      required: [registered]
+      properties:
+        registered:
+          type: boolean
+        config_toml_path:
+          type: string
+        hook_target:
+          type: string
+    target_state_schema_version: 1

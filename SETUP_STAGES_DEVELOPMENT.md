@@ -31,14 +31,15 @@
 8. [`applicable_when` — when to use vs alternatives](#8-applicable_when--when-to-use-vs-alternatives)
 9. [`platforms` — when something genuinely differs across CC and Codex](#9-platforms--when-something-genuinely-differs-across-cc-and-codex)
 10. [Settings layering — where `target_state` lands](#10-settings-layering--where-target_state-lands)
-11. [BoardAdapter capability dispatch — M3-conditioning](#11-boardadapter-capability-dispatch--m3-conditioning)
+11. [Kanban projection capability dispatch — M3-conditioning](#11-kanban-projection-capability-dispatch--m3-conditioning)
 12. [Cross-version evolution — `generation` bumps & `schema_version`](#12-cross-version-evolution--generation-bumps--schema_version)
 13. [The canonicalization invariant — agent footguns](#13-the-canonicalization-invariant--agent-footguns)
-14. [Recipe — adding a new stage end-to-end](#14-recipe--adding-a-new-stage-end-to-end)
-15. [Testing — what CI gates and what you must hand-test](#15-testing--what-ci-gates-and-what-you-must-hand-test)
-16. [Anti-patterns](#16-anti-patterns)
-17. [Failure-mode philosophy — graceful degradation](#17-failure-mode-philosophy--graceful-degradation)
-18. [Cross-cutting reading map](#18-cross-cutting-reading-map)
+14. [Lifecycle invariant — append-merge-only](#14-lifecycle-invariant--append-merge-only)
+15. [Recipe — adding a new stage end-to-end](#15-recipe--adding-a-new-stage-end-to-end)
+16. [Testing — what CI gates and what you must hand-test](#16-testing--what-ci-gates-and-what-you-must-hand-test)
+17. [Anti-patterns](#17-anti-patterns)
+18. [Failure-mode philosophy — graceful degradation](#18-failure-mode-philosophy--graceful-degradation)
+19. [Cross-cutting reading map](#19-cross-cutting-reading-map)
 
 ---
 
@@ -51,7 +52,7 @@ cover three independent runtime concerns:
 - **First-time setup** — the original "bootstrap" use case.
 - **Plugin-upgrade reconvergence** — when the registry's
   `generation` bumps or new stages are added in plugin v(N+1),
-  existing repos see those stages as `never-run` / `stale` and
+  existing repos see those stages as `pending` / `drifted` and
   the same machinery brings them current. Replaces the deferred
   `migrating-repo-version` SKILL ([ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md)).
 - **Agentic config-item elicitation (the settings UX)** —
@@ -80,18 +81,18 @@ guide.
 
 | Fact | Canonical home |
 |------|----------------|
-| Three axes (module / character / locality) — definitions | [`05-bootstrap-surface-redesign.md` § "The three axes"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#the-three-axes) |
-| Stages table (the 22-row registry view) | [§ "Stages"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#stages) |
-| Trigger model — hook flow + SKILL flow + hook–SKILL contract | [§ "Trigger model"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#trigger-model) + [ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md) |
-| 5-state lifecycle + three-layer fingerprint | [§ "Stage lifecycle states"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#stage-lifecycle-states) + [ADR-0013](./docs/architecture/adr/0013-declarative-state-schema-and-lifecycle.md) + [ADR-0020](./docs/architecture/adr/0020-stage-applicability-and-not-applicable-state.md) |
-| Stage registry contract (YAML + Python + JSON Schema) | [§ "Stage registry contract"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#stage-registry-contract) + [ADR-0014](./docs/architecture/adr/0014-stage-registry-contract.md) |
-| Per-stage entry shape (what gets persisted) | [§ "Per-stage entry shape"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#per-stage-entry-shape) |
-| Settings modular layering (4 files + `modules.<id>` + per-module `schema_version`) | [§ "Settings modular layering"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#settings-modular-layering-in-file-structure) + [ADR-0021](./docs/architecture/adr/0021-settings-modular-layering.md) |
+| Three axes (module / character / locality) — definitions | [`05-bootstrap-surface.md` § "The three axes"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#the-three-axes) |
+| Stages table (the 22-row registry view) | [§ "Stages"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#stages) |
+| Trigger model — hook flow + SKILL flow + hook–SKILL contract | [§ "Trigger model"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#trigger-model) + [ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md) |
+| 6-state lifecycle + three-layer fingerprint | [§ "Stage lifecycle states"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#stage-lifecycle-states) + [ADR-0013](./docs/architecture/adr/0013-declarative-state-schema-and-lifecycle.md) + [ADR-0020](./docs/architecture/adr/0020-stage-applicability-and-not-applicable-state.md) |
+| Stage registry contract (YAML + Python + JSON Schema) | [§ "Stage registry contract"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#stage-registry-contract) + [ADR-0014](./docs/architecture/adr/0014-stage-registry-contract.md) |
+| Per-stage entry shape (what gets persisted) | [§ "Per-stage entry shape"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#per-stage-entry-shape) |
+| Settings modular layering (4 files + `modules.<id>` + per-module `schema_version`) | [§ "Settings modular layering"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#settings-modular-layering-in-file-structure) + [ADR-0021](./docs/architecture/adr/0021-settings-modular-layering.md) |
 | `applicable_when` predicate forms (3 of them) | [ADR-0020](./docs/architecture/adr/0020-stage-applicability-and-not-applicable-state.md) § Decision |
 | `platforms` field semantics | [ADR-0016](./docs/architecture/adr/0016-cross-platform-parity-contract.md) |
-| Architect UX flow + 5-element config item protocol | [§ "Architect UX"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#architect-ux) + [ADR-0023](./docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md) |
-| Repo identity scheme + I-13 cross-clone state sharing | [§ "Repo identity"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#repo-identity) + [ADR-0017](./docs/architecture/adr/0017-i13-invariant-revision-cross-clone-state-sharing.md) |
-| BoardAdapter capability dispatch (M3) + M10 backend selection | [ADR-0022](./docs/architecture/adr/0022-boardadapter-capability-dispatch.md) |
+| Architect UX flow + 5-element config item protocol | [§ "Architect UX"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#architect-ux) + [ADR-0023](./docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md) |
+| Repo identity scheme + I-13 cross-clone state sharing | [§ "Repo identity"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#repo-identity) + [ADR-0017](./docs/architecture/adr/0017-i13-invariant-revision-cross-clone-state-sharing.md) |
+| Kanban projection capability dispatch (M3) + M10 projection selection | [ADR-0027](./docs/architecture/adr/0027-m3-dispatch-via-kanban-protocol-projection.md) |
 | M7 multi-stage AGENTS.md / CLAUDE.md routing-block protocol | [ADR-0018](./docs/architecture/adr/0018-m7-multi-stage-routing-block-protocol.md) |
 | Zero-config SQLite default audit backend | [ADR-0019](./docs/architecture/adr/0019-zero-config-sqlite-default-audit-backend.md) + [ADR-0009](./docs/architecture/adr/0009-allow-sqlite-as-byo-audit-db.md) |
 | M4 audit per-repo locality (replaces host-shared credentials) | [ADR-0015](./docs/architecture/adr/0015-m4-audit-per-repo-locality.md) |
@@ -112,7 +113,7 @@ seconds.
                                          │ reads partitioned settings,
                                          │ runs lifecycle diff,
                                          │ emits INVOKE marker if
-                                         │ any stage is never-run / stale
+                                         │ any stage is pending / drifted
                                          ▼
                                ┌────────────────────────┐
                                │ bootstrapping-repo SKILL│
@@ -145,10 +146,11 @@ identify a stage. Two stages with the same `(module, character,
 locality)` triple may not coexist; that uniqueness is the
 identity invariant the registry's JSON Schema enforces.
 
-The **5-state lifecycle** (`never-run`, `completed`, `stale`,
-`deprecated`, `not-applicable`) is computed by the hook from
-the partitioned settings + the registry; the SKILL never
-guesses, it only consumes the lifecycle output.
+The **6-state lifecycle** (`pending`, `applied`, `drifted`,
+`deprecated`, `not-applicable`, `failed`/`blocked` as
+transients) is computed by the hook from the partitioned
+settings + the registry; the SKILL never guesses, it only
+consumes the lifecycle output.
 
 If you internalize one diagram, internalize the one above.
 Everything else in this guide elaborates on a piece of it.
@@ -221,7 +223,7 @@ has to wade through on every plugin upgrade.
 ### Module (functional axis)
 
 The 10 modules (M1–M10) are listed in [§ "Axis C — Functional
-module"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#axis-c--functional-module).
+module"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#axis-c--functional-module).
 Common misclassifications:
 
 - **"Audit DDL apply" feels like M1 plugin-runtime infra**
@@ -296,7 +298,7 @@ host-specific or architect-specific, it is `repo-clone` or
 
 Five required Python callables per stage in
 `scripts/stages_lib/<stage_id>.py`. Signatures and intent:
-[§ "What the lifecycle model asks of each stage"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#what-the-lifecycle-model-asks-of-each-stage).
+[§ "What the lifecycle model asks of each stage"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#what-the-lifecycle-model-asks-of-each-stage).
 
 The contract itself is in the spec; what follows is the
 judgment the spec doesn't encode.
@@ -339,18 +341,18 @@ caching at the lifecycle level, not inside the predicate).
 Trap: making `compute_target_state` non-deterministic (e.g.,
 including `datetime.now()` or random IDs). The output is
 fed to `_canonical.py` for the layer-2 hash; non-determinism
-makes the hash flap and every stage permanently `stale`.
+makes the hash flap and every stage permanently `drifted`.
 
 If you genuinely need a per-run-derived value (timestamps,
 correlation IDs), put it in `hash_excluded_fields`
-([§ "Hash-allowlist"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#hash-allowlist-fields-excluded-from-hash)).
+([§ "Hash-allowlist"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#hash-allowlist-fields-excluded-from-hash)).
 
 ### `generation` int — declared in YAML, not Python
 
 Trap: forgetting to bump `generation` after editing
 `compute_target_state` or `target_state_schema`. Without the
 bump, the layer-1 fast-path keeps short-circuiting to
-`completed` even though the expected target shape changed —
+`applied` even though the expected target shape changed —
 existing repos miss the migration silently.
 
 **Rule**: every PR that edits the per-stage Python module's
@@ -367,10 +369,10 @@ Agentic stages are the plugin's settings UX. The
 is mandatory for every agentic stage:
 
 1. **Schema declaration** (`target_state_schema`)
-2. **Detection** (lifecycle 5-state — see § 12)
+2. **Detection** (lifecycle 6-state — see § 12)
 3. **Interaction** (`interactive_prompt` registry field)
 4. **Persistence** (`locality` chooses the settings file)
-5. **Re-prompt trigger** (lifecycle transition to `stale`)
+5. **Re-prompt trigger** (lifecycle transition to `drifted`)
 
 See [ADR-0023](./docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md)
 for full details.
@@ -403,7 +405,7 @@ requirement before extending the protocol.
 ### Judgment: when "no choice made" is a valid `target_state`
 
 If the schema permits empty list / null / "no presets selected"
-as a valid value, an empty result is `completed`, not `skipped`.
+as a valid value, an empty result is `applied`, not `skipped`.
 There is no "skip" lifecycle state. See
 [ADR-0023 § "Skip semantics are eliminated"](./docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md).
 
@@ -418,13 +420,15 @@ Three legal forms (per [ADR-0020](./docs/architecture/adr/0020-stage-applicabili
 
 ```yaml
 # Form 1: setting-path (preferred for declarative conditionals)
+# Supports both `equals` (exact match) and `one_of` (list match).
 applicable_when:
-  setting_path: m10.repo.choose-kanban-backend.target_state.backend
-  equals: github-project-v2
+  setting_path: modules.m10_kanban.target_state.kanban_projection
+  one_of: [github-project-v2, linear]
 
-# Form 2: board-capability (for M3-style capability dispatch)
+# Form 2: kanban-projection-capability (for M3-style capability dispatch)
+# Uses the active kanban projection's declared capability set (ADR-0027).
 applicable_when:
-  board_capability: pull_request_aggregate
+  kanban_projection_capability: pull_request_aggregate
 
 # Form 3: Python escape hatch (last resort)
 applicable_when:
@@ -435,8 +439,8 @@ applicable_when:
 
 | Situation | Use |
 |-----------|-----|
-| "Run this stage only if the architect chose X in stage Y" | Form 1 (setting-path). Cheapest, declarative. |
-| "Run this stage only if the chosen board adapter supports capability Z" | Form 2 (board-capability). Maps cleanly to ADR-0022 capability dispatch. |
+| "Run this stage only if the architect chose X in stage Y" | Form 1 (setting-path). Cheapest, declarative. Use `equals` for a single value match, `one_of` for a list of permitted values. |
+| "Run this stage only if the active kanban projection declares capability Z" | Form 2 (kanban-projection-capability). Reads the active projection's reference file under `skills/operating-kanban/references/<projection>.md § 'Setup capabilities'`. Maps cleanly to ADR-0027 M3-dispatch. |
 | "Run this stage based on logic Forms 1+2 cannot express" | Form 3 (python). **Last resort.** Every Form-3 use accumulates registry-side complexity. Document why Forms 1+2 don't suffice in the per-stage Python module. |
 | "Run this stage on Codex but not CC" | NOT `applicable_when` — that's the `platforms` field (see § 9). The two compose; `platforms` filters first, `applicable_when` filters second. |
 
@@ -503,8 +507,10 @@ Per [ADR-0021](./docs/architecture/adr/0021-settings-modular-layering.md):
   (host-shared, repo-shared, repo-clone; external is observed
   not stored).
 - **Two-section split per file**:
-  - `stages_completed[]` — machine-readable, authoritative
-    (the lifecycle reads this).
+  - `modules.lifecycle.<stage_id>` — machine-readable,
+    authoritative lifecycle store (ADR-0013; the lifecycle
+    reads this). Supersedes the earlier `stages_completed[]`
+    flat-list design from the ADR-0021 v1-draft.
   - `modules.<id>` — architect-friendly projection (read-only
     derived view, written by the SKILL on every successful
     stage completion).
@@ -538,7 +544,7 @@ Each module owns its own `schema_version`. When you bump it:
 1. Implement the migration *inside* the stage's
    `compute_target_state` (read old shape, transform to new).
 2. Bump the stage's `generation` (so existing repos see
-   `stale`).
+   `drifted`).
 3. The next hook tick → SKILL runs the stage → executor
    writes the new shape → `schema_version` bumps in the
    settings file.
@@ -549,32 +555,31 @@ yourself reaching for a central runner, you're probably trying
 to coordinate cross-module changes — push them through
 multiple stages with `depends_on` instead.
 
-## 11. BoardAdapter capability dispatch — M3-conditioning
+## 11. Kanban projection capability dispatch — M3-conditioning
 
-[ADR-0022](./docs/architecture/adr/0022-boardadapter-capability-dispatch.md)
-defines:
+[ADR-0027](./docs/architecture/adr/0027-m3-dispatch-via-kanban-protocol-projection.md)
+defines the current M3-dispatch model (supersedes ADR-0022 BoardAdapter dispatch):
 
-- **M10 BoardAdapter selection** — agentic stage
-  `m10.repo.choose-kanban-backend` elicits which adapter the
+- **M10 kanban projection selection** — agentic stage
+  `m10.repo.choose-kanban-projection` elicits which kanban projection the
   repo uses.
 - **M3 stages declare capability dependencies** — e.g.,
   `m3.repo.label-card-status` declares
-  `applicable_when: board_capability: card_status_label`.
-  Adapters declare which capabilities they support.
+  `applicable_when: kanban_projection_capability: card_status_label`.
+  Projections declare which capabilities they support in their reference file
+  under `skills/operating-kanban/references/<projection-id>.md § 'Setup capabilities'`.
 
 ### Judgment: adding a new capability
 
 When adding a new M3 stage:
 
 1. Decide which capability it requires.
-2. Check whether existing adapters declare that capability.
-   If only some do, the stage gets `not-applicable` for repos
-   using non-supporting adapters — verify that's the
-   intended UX.
-3. If the capability is brand-new, add it to the canonical
-   capability list in [ADR-0022](./docs/architecture/adr/0022-boardadapter-capability-dispatch.md)
-   and update every adapter's declared capability set in the
-   same PR.
+2. Check whether existing projections declare that capability in their
+   reference files. If only some do, the stage gets `not-applicable` for repos
+   using non-supporting projections — verify that's the intended UX.
+3. If the capability is brand-new, add it to the supporting projection's
+   reference file under `skills/operating-kanban/references/<projection-id>.md`
+   and update the stage's `applicable_when` in the registry in the same PR.
 
 ### When you should NOT use capability dispatch
 
@@ -605,7 +610,7 @@ What you need to know operationally:
 Until v1 GA, **breaking changes are accepted without
 in-place migration**. If you're tempted to write a v0.x → v0.y
 migration helper, stop — the policy is to delete legacy state
-and re-bootstrap. See [§ "Open design choices > Decided"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#decided-by-this-draft).
+and re-bootstrap. See [§ "Open design choices > Decided"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#decided-by-this-draft).
 
 After v1 GA this changes — backward compatibility becomes
 load-bearing. Plan the v1 GA cutover deliberately.
@@ -613,7 +618,7 @@ load-bearing. Plan the v1 GA cutover deliberately.
 ## 13. The canonicalization invariant — agent footguns
 
 The five canonicalization steps are in
-[§ "Canonicalization invariant for hash stability"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#canonicalization-invariant-for-hash-stability).
+[§ "Canonicalization invariant for hash stability"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#canonicalization-invariant-for-hash-stability).
 
 Footguns specific to agents writing stage code:
 
@@ -622,7 +627,7 @@ Footguns specific to agents writing stage code:
   drift across pyyaml versions. Always use the shared helper.
 - **Inserting timestamps / correlation IDs into
   `target_state`** without listing them in
-  `hash_excluded_fields`. Hash flap → permanent `stale`.
+  `hash_excluded_fields`. Hash flap → permanent `drifted`.
 - **Writing `target_state` keys in non-deterministic order**.
   The canonicalizer sorts, so this *should* be safe, but if you
   bypass the canonicalizer for any reason (custom emit path,
@@ -639,7 +644,84 @@ breaks, write a CI round-trip test that demonstrates the break
 before patching. We've been burned by "well-intentioned" hash
 fixes that broke other stages silently.
 
-## 14. Recipe — adding a new stage end-to-end
+## 14. Lifecycle invariant — append-merge-only
+
+Setup-stages state under `modules.lifecycle.<stage_id>` (and any module
+section under `modules.*` more generally) is **append-merge-only** and
+never bulk-overwritten. Two related rules follow from this invariant;
+violating either produces silent data loss or silent staleness.
+
+### 14.1 Executors that write `settings.yml` MUST load-merge
+
+Any stage callable (`executor` or `apply_choice`) that writes to a
+`settings.yml` family file MUST:
+
+1. Load the existing file content first.
+2. Preserve every sibling module section (especially
+   `modules.lifecycle.*` written by peer stages).
+3. Preserve any non-`setup` top-level keys.
+4. Overwrite ONLY its own keys.
+
+A fresh `data = {... "modules": {"lifecycle": {...}}, ...}` literal
+followed by `write_settings(...)` is the **canonical anti-pattern**.
+It clobbers peer state and rolls all 22 stages back to `pending` on
+re-bootstrap. The fix is structural: read → modify → write, not write
+fresh.
+
+This rule applies even when the executor "owns" the file (e.g.,
+`m1.repo.write-state-yml` owns repo-shared `settings.yml`). Owning a
+file means owning its lifecycle / structure invariants, not "may
+clobber its other contents."
+
+### 14.2 `locality: external` stages with TTL are cache-coherent
+
+When a stage declares `locality: external` AND `external_ttl_seconds`,
+the lifecycle eval (`_lifecycle.py:evaluate_stage`) treats `applied`
+as **provisional**. After `external_ttl_seconds` elapses since
+`external_validated_at`, the eval re-runs `target_state_predicate`
+(live IO) to validate that the external system still matches the
+recorded target state. The `external_validated_at` timestamp is the
+cache marker — observable, not drift-tolerant.
+
+A regression that ignores `external_ttl_seconds` produces silent
+staleness: an external resource (GitHub label, audit DDL, Status
+field) deleted out-of-band stays "applied" forever, and bootstrap
+never detects the drift.
+
+### 14.3 Type note — `external_validated_at`
+
+`external_validated_at` may be either an ISO 8601 string or a Python
+`datetime` object, depending on serializer:
+
+- `yaml.safe_load(...)` auto-parses ISO 8601 timestamps into
+  `datetime` objects (PyYAML feature, not bug).
+- `json.loads(...)` keeps them as strings.
+
+Code reading `external_validated_at` MUST coerce both shapes via
+`_coerce_datetime` (defined in `_lifecycle.py`) before comparing
+against TTL. Naive `datetime.fromisoformat(value)` fails with
+`TypeError` when `value` is already a `datetime`.
+
+### 14.4 Why this invariant matters
+
+Both shapes — bulk-overwrite and TTL-ignore — were diagnosed by
+independent audit during PR #75 review and fixed in Phase 5 Stage 5.1.
+The historical fresh-clone E2E walked all 22 stages with a two-pass
+workaround that batched lifecycle writes after `m1.repo.write-state-
+yml` ran, masking the bulk-overwrite bug from CI. Production
+re-bootstrap had no such workaround — silent vaporization on every
+schema_version bump.
+
+The invariant exists in this guide so future executors do not
+re-introduce either bug class. When in doubt, read the canonical
+implementations:
+
+- `scripts/stages_lib/m1_repo_write_state_yml.py:executor` — load-
+  merge reference.
+- `scripts/stages_lib/_lifecycle.py:evaluate_stage` — TTL-aware
+  cache coherency reference.
+
+## 15. Recipe — adding a new stage end-to-end
 
 The full procedure as a checklist for a PR-prep self-review:
 
@@ -662,7 +744,7 @@ The full procedure as a checklist for a PR-prep self-review:
 □ 6. If character: agentic, fill all 5 protocol elements
      (§ 7). Per-prompt-renderer kind must be one of the 5.
 □ 7. If locality: external, set external_ttl_seconds (per
-     [§ "External stage TTL cache"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#external-stage-ttl-cache-in-repo-shared-stateyml)).
+     [§ "External stage TTL cache"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#external-stage-ttl-cache-in-repo-shared-stateyml)).
 □ 8. Set platforms (default both, see § 9). For codex-only or
      cc-only, justify in the per-stage Python module's
      module-level docstring.
@@ -704,7 +786,7 @@ The PR review questions a reviewer should ask:
 7. Is `generation` bumped if any persisted shape changed?
 8. Is the design doc table updated to match?
 
-## 15. Testing — what CI gates and what you must hand-test
+## 16. Testing — what CI gates and what you must hand-test
 
 CI-gated:
 
@@ -728,7 +810,7 @@ NOT CI-gated (you must hand-test):
 - **External-locality stage observability** — RDBMS / GitHub
   query failures mid-flight (network drops, auth expiry).
   Manually simulate at least one failure mode and verify the
-  lifecycle reports `stale` rather than crashing.
+  lifecycle reports `drifted` rather than crashing.
 - **Mid-flow architect interrupt** — open a session, let the
   SKILL prompt for an agentic stage's input, abandon the
   session before answering. Reopen — the stage should be
@@ -738,7 +820,7 @@ NOT CI-gated (you must hand-test):
   bootstrap end-to-end at least once before opening a PR
   that adds an agentic stage.
 
-## 16. Anti-patterns
+## 17. Anti-patterns
 
 ### A1. "I'll add a stage just for this one debug helper."
 
@@ -768,10 +850,16 @@ prompt code. If your decision shape doesn't fit one of the
 5 prompt kinds, **push back on the requirement**, don't
 extend the protocol.
 
-### A5. "I'll put credentials in `repo-shared` because they're related to this repo."
+### A5. "I'll put credentials in `repo-shared` or `repo-clone` because they're related to this repo."
 
-No. Credentials are `repo-clone` (gitignored). The locality
-axis is about git semantics, not subject-matter.
+No. Credentials live in a separate `~/.board-superpowers/repos/<repo-identity>/credentials.yml`
+(mode 0600), HOST-side per-repo. The four-locality settings.yml family (mode 0644) MUST NOT carry
+secrets per ADR-0024 § Part A line 53-56 — the settings.yml files are committed or gitignored
+plaintext; DSNs / tokens / passwords must not appear in them.
+
+The locality axis governs the `settings.yml` family files only (`host-shared`, `repo-shared`,
+`repo-git`, `repo-clone`). Credentials are in a separate file outside this family entirely —
+not in any of the four settings.yml paths, not gitignored repo-clone, not host-shared settings.yml.
 
 ### A6. "I'll skip bumping `generation` because it's just a docstring change."
 
@@ -813,7 +901,7 @@ collapse them into one stage with richer
 `target_state_schema`, or split the module / re-classify the
 locality so the triples differ.
 
-## 17. Failure-mode philosophy — graceful degradation
+## 18. Failure-mode philosophy — graceful degradation
 
 The setup-stages system follows a strict graceful-degradation
 discipline. Three principles:
@@ -859,7 +947,8 @@ That's the failure mode you build.
 
 Agentic stages cannot complete without architect input. In a
 CI run or scripted environment, the SKILL records
-`status: pending-architect-input` and exits cleanly. The
+`status: blocked` (the v0.5.0 canonical name; previously
+`pending-architect-input`) and exits cleanly. The
 stage stays pending until the next interactive session. This
 is a deliberate choice — see [ADR-0023 § Decision sub
 "Agentic, architect unreachable"](./docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md).
@@ -869,7 +958,7 @@ auto-continue. Architect-input stages exist *because* a
 default would be wrong; substituting a default at agent-time
 defeats the protocol.
 
-## 18. Cross-cutting reading map
+## 19. Cross-cutting reading map
 
 When your work touches setup-stages, the right reading order
 depends on which seam you're modifying. Quick map:
@@ -887,7 +976,7 @@ depends on which seam you're modifying. Quick map:
 | Cross-version evolution / migration | This guide § 12 + § 13, ADR-0013 |
 
 For everything else: **the design doc**
-[`docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+[`docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md`](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md)
 is the authoritative reference. The 13 setup-stages ADRs
 (0012–0024) carry the per-decision rationale.
 
@@ -895,7 +984,7 @@ is the authoritative reference. The 13 setup-stages ADRs
 
 If your stage-touching change makes a contract in this guide
 stale (e.g., a new prompt-renderer kind ships, a new
-applicable_when form lands, the recipe in § 14 grows a step),
+applicable_when form lands, the recipe in § 15 grows a step),
 fix this guide in the **same PR** — not a follow-up. Doc lag
 is the failure mode this whole companion-doc pattern exists to
 prevent.

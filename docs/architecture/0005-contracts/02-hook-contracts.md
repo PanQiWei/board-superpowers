@@ -174,11 +174,21 @@ Body composition:
 
 Emitted when on-disk state implies a specific skill should be
 invoked **before** the model would normally route via
-description matching. The hook reads
-`~/.board-superpowers/manifest.yml`,
-`~/.board-superpowers/repos/<normalized>/state.yml`, and
-`${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` to compute
-the condition.
+description matching. The hook implements the **unified
+check-script protocol** (per ADR-0012): it reads the four
+partitioned settings files (`~/.board-superpowers/settings.yml`,
+`~/.board-superpowers/repos/<repo-identity>/settings.yml`,
+`<repo>/.board-superpowers/settings.yml`,
+`<repo>/.board-superpowers/settings.local.yml`) and
+`${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`, computes
+the lifecycle diff (per ADR-0013's 6-state model), and emits
+a marker if any stage is `pending` or `drifted`.
+
+The hook is **observation-only**: it reads settings files and
+emits a marker. It never writes status. It never executes a
+stage. The `bootstrapping-repo` SKILL is the single executor
+for every stage that needs running — automated and agentic alike
+(ADR-0012).
 
 Body composition (verbatim payload — no Markdown, no
 prose-shaped wrapping):
@@ -197,8 +207,97 @@ emits are:
 
 | Marker value | Trigger condition |
 |--------------|-------------------|
-| `bootstrapping-repo` | `~/.board-superpowers/manifest.yml` absent (first-time host) OR `~/.board-superpowers/repos/<normalized>/state.yml` absent (per-`(host, repo)` first-time) |
-| `migrating-repo-version` | `state.yml:last_seen_version_in_repo` ≠ `plugin.json:version` (per-repo upgrade pending) OR `manifest.yml:last_seen_version` ≠ `plugin.json:version` AND `state.yml` absent (host upgrade with no per-repo state yet) |
+| `bootstrapping-repo` | Any stage in the registry (ADR-0014) is `pending` (no entry in `modules.lifecycle.<id>`) or `drifted` (recorded `generation` or `target_state_hash` no longer matches registry); covers both first-time bootstrap AND plugin upgrade drift |
+
+> **Replaces:** the v0.4.0 two-entry table (`bootstrapping-repo`
+> for file-absence only + `migrating-repo-version` for version drift).
+> The `migrating-repo-version` marker is **removed** — migration is
+> "running the stages the lifecycle identifies as `drifted`", handled
+> by the same `bootstrapping-repo` SKILL (ADR-0012 absorbed
+> `migrating-repo-version` into the unified model).
+
+---
+
+### Unified check-script protocol — setup-stages (ADR-0012)
+
+> **This sub-section documents the hook's behavior under the
+> v0.5.0 setup-stages redesign.** It applies to
+> `hooks/session-start.sh` v0.5.0+.
+
+#### What the hook reads
+
+On every `SessionStart`, the hook reads:
+
+1. `${CLAUDE_PLUGIN_ROOT}/scripts/stages-registry.yml` — the
+   stage registry (ADR-0014); the source of current `generation`
+   and `target_state_schema` for each stage.
+2. `~/.board-superpowers/settings.yml` — host-shared
+   `modules.lifecycle` entries (ADR-0013 lifecycle store).
+3. `~/.board-superpowers/repos/<repo-identity>/settings.yml` —
+   repo-shared `modules.lifecycle` entries (primary lifecycle
+   store for most stages).
+4. `<repo>/.board-superpowers/settings.yml` — repo-git locality
+   (checked for existence; no lifecycle entries at repo-git in v1).
+5. `<repo>/.board-superpowers/settings.local.yml` — repo-clone
+   locality (checked for existence; `modules.lifecycle` entries
+   present if repo-clone stages have run).
+6. `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json` — current
+   plugin version.
+
+`<repo-identity>` is derived from `git remote get-url origin`
+(GitHub-based: `<owner>-<repo>`) per ADR-0017; `_path-<normalized>`
+fallback for local-only repos.
+
+#### What the hook computes
+
+For each stage in the registry whose `applicable_when` predicate
+(per ADR-0020) evaluates true against current settings:
+
+1. **Layer 1 check (O(1)):** compare `entry.generation` vs
+   `registry[stage_id].generation`. If equal: `applied`.
+2. **Layer 2 check (hash):** if generations differ OR no entry
+   exists: compute `sha256(canonical YAML emit of registry's
+   current `compute_target_state()` output)` and compare against
+   `entry.target_state_hash`. If no entry: `pending`.
+3. **Lifecycle classification:** `pending` | `applied` |
+   `drifted` | `deprecated` | `not-applicable` | `failed` |
+   `blocked` per ADR-0013.
+
+The hook emits `INVOKE: bootstrapping-repo / REASON: <N> stages
+need running (<stage_id1>, <stage_id2>, ...)` when one or more
+stages are `pending` or `drifted`. A canonical REASON wording
+(from ADR-0012):
+
+```
+INVOKE: bootstrapping-repo
+REASON: 3 stages need running (m4.repo.acquire-dsn, m7.repo.inject-routing-block, m9.host.register-codex-hooks)
+```
+
+#### Invariants that still apply
+
+- **Invariant 1 (Self-contained)** — the hook MUST NOT source
+  `scripts/lib/common.sh`. If the registry or any settings file
+  is missing or corrupt, the hook silently no-ops (no marker
+  emitted). The SKILL itself re-checks state (ADR-0012 marker is
+  a fast-path optimization, not a correctness requirement).
+- **Invariant 3 (Never block)** — the hook always exits 0,
+  even if the registry cannot be loaded or the diff fails. This
+  is an advisory hook; blocking session start is worse than
+  running unconfigured.
+- **Invariant 4 (10s budget)** — the check reads ~4 small YAML
+  files + ~20 hash comparisons. Well under the budget. If the
+  registry grows large enough to exceed this, the registry
+  design (not the timeout) needs rethinking.
+- **ADR-0012 observation-only rule** — the hook reads the
+  settings files but NEVER writes to them. Stage execution is
+  exclusively the SKILL's job.
+
+#### Codex CLI parity
+
+`hooks/session-start.sh` is platform-portable. Both Claude Code
+and Codex CLI wire the same script. The registry-diff logic is
+pure YAML parsing + integer/string comparison — no CC-specific
+APIs. Per `SKILLS.md` "Cross-platform hook delivery".
 
 Future hook events (`PreToolUse`, `PostToolUse`, `Stop` — none
 wired at v1) MAY emit `INVOKE:` for any v1 skill name; the

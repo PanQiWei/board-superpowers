@@ -3,17 +3,25 @@
 #
 # Fires once per CC / Codex session at startup. Per
 # docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md
-# § "three-layer alert + intent-injection strategy" the hook performs
-# TWO roles:
+# § "Hook lifecycle diff" the hook performs TWO roles:
 #   (a) dep alert — surface a banner when a dependency is missing or
 #       the consuming repo's AGENTS.md / CLAUDE.md lacks the routing block.
-#   (b) intent injection — when on-disk state implies a specific
-#       skill should be invoked, emit one of the legal markers per
-#       docs/architecture/0005-contracts/02-hook-contracts.md
-#       § "Intent-injection markers". v0.2.0 emits only
-#       INVOKE: bootstrapping-repo (manifest.yml or per-repo state.yml
-#       absent). INVOKE: migrating-repo-version is reserved for a future
-#       slice once schema-aware version comparison ships.
+#   (b) intent injection — lifecycle-diff-based: runs
+#       `python3 -m stages_lib lifecycle-probe` to evaluate all 22 registered
+#       stages against persisted state, and emits INVOKE: bootstrapping-repo
+#       with the first non-applied stage as REASON. Per ADR-0012, the
+#       formerly-deferred migrating-repo-version SKILL is absorbed into
+#       bootstrapping-repo as the single executor for setup-stages, so there
+#       is only one marker grammar in use.
+#
+#       GRACEFUL DEGRADATION (fresh-repo no-venv):
+#       Before attempting lifecycle-probe, the hook checks whether the
+#       per-repo venv (<repo>/.board-superpowers/.venv/bin/python3) exists.
+#       If absent the hook falls back to the v0.4.x file-presence heuristic
+#       (host-shared settings.yml + repo-shared settings.yml absent → emit
+#       INVOKE: bootstrapping-repo with a fresh-repo REASON). This preserves
+#       the first-time-user UX without requiring the venv.
+#   (c) audit outbox observer — surfaces pending jsonl rows (unchanged).
 #
 # Output protocol: ONE JSON object on stdout per
 # https://code.claude.com/docs/en/hooks (additionalContext rides as
@@ -26,8 +34,8 @@
 #
 # SELF-CONTAINED: this script MUST NOT source scripts/lib/common.sh,
 # per 02-hook-contracts.md § "Self-containment" (line 297-298) and
-# 05-bootstrap-surface.md § "Cross-cutting principles". A broken or
-# missing lib must never prevent session startup. The path
+# 05-bootstrap-surface.md § "Cross-cutting principles". A broken
+# or missing lib must never prevent session startup. The path
 # normalization helper bsp_normalize_repo_path (defined in
 # scripts/lib/common.sh) is duplicated INLINE below as
 # normalize_repo_path. The primary-repo-root resolver
@@ -178,23 +186,42 @@ if [ -n "${DEP_RAW}" ]; then
     done <<< "${DEP_RAW}"
 fi
 
-# --- Layer 1b: state probe ---------------------------------------------
-# Per 05-bootstrap-surface.md § "State files":
-#   ~/.board-superpowers/manifest.yml             → manifest_present
-#   ~/.board-superpowers/repos/<normalized>/state.yml → state_present
+# --- Layer 1b: lifecycle-diff intent injection (REWRITE from v0.4.x) -----
+# Per 05-bootstrap-surface.md § "Hook lifecycle diff" and ADR-0012.
 #
-# <normalized> derives from the repo root via the inline helper above.
-# A non-git working directory yields no state probe (state_present=yes
-# defensively — the hook only INVOKEs bootstrapping-repo when we are
-# certain a repo bootstrap is missing).
+# v0.5.0+ behavior:
+#   1. Resolve primary repo root (worktree-safe, same as before).
+#   2. Fresh-repo no-venv graceful degradation: if the per-repo venv is
+#      absent → emit INVOKE: bootstrapping-repo immediately (same UX as
+#      v0.4.x; no Python lifecycle needed).
+#   3. If venv present → invoke `python3 -m stages_lib lifecycle-probe`
+#      from the venv to evaluate all 22 registered stages.
+#      The probe returns one of:
+#        INVOKE: bootstrapping-repo\nREASON: <stage_id> is <state>...
+#        (or nothing if all stages are applied / not-applicable)
+#   4. Append the probe output to LINES if non-empty.
+#
+# The lifecycle-probe subcommand lives in scripts/stages_lib/__main__.py
+# and is invoked as `python3 -m stages_lib lifecycle-probe ...`.  This
+# choice keeps the hook bash side minimal and puts all lifecycle logic in
+# testable Python.
+#
+# SELF-CONTAINED: this layer still MUST NOT source common.sh. The inline
+# bsp_repo_identity equivalent (git remote get-url origin → python3 parse)
+# is replicated inline below per the self-containment contract. Keep in
+# lockstep with bsp_repo_identity in scripts/lib/common.sh.
+#
+# REASON grammar (02-hook-contracts.md lines 213-216):
+#   plain ASCII, ≤120 chars, punctuation only `. , ; : - ( )`.
+#   No newlines, no JSON, no markup.
+# The lifecycle-probe sanitizes its own REASON output before returning it;
+# this hook emits the probe's line verbatim (the probe is trusted output
+# from our own Python, same-process sanitization).
 
 # Resolve PWD to the PRIMARY repo root, not a worktree root.
 # `git rev-parse --show-toplevel` returns the worktree path when run
-# inside a worktree; the worktree's path normalizes to a different
-# `<normalized>` than the canonical repo, which would make the hook
-# falsely emit INVOKE: bootstrapping-repo for an already-bootstrapped
-# repo. Fall back to `pwd -P` of $PWD on non-git directories so the
-# hook degrades gracefully without crashing.
+# inside a worktree; use primary_repo_root() defined above to find the
+# canonical repo root regardless.
 REPO_ROOT=""
 if REPO_ROOT="$(primary_repo_root "${PWD}")" && [ -n "${REPO_ROOT}" ]; then
     :
@@ -202,19 +229,114 @@ else
     REPO_ROOT=""
 fi
 
-MANIFEST_PRESENT="no"
-if [ -f "${HOME}/.board-superpowers/manifest.yml" ]; then
-    MANIFEST_PRESENT="yes"
+# --- Fresh-repo / no-venv graceful degradation ----------------------------
+# If the per-repo venv is absent (bootstrap has never run), fall back to
+# the v0.4.x file-presence heuristic. The lifecycle-probe requires PyYAML
+# (from the venv); without it we cannot evaluate stages. Emitting
+# INVOKE: bootstrapping-repo without lifecycle eval is correct here —
+# the venv's absence is itself a "not bootstrapped" signal.
+#
+# Per v0.5.0 schema, the host-level settings.yml replaces manifest.yml, and
+# the repo-shared settings.yml replaces state.yml. We check both to preserve
+# the v0.4.x two-condition (host + repo) first-time-user experience.
+VENV_PYTHON=""
+if [ -n "${REPO_ROOT}" ]; then
+    CANDIDATE="${REPO_ROOT}/.board-superpowers/.venv/bin/python3"
+    if [ -x "${CANDIDATE}" ]; then
+        VENV_PYTHON="${CANDIDATE}"
+    fi
 fi
 
-STATE_PRESENT="yes"
-NORMALIZED=""
-if [ -n "${REPO_ROOT}" ]; then
-    if NORMALIZED="$(normalize_repo_path "${REPO_ROOT}" 2>/dev/null)"; then
-        if [ -f "${HOME}/.board-superpowers/repos/${NORMALIZED}/state.yml" ]; then
-            STATE_PRESENT="yes"
+LIFECYCLE_INVOKE=""  # will hold "INVOKE: bootstrapping-repo\nREASON: ..." or ""
+
+if [ -z "${VENV_PYTHON}" ]; then
+    # No venv — fresh repo or incomplete M2 bootstrap.
+    # Check v0.5.0 settings.yml presence (host-shared + repo-shared).
+    # Per ADR-0024 Part A: host-shared = ~/.board-superpowers/settings.yml;
+    # repo-shared = ~/.board-superpowers/repos/<normalized>/settings.yml.
+    # We check repo-shared using the NORMALIZED path helper for consistency
+    # with the v0.4.x logic that was previously here.
+    HOST_SETTINGS="${HOME}/.board-superpowers/settings.yml"
+    HOST_SETTINGS_PRESENT="no"
+    if [ -f "${HOST_SETTINGS}" ]; then
+        HOST_SETTINGS_PRESENT="yes"
+    fi
+    # Also accept legacy manifest.yml (v0.4.x install still in use)
+    if [ -f "${HOME}/.board-superpowers/manifest.yml" ]; then
+        HOST_SETTINGS_PRESENT="yes"
+    fi
+
+    REPO_SETTINGS_PRESENT="yes"
+    if [ -n "${REPO_ROOT}" ]; then
+        NORMALIZED="$(normalize_repo_path "${REPO_ROOT}" 2>/dev/null || true)"
+        if [ -n "${NORMALIZED}" ]; then
+            REPO_SETTINGS="${HOME}/.board-superpowers/repos/${NORMALIZED}/settings.yml"
+            # Also check legacy state.yml path
+            REPO_STATE="${HOME}/.board-superpowers/repos/${NORMALIZED}/state.yml"
+            if [ -f "${REPO_SETTINGS}" ] || [ -f "${REPO_STATE}" ]; then
+                REPO_SETTINGS_PRESENT="yes"
+            else
+                REPO_SETTINGS_PRESENT="no"
+            fi
+        fi
+    fi
+
+    if [ "${HOST_SETTINGS_PRESENT}" = "no" ] || [ "${REPO_SETTINGS_PRESENT}" = "no" ]; then
+        raw_reason=""
+        if [ "${HOST_SETTINGS_PRESENT}" = "no" ] && [ "${REPO_SETTINGS_PRESENT}" = "no" ]; then
+            raw_reason="fresh repo - host and per-repo settings absent; venv not yet created."
+        elif [ "${HOST_SETTINGS_PRESENT}" = "no" ]; then
+            raw_reason="host bootstrap pending; host-shared settings absent; venv not yet created."
         else
-            STATE_PRESENT="no"
+            raw_reason="per-repo bootstrap pending; repo-shared settings absent; venv not yet created."
+        fi
+        LIFECYCLE_INVOKE="$(printf 'INVOKE: bootstrapping-repo\nREASON: %s' \
+            "$(sanitize_reason_line "${raw_reason}")")"
+    fi
+else
+    # Venv present — run full lifecycle-diff probe.
+    # Resolve repo_identity inline (MUST NOT source common.sh).
+    # Inline equivalent of bsp_repo_identity: parse git remote URL with python3.
+    # DUPLICATION NOTICE: keep in lockstep with bsp_repo_identity in
+    # scripts/lib/common.sh per the self-containment contract.
+    REPO_IDENTITY=""
+    if [ -n "${REPO_ROOT}" ] && command -v git >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
+        ORIGIN_URL="$(git -C "${REPO_ROOT}" remote get-url origin 2>/dev/null || true)"
+        if [ -n "${ORIGIN_URL}" ]; then
+            REPO_IDENTITY="$(printf '%s' "${ORIGIN_URL}" | python3 -c '
+import re, sys
+url = sys.stdin.read().strip()
+url = re.sub(r"\.git$", "", url)
+m = re.search(r"github\.com[:/](.+/[^/]+)$", url)
+if m:
+    print(m.group(1).lower())
+    sys.exit(0)
+parts = re.split(r"[:/]", url.rstrip("/"))
+if len(parts) >= 2:
+    print("/".join(parts[-2:]).lower())
+    sys.exit(0)
+sys.exit(1)
+' 2>/dev/null || true)"
+        fi
+    fi
+    # Fallback: use normalized repo path as identity if git remote unavailable.
+    if [ -z "${REPO_IDENTITY}" ] && [ -n "${REPO_ROOT}" ]; then
+        REPO_IDENTITY="$(normalize_repo_path "${REPO_ROOT}" 2>/dev/null || true)"
+    fi
+
+    if [ -n "${REPO_ROOT}" ] && [ -n "${REPO_IDENTITY}" ]; then
+        # Invoke lifecycle-probe via the venv Python.
+        # The probe returns "INVOKE: bootstrapping-repo\nREASON: ..." or empty.
+        # The venv Python is invoked with PYTHONPATH set to scripts/ so that
+        # `python3 -m stages_lib` resolves against the plugin's stages_lib package.
+        RAW_PROBE="$(PYTHONPATH="${PLUGIN_ROOT}/scripts" "${VENV_PYTHON}" -m stages_lib lifecycle-probe \
+            --plugin-root "${PLUGIN_ROOT}" \
+            --home "${HOME}" \
+            --repo-root "${REPO_ROOT}" \
+            --repo-identity "${REPO_IDENTITY}" \
+            2>/dev/null || true)"
+        if [ -n "${RAW_PROBE}" ]; then
+            LIFECYCLE_INVOKE="${RAW_PROBE}"
         fi
     fi
 fi
@@ -223,7 +345,7 @@ fi
 # Order, per 02-hook-contracts.md "additionalContext body":
 #   1. Version banner (always).
 #   2. Dep / routing alert (when something is wrong) — most urgent.
-#   3. Intent-injection marker (when state files absent) — at most one.
+#   3. Intent-injection marker (at most one, from lifecycle diff above).
 LINES=()
 LINES+=("board-superpowers v${PLUGIN_VERSION} loaded.")
 
@@ -255,27 +377,15 @@ if [ -n "${DEP_MISSING}" ] || [ "${DEP_ROUTING}" = "no" ]; then
 fi
 
 # Intent-injection marker: at most one INVOKE: per payload (per
-# 02-hook-contracts.md line 218-222). manifest absent or state.yml
-# absent both route to bootstrapping-repo; pick a single REASON line.
-#
-# REASON grammar (02-hook-contracts.md lines 213-216):
-#   plain ASCII, ≤120 chars, punctuation only `. , ; : - ( )`.
-#   No newlines, no JSON, no markup.
-# The `~` and `/` characters previously used in path mentions are
-# OUTSIDE the whitelist; rephrase without paths and pass through
-# sanitize_reason_line as a defensive net.
-if [ "${MANIFEST_PRESENT}" = "no" ] || [ "${STATE_PRESENT}" = "no" ]; then
+# 02-hook-contracts.md line 218-222). LIFECYCLE_INVOKE holds the probe
+# output (two-line "INVOKE: ...\nREASON: ..." or "").
+if [ -n "${LIFECYCLE_INVOKE}" ]; then
     LINES+=("")
-    LINES+=("INVOKE: bootstrapping-repo")
-    raw_reason=""
-    if [ "${MANIFEST_PRESENT}" = "no" ] && [ "${STATE_PRESENT}" = "no" ]; then
-        raw_reason="host bootstrap pending; both manifest and per-repo state files are absent."
-    elif [ "${MANIFEST_PRESENT}" = "no" ]; then
-        raw_reason="host bootstrap pending; manifest is absent."
-    else
-        raw_reason="per-repo bootstrap pending; state file is absent."
-    fi
-    LINES+=("REASON: $(sanitize_reason_line "${raw_reason}")")
+    # Append each line of the two-line marker separately so the joined
+    # output preserves the "INVOKE: ...\nREASON: ..." line structure.
+    while IFS= read -r invoke_line; do
+        LINES+=("${invoke_line}")
+    done <<< "${LIFECYCLE_INVOKE}"
 fi
 
 # --- Layer 1c: audit outbox observer (Task 7 / AC4) --------------------

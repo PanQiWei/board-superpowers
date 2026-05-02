@@ -401,7 +401,9 @@ M10 stage never invokes runtime protocol actions.
   `compliance` / writing the initial state. ADR-0026 layers
   `kanbans` (list) + `legacy_claims` on top; `operating-kanban`
   reads all of them at runtime but only the M10 stage / `bind`
-  / `migrating-repo-version` write.
+  / the unified setup-stages flow inside `bootstrapping-repo`
+  (per ADR-0012, which absorbs version-transition migrations
+  into the same SKILL) write.
 
 ### What still needs to be sorted (v0.5.0+ work)
 
@@ -413,11 +415,11 @@ M10 stage never invokes runtime protocol actions.
   selection as protocol-projection metadata; routes through
   `operating-kanban`'s backend-selection logic (per ADR-0027 +
   ADR-0026 § Schema), not as ADR-0005-shaped adapter handles.
-- The exact shape of the v0.5.0 `migrating-repo-version` skill's
-  legacy_claims write (`modules.m10_kanban.legacy_claims`) needs
-  alignment with ADR-0017 cross-clone state sharing. ADR-0026
-  Branch naming Migration § documents the path; the skill's
-  implementation lands in v0.5.0.
+- The legacy_claims write (`modules.m10_kanban.legacy_claims`)
+  needs alignment with ADR-0017 cross-clone state sharing.
+  ADR-0026 Branch naming Migration § documents the path; per
+  ADR-0012 the work is owned by a setup-stage executed inside
+  `bootstrapping-repo` (no separate migration SKILL ships).
 
 ---
 
@@ -493,9 +495,11 @@ not *the* universal contract.
 `operating-kanban` reads M10 state, never writes it. If you find
 yourself wanting `operating-kanban` to mutate
 `modules.m10_kanban.*`, you are crossing the seam in the wrong
-direction. Mutations to that block belong in setup-stages SKILLs
-(M10 config-item stage's `set` callable, or
-`migrating-repo-version` for v0.4.x → v0.5.0 transitions).
+direction. Mutations to that block belong in setup-stages SKILLs —
+the M10 config-item stage's `set` callable, or any other setup-stage
+executed inside `bootstrapping-repo` (the unified executor per
+ADR-0012, which absorbed the version-transition migration scope
+formerly carved out for `migrating-repo-version`).
 
 ### Pitfall 5: re-litigating the flat-Card hierarchy decision
 

@@ -104,7 +104,7 @@ parent directory is non-writable.
   v1 scope per P3.
 - **Pre-v1 v0.3.0 architects upgrade with manual cleanup**
   (already documented as a pre-v1 breaking change in
-  `05-bootstrap-surface-redesign.md`; no new migration logic).
+  `05-bootstrap-surface.md`; no new migration logic).
 
 ## Alternatives considered
 
@@ -155,6 +155,6 @@ so override discoverability is stable.
 - [`../0005-contracts/07-path-conventions.md`](../0005-contracts/07-path-conventions.md)
   § "Per-host layout" — `audit.db` sibling location;
   project-tree `audit.db` forbidden rule preserved.
-- [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+- [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   § "Decided" → "Per-repo audit DB defaults to zero-config
   SQLite" — living design doc this ADR formalizes.

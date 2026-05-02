@@ -11,7 +11,7 @@ Route by question to a specific section instead of reading end-to-end:
 | What kind of layer is this plugin? Why scheduling-only and not coding-discipline? | [§ "What kind of layer is board-superpowers"](#what-kind-of-layer-is-board-superpowers) |
 | What skill goes where? Which layer does the new skill belong in? | [§ "Three layers, strictly downward"](#three-layers-strictly-downward) |
 | What's the layer's stability profile? How does the body-length budget map to the layer? | [§ "Three layers, strictly downward"](#three-layers-strictly-downward) (final table) |
-| Why are there exactly four atomic skills? What SPOTs do they consolidate? | [§ "Why exactly four atomic skills (the SPOT census)"](#why-exactly-four-atomic-skills-the-spot-census) |
+| Why are there exactly five atomic skills? What SPOTs do they consolidate? | [§ "Why exactly five atomic skills (the SPOT census)"](#why-exactly-five-atomic-skills-the-spot-census) |
 | How does an atomic-contract change propagate through the molecular consumers? | [§ "How a contract update propagates"](#how-a-contract-update-propagates) |
 | What are the five bounded contexts and which skill operates on which? | [§ "The 5 bounded contexts"](#the-5-bounded-contexts) |
 | When a Consumer is spawned by the Producer rather than the architect, what changes? | [§ "Mode-1 vs Mode-2 Consumer spawn"](#mode-1-vs-mode-2-consumer-spawn) |
@@ -35,18 +35,18 @@ This split is what lets board-superpowers stay small. Roughly: planning, slicing
                     └──────────────┬───────────────┘
                                    │ routes to
                     ┌──────────────▼───────────────┐
-                    │       Molecular layer        │   5 skills
+                    │       Molecular layer        │   4 skills
                     │  managing-board ·            │
                     │  consuming-card ·            │
                     │  decomposing-into-milestones │
-                    │  bootstrapping-repo ·        │
-                    │  migrating-repo-version      │
+                    │  bootstrapping-repo          │
                     └──────────────┬───────────────┘
                                    │ reads from
                     ┌──────────────▼───────────────┐
-                    │         Atomic layer         │   4 skills
+                    │         Atomic layer         │   5 skills
                     │  board-canon ·               │
                     │  enforcing-pr-contract ·     │
+                    │  operating-kanban ·          │
                     │  classifying-actions ·       │
                     │  auditing-actions            │
                     └──────────────────────────────┘
@@ -74,16 +74,19 @@ Consumers can come from two places, and the difference matters for what they're 
 
 The two modes share the same `consuming-card` skill body; the body branches on detected mode where it matters. Mode-2 is currently Claude Code only.
 
-## Why exactly four atomic skills (the SPOT census)
+## Why exactly five atomic skills (the SPOT census)
 
-Atomic skills are not a free-form convenience layer. Each one consolidates a contract that *multiple* molecular skills would otherwise inline-copy. The census that yields four:
+Atomic skills are not a free-form convenience layer. Each one consolidates a contract that *multiple* molecular skills would otherwise inline-copy. The census that yields five:
 
 | Contract | Inlined by, without atomic | SPOT consolidator |
 |----------|----------------------------|-------------------|
-| State machine + Card body schema + branch naming + WIP rules | All 5 molecular skills | `board-canon` |
+| State machine + Card body schema + branch naming + WIP rules (backend-agnostic — *what is legal*) | All 4 molecular skills | `board-canon` |
 | PR three-section shape + filler detection + Card AC sync | `consuming-card` (write side) + `managing-board` (validate side) | `enforcing-pr-contract` |
-| 14-row autonomy matrix + 5-step triage + override parsing | All 5 mutating molecular skills | `classifying-actions` |
-| Audit log schema + propose-resolve sequencing + degradation rules | All 5 mutating molecular skills | `auditing-actions` |
+| 8-action protocol dispatch over the active backend projection (Form A bash CLI / Form B MCP / Form C REST) + projection-routing logic + bootstrap-side setup-capability registry (backend-aware — *how to act on this repo's backend*) | All 4 board-touching molecular skills | `operating-kanban` |
+| 14-row autonomy matrix + 5-step triage + override parsing | All 4 mutating molecular skills | `classifying-actions` |
+| Audit log schema + propose-resolve sequencing + degradation rules | All 4 mutating molecular skills | `auditing-actions` |
+
+The `board-canon` / `operating-kanban` pair sit on the same domain (Kanban) but consolidate distinct SPOTs: if the question is *what is legal / what does X mean*, route to `board-canon`; if the question is *how do I do X on this repo's backend*, route to `operating-kanban`. Mixing them into one atomic would couple a stable backend-agnostic ontology to a mutable backend-specific dispatch layer and force every projection landing to re-review the ontology.
 
 A contract that only one molecular skill needs stays inline. The atomic-layer count is governed by the SPOT threshold, not by aesthetic preference.
 
@@ -101,7 +104,7 @@ The domain divides into five bounded contexts. Each context has its own vocabula
 |---------|------------|---------------|--------|
 | **Board** | Card + PR | GitHub Project + Issues + git refs | `managing-board` (read), `consuming-card` (read + write own card), `decomposing-into-milestones` (write new cards), `bootstrapping-repo` (read Status field), `board-canon` (schema authority) |
 | **Session** | ProducerSession + ConsumerLogical | OS processes + worktrees | `managing-board` (lifecycle read), `consuming-card` (own session) |
-| **Bootstrap** | HostBootstrap + RepoBootstrap + RepoConfig | `~/.board-superpowers/manifest.yml`, per-repo `config.yml`, host-local `state.yml` | `bootstrapping-repo` (read + write), `migrating-repo-version` (read + write), `using-board-superpowers` (read for state probes) |
+| **Bootstrap** | HostBootstrap + RepoBootstrap + RepoConfig | `~/.board-superpowers/manifest.yml`, per-repo `config.yml`, host-local `state.yml` | `bootstrapping-repo` (read + write — sole executor for setup-stages including version-transition migrations per ADR-0012), `using-board-superpowers` (read for state probes) |
 | **Audit** | AuditTrail | BYO RDBMS, jsonl on degradation | `auditing-actions` (write via `audit-log-write.sh`) |
 | **Spec** | SpecPointer (thin) | Card body's first line | `consuming-card` (read at claim time) |
 
@@ -167,4 +170,4 @@ The architecture is intentionally simple so the answer to each of these is fast.
 
 ## Recap
 
-board-superpowers is a small, focused scheduling layer: 1 entry skill, 5 molecular workflows, 4 atomic SPOTs, all reading and writing across 5 bounded contexts whose only shared backing stores are GitHub, the host filesystem, and a user-supplied database. Engineering disciplines come from `superpowers` and `gstack`. The architecture's job is to keep the dispatch layer small enough to load on demand, the contracts authoritative enough to compose, and the parallel-Consumer model isolated enough to scale. When in doubt about whether something belongs in this plugin, ask: *is it scheduling, or is it doing the work?* Scheduling stays here; the rest is delegated.
+board-superpowers is a small, focused scheduling layer: 1 entry skill, 4 molecular workflows, 5 atomic SPOTs, all reading and writing across 5 bounded contexts whose only shared backing stores are GitHub, the host filesystem, and a user-supplied database. Engineering disciplines come from `superpowers` and `gstack`. The architecture's job is to keep the dispatch layer small enough to load on demand, the contracts authoritative enough to compose, and the parallel-Consumer model isolated enough to scale. When in doubt about whether something belongs in this plugin, ask: *is it scheduling, or is it doing the work?* Scheduling stays here; the rest is delegated.
