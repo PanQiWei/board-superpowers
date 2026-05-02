@@ -3,7 +3,7 @@
 # Locality:  repo-clone
 # Path:      <repo>/.board-superpowers/settings.local.yml
 # Tracked:   NO — gitignored (per m6.repo.append-gitignore: *.local.*)
-# Mode:      0644 (no secrets; DSN override lives in credentials.yml at 0600)
+# Mode:      0644 (no secrets; audit DSN lives in credentials.yml at 0600)
 # Replaces:  v0.4.0 config.local.yml
 #
 # ADR-0024 § Part A: repo-clone locality.
@@ -47,19 +47,15 @@ modules:
   #   Default: 5. Valid range: 1..20 (ADR-0024 Part B validation).
   #   The agentic stage m5.repo.set-wip-limit prompts architect on first boot.
   #   Architect may accept the default (5) to advance without typing.
-  # dsn_override: per-clone audit DSN override. Takes precedence over
-  #   credentials.yml (which is per-repo-shared). Useful when a developer
-  #   wants to route their clone's audit rows to a personal DB instance.
-  #   NOTE: leave empty to use the shared credentials.yml DSN.
   m5_repo_configuration:
     schema_version: 1
     wip_limit: 5            # per ADR-0024 Part B; default 5; range 1..20
 
-  # M4 — Audit DSN per-clone override (optional)
-  # dsn_override: when set, BOARD_SP_AUDIT_DB_URL from this field wins over
-  #   credentials.yml. Useful for clone-local audit isolation.
-  #   DSNs are sensitive; keep mode 0600 if setting manually.
-  #   Empty = use the shared credentials.yml DSN.
+  # M4 — Audit (per-clone slot reserved for ADR-0021 schema_version only)
+  # ADR-0015 § Decision lines 39-50 mandate repo-shared (per-repo,
+  # host-local, cross-clone-shared) locality for ALL M4 stages: the
+  # canonical audit DSN lives in HOST-side credentials.yml at mode 0600,
+  # written by m4.repo.acquire-dsn. No per-clone M4 config items exist
+  # at v0.5.x; the schema_version slot is retained per ADR-0021.
   m4_audit:
     schema_version: 1
-    dsn_override: ""  # e.g. "sqlite:///<repo>/.board-superpowers/audit-local.db"
