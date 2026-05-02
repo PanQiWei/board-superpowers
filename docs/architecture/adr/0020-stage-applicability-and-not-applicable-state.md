@@ -31,14 +31,16 @@ conditionality:
 2. **M3 is hard-coded to GitHub Project.** Per
    [`05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
    § "Functional modules" → M3, the redesign reframes M3 as
-   "Board operations (BoardAdapter-driven)" — operations
-   dispatched through the
-   [ADR-0005](./0005-board-adapter-contract.md) BoardAdapter
-   abstraction. M3 stages need a declarative way to
-   participate only when the selected backend (chosen by
-   `m10.repo.choose-kanban-backend`) declares the relevant
+   "Kanban-projection-driven Board operations" — operations
+   dispatched through the projection-capability mechanism
+   formalized in
+   [ADR-0027](./0027-m3-dispatch-via-kanban-protocol-projection.md).
+   M3 stages need a declarative way to participate only when
+   the selected projection (chosen by
+   `m10.repo.choose-kanban-projection`) declares the relevant
    capability. Without a registry-level gate, every M3 stage
-   inlines a backend-name check that drifts as adapters land.
+   inlines a projection-name check that drifts as projections
+   land.
 3. **No generic conditional-stage mechanism.** "Applies only
    when X" recurs across non-board-related stages — Codex-only
    stages already carry a `platforms` coarse predicate
@@ -63,16 +65,15 @@ generation / hash diff. The predicate has three forms:
    True when the value at `<dot.path>` in the merged settings
    (per ADR-0021 layering) is one of `<values>`. Most stages
    use this form.
-2. **Declarative board-capability.**
-   `applicable_when: {board_capability: <name>}`. True when
-   the BoardAdapter selected by
-   `m10.repo.choose-kanban-backend` declares `<name>` in its
-   capability set (capability declaration on the adapter
-   contract, ADR-0005, extended by ADR-0022). M3 stages use
-   this form — `m3.repo.ensure-labels` declares
-   `{board_capability: ensure-labels}`,
+2. **Declarative kanban-projection-capability.**
+   `applicable_when: {kanban_projection_capability: <name>}`.
+   True when the projection selected by
+   `m10.repo.choose-kanban-projection` declares `<name>` in
+   its capability set (per ADR-0027 § "Capability vocabulary").
+   M3 stages use this form — `m3.repo.ensure-labels` declares
+   `{kanban_projection_capability: ensure-labels}`,
    `m3.repo.validate-status-field` declares
-   `{board_capability: status-field-schema}`.
+   `{kanban_projection_capability: validate-status-field}`.
 3. **Python predicate reference.**
    `applicable_when_fn: <module.callable>`. Escape hatch for
    conditions that cannot be expressed declaratively. The
@@ -111,20 +112,20 @@ a registry bug caught by CI.
   executor.
 - **M3 hard-coding is dissolved.** `m3.repo.*` stages
   declare capability requirements; v0.5.0's
-  GitHub-Project-v2 adapter declares
-  `[ensure-labels, status-field-schema]` and both stages
-  participate; future Linear / Jira adapters declare their
+  github-project-v2 projection declares
+  `[ensure-labels, validate-status-field]` and both stages
+  participate; future linear / jira projections declare their
   own capability sets and M3 stages re-route automatically
-  via `not-applicable`. No backend-name comparison anywhere
+  via `not-applicable`. No projection-name comparison anywhere
   in stage executors.
 - **Architect-readable summaries.** Output distinguishes
   "completed" from "not-applicable (predicate false:
-  kanban_backend=linear)." No more zero-work
+  kanban_projection=linear)." No more zero-work
   "completed in 0ms" rows.
 - **Re-applicability is automatic.** Architect flips
-  `kanban_backend` from `github-project-v2` to `linear` →
+  `kanban_projection` from `github-project-v2` to `linear` →
   next session the M3 stages flip from `completed` to
-  `not-applicable` (entry preserved) and the new backend's
+  `not-applicable` (entry preserved) and the new projection's
   capability stages flip from `not-applicable` to
   `never-run`. No explicit migration step.
 
@@ -132,22 +133,22 @@ a registry bug caught by CI.
 
 - **Predicate registry surface to validate.** The JSON
   Schema (ADR-0014) must reject malformed `applicable_when`
-  blocks, missing `board_capability` names not declared by
-  any registered adapter, and `setting_path`s that don't
-  resolve in the settings schema. CI gating absorbs the
-  cost.
+  blocks, missing `kanban_projection_capability` names not
+  declared by any registered projection, and `setting_path`s
+  that don't resolve in the settings schema. CI gating
+  absorbs the cost.
 - **`applicable_when_fn` escape hatch.** Form 3 admits
   arbitrary Python; a non-deterministic predicate (clock
   read, random) breaks lifecycle stability. Mitigation: CI
   round-trips every form 3 predicate against fixed inputs
   and asserts determinism.
-- **Capability declaration becomes adapter-contract
-  surface.** ADR-0005 gains a capability declaration
-  mechanism (specified in ADR-0022). New adapters that
-  forget to declare a capability silently make all stages
-  requiring it `not-applicable` — visible in summaries but
-  easy to miss. CI test asserts every shipped adapter
-  declares the capability set its dependent stages need.
+- **Capability declaration becomes projection-contract
+  surface.** Projections (per ADR-0027) declare their
+  capability set; new projections that forget to declare a
+  capability silently make all stages requiring it
+  `not-applicable` — visible in summaries but easy to miss.
+  CI test asserts every shipped projection declares the
+  capability set its dependent stages need.
 
 ## Alternatives considered
 
@@ -195,8 +196,8 @@ ADR-0016). `platforms` is the special-cased
 runtime-environment predicate; `applicable_when` is the
 fine settings / capability predicate. Both must be true for
 a stage to participate — a stage with `platforms: codex-only`
-AND `applicable_when: {board_capability: status-field-schema}`
-participates only on Codex AND only when the selected adapter
+AND `applicable_when: {kanban_projection_capability: validate-status-field}`
+participates only on Codex AND only when the selected projection
 declares that capability. The composition rule lives in
 ADR-0016.
 
@@ -210,15 +211,16 @@ drives execution.
 
 ## Related
 
-- [ADR-0005](./0005-board-adapter-contract.md) — BoardAdapter
-  contract; the `board_capability` predicate form resolves
-  through this contract's capability declaration surface
-  (extended by ADR-0022).
+- [ADR-0027](./0027-m3-dispatch-via-kanban-protocol-projection.md)
+  — Kanban projection capability dispatch; the
+  `kanban_projection_capability` predicate form resolves
+  through this contract's capability vocabulary.
 - ADR-0012 — Unified check-script trigger model; predicate
   evaluation runs inside the hook flow defined there and
   inherits the ≤200ms budget.
 - ADR-0013 — Declarative state schema + lifecycle; this ADR
-  extends the 4-state lifecycle to 5 states.
+  extends the 4-state lifecycle by adding `not-applicable`
+  (later evolved to 6 states by ADR-0013 amendment D11.1).
 - ADR-0014 — Stage registry contract; this ADR adds the
   `applicable_when` field to the column-semantics
   enumeration and JSON Schema validation.
@@ -228,11 +230,12 @@ drives execution.
 - ADR-0021 — Settings modular layering; settings paths
   resolved by `applicable_when: {setting_path: ...}` follow
   layering and merge semantics defined there.
-- ADR-0022 — BoardAdapter capability dispatch; defines how
-  adapters declare capability sets that the
-  `board_capability` predicate form resolves against.
+- ADR-0024 — settings.yml family rename + new config-item
+  stages; defines `m10.repo.choose-kanban-projection` as the
+  selection stage whose persisted choice this ADR's
+  `kanban_projection_capability` predicate form consumes.
 - [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
-  — Living design doc; § "Stage lifecycle states" (5-state
+  — Living design doc; § "Stage lifecycle states" (6-state
   table including `not-applicable`), § "Stage registry
   contract" → "Column / field semantics" (`applicable_when`
   row), § "What the lifecycle model asks of each stage" (MAY
