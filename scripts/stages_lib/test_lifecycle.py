@@ -517,3 +517,279 @@ def test_form_b_uses_subprocess_not_reimplemented():
                         )
     except SyntaxError:
         pass  # If we can't parse, fall through
+
+
+# ---------------------------------------------------------------------------
+# T2.5-22/23  external_ttl_seconds — Layer 2.5 cache-coherent re-validation
+#
+# Audit A2: stages with locality:external never re-run live IO once persisted
+# applied. The lifecycle MUST respect external_ttl_seconds: an applied verdict
+# is provisional until external_validated_at + external_ttl_seconds elapses.
+# After expiry, live IO (helper_module.idempotency_check) re-runs to validate.
+# See SETUP_STAGES_DEVELOPMENT.md § Lifecycle invariant: append-merge-only.
+# ---------------------------------------------------------------------------
+
+import datetime as _dt
+
+
+def _make_external_stage(stage_id="m3.repo.ensure-labels", generation=1, ttl=3600):
+    """Build an external-locality stage dict for TTL tests."""
+    return {
+        "stage_id": stage_id,
+        "generation": generation,
+        "depends_on": [],
+        "hash_excluded_fields": ["last_validated_at", "external_validated_at"],
+        "locality": "external",
+        "external_ttl_seconds": ttl,
+    }
+
+
+def _iso_z(when: _dt.datetime) -> str:
+    """Render a datetime as RFC-3339 / ISO 8601 with trailing Z.
+
+    `datetime.isoformat()` on a UTC-aware datetime produces "...+00:00"; we
+    swap that suffix for the canonical "Z" form so the result matches what
+    production code emits via `_refresh_external_validated_at`.
+    """
+    iso = when.astimezone(_dt.timezone.utc).replace(microsecond=0).isoformat()
+    return iso.replace("+00:00", "Z")
+
+
+def test_external_stage_ttl_not_yet_expired_returns_applied_without_live_io(dirs):
+    """T2.5-22: locality:external + applied + TTL fresh → no live IO, applied."""
+    home, repo = dirs
+    target_state = {"canonical_labels_present": True}
+    h = fingerprint(target_state)
+    fresh_ts = _iso_z(_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=60))
+
+    # Pre-populate persisted state with FRESH external_validated_at (60s ago, ttl=3600).
+    data = {
+        "modules": {
+            "lifecycle": {
+                "m3.repo.ensure-labels": {
+                    "status": "applied",
+                    "generation": 1,
+                    "target_state_hash": h,
+                    "target_state": target_state,
+                    "external_validated_at": fresh_ts,
+                }
+            }
+        }
+    }
+    write_settings("repo-shared", data, home=home, repo_root=repo, repo_identity=REPO_IDENTITY)
+
+    # Mock idempotency_check so we can assert it is NOT called.
+    idempotency_calls = []
+    def fake_idempotency_check(ctx):
+        idempotency_calls.append(ctx)
+        return {"present": True, "current_state": {}}
+
+    helper = SimpleNamespace(
+        compute_target_state=lambda ctx: target_state,
+        idempotency_check=fake_idempotency_check,
+    )
+
+    stage = _make_external_stage(generation=1, ttl=3600)
+    result = evaluate_stage(
+        stage, home=home, repo_root=repo, repo_identity=REPO_IDENTITY,
+        helper_module=helper,
+    )
+    assert result["state"] == "applied", f"expected applied, got {result['state']!r}: {result['reason']}"
+    assert idempotency_calls == [], "live IO MUST NOT run while TTL cache is hot"
+
+
+def test_external_stage_ttl_expired_reruns_live_io(dirs):
+    """T2.5-23: locality:external + applied + TTL expired → live IO re-runs.
+
+    After live IO success, external_validated_at advances; status remains applied.
+    """
+    home, repo = dirs
+    target_state = {"canonical_labels_present": True}
+    h = fingerprint(target_state)
+    # Stale: ttl-3600s + 60s buffer in the past.
+    stale_ts = _iso_z(_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=3660))
+
+    data = {
+        "modules": {
+            "lifecycle": {
+                "m3.repo.ensure-labels": {
+                    "status": "applied",
+                    "generation": 1,
+                    "target_state_hash": h,
+                    "target_state": target_state,
+                    "external_validated_at": stale_ts,
+                }
+            }
+        }
+    }
+    write_settings("repo-shared", data, home=home, repo_root=repo, repo_identity=REPO_IDENTITY)
+
+    idempotency_calls = []
+    def fake_idempotency_check(ctx):
+        idempotency_calls.append(ctx)
+        return {"present": True, "current_state": {}}
+
+    helper = SimpleNamespace(
+        compute_target_state=lambda ctx: target_state,
+        idempotency_check=fake_idempotency_check,
+    )
+
+    stage = _make_external_stage(generation=1, ttl=3600)
+    result = evaluate_stage(
+        stage, home=home, repo_root=repo, repo_identity=REPO_IDENTITY,
+        helper_module=helper,
+    )
+    assert idempotency_calls, "live IO MUST run when TTL cache is stale"
+    assert result["state"] == "applied", (
+        f"expected applied (live IO succeeded), got {result['state']!r}: {result['reason']}"
+    )
+
+    # Re-load persisted entry → external_validated_at must have advanced.
+    from stages_lib._partitioned_settings import read_settings as _rs
+    data2 = _rs("repo-shared", home=home, repo_root=repo, repo_identity=REPO_IDENTITY)
+    entry = (data2.get("modules") or {}).get("lifecycle", {}).get("m3.repo.ensure-labels", {})
+    new_ts = entry.get("external_validated_at", "")
+    assert new_ts and new_ts != stale_ts, (
+        f"external_validated_at must advance after live IO; got {new_ts!r} (was {stale_ts!r})"
+    )
+
+
+def test_external_stage_ttl_expired_live_io_failure_returns_drifted(dirs):
+    """T2.5-24: locality:external + applied + TTL expired + live IO fails → drifted."""
+    home, repo = dirs
+    target_state = {"canonical_labels_present": True}
+    h = fingerprint(target_state)
+    stale_ts = _iso_z(_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=3660))
+
+    data = {
+        "modules": {
+            "lifecycle": {
+                "m3.repo.ensure-labels": {
+                    "status": "applied",
+                    "generation": 1,
+                    "target_state_hash": h,
+                    "target_state": target_state,
+                    "external_validated_at": stale_ts,
+                }
+            }
+        }
+    }
+    write_settings("repo-shared", data, home=home, repo_root=repo, repo_identity=REPO_IDENTITY)
+
+    helper = SimpleNamespace(
+        compute_target_state=lambda ctx: target_state,
+        idempotency_check=lambda ctx: {"present": False, "current_state": {"missing": ["x"]}},
+    )
+
+    stage = _make_external_stage(generation=1, ttl=3600)
+    result = evaluate_stage(
+        stage, home=home, repo_root=repo, repo_identity=REPO_IDENTITY,
+        helper_module=helper,
+    )
+    assert result["state"] == "drifted", (
+        f"expected drifted (live IO observed missing target), got {result['state']!r}"
+    )
+
+
+def test_external_stage_no_external_validated_at_treats_as_expired(dirs):
+    """T2.5-25: locality:external + applied + missing external_validated_at → re-run live IO.
+
+    Belt-and-suspenders: pre-existing applied entries written before this fix
+    landed have no external_validated_at; the lifecycle MUST treat them as
+    cache-expired and trigger a fresh validation rather than trusting the
+    stale verdict indefinitely.
+    """
+    home, repo = dirs
+    target_state = {"canonical_labels_present": True}
+    h = fingerprint(target_state)
+
+    data = {
+        "modules": {
+            "lifecycle": {
+                "m3.repo.ensure-labels": {
+                    "status": "applied",
+                    "generation": 1,
+                    "target_state_hash": h,
+                    "target_state": target_state,
+                    # external_validated_at intentionally absent
+                }
+            }
+        }
+    }
+    write_settings("repo-shared", data, home=home, repo_root=repo, repo_identity=REPO_IDENTITY)
+
+    idempotency_calls = []
+    def fake_idempotency_check(ctx):
+        idempotency_calls.append(ctx)
+        return {"present": True, "current_state": {}}
+
+    helper = SimpleNamespace(
+        compute_target_state=lambda ctx: target_state,
+        idempotency_check=fake_idempotency_check,
+    )
+
+    stage = _make_external_stage(generation=1, ttl=3600)
+    result = evaluate_stage(
+        stage, home=home, repo_root=repo, repo_identity=REPO_IDENTITY,
+        helper_module=helper,
+    )
+    assert idempotency_calls, "missing external_validated_at must trigger live IO"
+    assert result["state"] == "applied"
+
+
+def test_external_stage_ttl_accepts_yaml_datetime_object(dirs):
+    """T2.5-26: persisted external_validated_at as datetime object (PyYAML auto-parse)
+    is honored as a fresh cache marker — production parser MUST accept both
+    `datetime` (PyYAML default) and ISO string (when the source emitter quoted it).
+    """
+    home, repo = dirs
+    target_state = {"canonical_labels_present": True}
+    h = fingerprint(target_state)
+    fresh_dt = _dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(seconds=60)
+
+    # Pre-populate persisted state with a datetime OBJECT (not string) — this is
+    # the shape PyYAML's safe_load returns when reading an unquoted ISO 8601
+    # value. write_settings/safe_dump round-trips through quoted form, so to
+    # exercise the datetime branch we drop the YAML directly.
+    settings_path = (
+        home / ".board-superpowers" / "repos" / REPO_IDENTITY / "settings.yml"
+    )
+    settings_path.parent.mkdir(parents=True, exist_ok=True)
+    iso_unquoted = fresh_dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    settings_path.write_text(
+        "modules:\n"
+        "  lifecycle:\n"
+        "    m3.repo.ensure-labels:\n"
+        "      status: applied\n"
+        "      generation: 1\n"
+        f"      target_state_hash: {h}\n"
+        "      target_state:\n"
+        "        canonical_labels_present: true\n"
+        f"      external_validated_at: {iso_unquoted}\n",  # unquoted → datetime
+        encoding="utf-8",
+    )
+    # Sanity-check the round-trip yields a datetime, not a string.
+    loaded = yaml.safe_load(settings_path.read_text(encoding="utf-8"))
+    persisted_ts = loaded["modules"]["lifecycle"]["m3.repo.ensure-labels"]["external_validated_at"]
+    assert isinstance(persisted_ts, _dt.datetime), (
+        f"YAML auto-parse expected datetime, got {type(persisted_ts).__name__}: "
+        "test fixture not exercising the datetime branch"
+    )
+
+    idempotency_calls = []
+    def fake_idempotency_check(ctx):
+        idempotency_calls.append(ctx)
+        return {"present": True, "current_state": {}}
+
+    helper = SimpleNamespace(
+        compute_target_state=lambda ctx: target_state,
+        idempotency_check=fake_idempotency_check,
+    )
+
+    stage = _make_external_stage(generation=1, ttl=3600)
+    result = evaluate_stage(
+        stage, home=home, repo_root=repo, repo_identity=REPO_IDENTITY,
+        helper_module=helper,
+    )
+    assert result["state"] == "applied", f"expected applied, got {result['state']!r}"
+    assert idempotency_calls == [], "datetime persisted timestamp must be honored as cache marker"

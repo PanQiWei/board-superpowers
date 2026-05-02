@@ -9,17 +9,25 @@ States: not-applicable | pending | applied | drifted | failed | blocked
 # `deprecated` state per ADR-0013 § Decision deferred to v0.6.0 (auto-prune of
 # removed-from-registry stages); no v0.5.0 stage carries `deprecated_in_version`.
 ADR refs: ADR-0013 (lifecycle), ADR-0020 (applicable_when), ADR-0027 § 2 (Form B).
+
+Lifecycle invariant: append-merge-only. Persisted lifecycle state under
+`modules.lifecycle.<stage_id>` is never bulk-overwritten — see
+SETUP_STAGES_DEVELOPMENT.md § "Lifecycle invariant: append-merge-only".
+locality:external stages with declared `external_ttl_seconds` are
+cache-coherent: an applied verdict is provisional until TTL elapses,
+after which live IO re-runs to validate.
 """
 
 from __future__ import annotations
 
+import datetime as _dt
 import importlib
 import subprocess
 from pathlib import Path
 from typing import Literal
 
 from ._canonical import fingerprint
-from ._partitioned_settings import read_settings
+from ._partitioned_settings import read_settings, update_module_section
 
 LifecycleState = Literal[
     "not-applicable", "pending", "applied", "drifted", "failed", "blocked",
@@ -315,9 +323,161 @@ def evaluate_stage(
                        persisted.get("generation"), reg_gen,
                        persisted.get("target_state_hash"), reg_hash, sd)
 
+    # Layer 2.5 — locality:external TTL re-validation (audit A2 fix).
+    # When a stage with locality:external has matched both Layer 1 and
+    # Layer 2 (i.e., would otherwise be `applied`), check whether its
+    # external_validated_at cache marker is still inside the declared
+    # external_ttl_seconds window. If expired (or missing) we re-run live
+    # IO via helper_module.idempotency_check; success refreshes the cache,
+    # failure flips the verdict to `drifted`. See
+    # SETUP_STAGES_DEVELOPMENT.md § "Lifecycle invariant: append-merge-only".
+    if stage.get("locality") == "external" and stage.get("external_ttl_seconds"):
+        verdict = _evaluate_external_ttl(
+            stage, persisted=persisted, helper_module=helper_module,
+            home=home, repo_root=repo_root, repo_identity=repo_identity,
+        )
+        if verdict is not None:
+            state, reason = verdict
+            return _result(stage_id, state, reason,
+                           persisted.get("generation"), reg_gen,
+                           persisted.get("target_state_hash"), reg_hash, None)
+
     return _result(stage_id, "applied", "generation and target_state_hash match",
                    persisted.get("generation"), reg_gen,
                    persisted.get("target_state_hash"), reg_hash, None)
+
+
+# ---------------------------------------------------------------------------
+# Layer 2.5 — locality:external TTL re-validation (audit A2)
+# ---------------------------------------------------------------------------
+
+
+def _evaluate_external_ttl(
+    stage: dict,
+    *,
+    persisted: dict,
+    helper_module: object,
+    home: Path,
+    repo_root: Path,
+    repo_identity: str,
+) -> tuple[str, str] | None:
+    """Return (state, reason) override when external TTL handling applies.
+
+    Returns None when the cache is hot (no override — caller returns the
+    default `applied` verdict). Otherwise returns one of:
+      ("applied", "<reason>")  — live IO succeeded; cache refreshed.
+      ("drifted", "<reason>")  — live IO observed missing target.
+      ("applied", "<reason>")  — helper has no idempotency_check; fail open.
+
+    The function is the single locus of TTL-cache writes; it MUST update
+    `external_validated_at` via update_module_section() (load-merge), never
+    via a bulk write. See SETUP_STAGES_DEVELOPMENT.md § Lifecycle invariant.
+    """
+    stage_id: str = stage["stage_id"]
+    ttl: int = int(stage.get("external_ttl_seconds") or 0)
+    if ttl <= 0:
+        return None
+
+    last_validated = persisted.get("external_validated_at")
+    now = _dt.datetime.now(_dt.timezone.utc)
+
+    # PyYAML auto-parses ISO timestamps into datetime objects on load; the
+    # raw string form survives only when the source emitter quoted the value.
+    # Accept both shapes so the cache check works regardless of write path.
+    expired = True
+    parsed: _dt.datetime | None = None
+    if isinstance(last_validated, _dt.datetime):
+        parsed = last_validated
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=_dt.timezone.utc)
+    elif isinstance(last_validated, str) and last_validated:
+        parsed = _parse_iso_timestamp(last_validated)
+    if parsed is not None:
+        expires_at = parsed + _dt.timedelta(seconds=ttl)
+        expired = now >= expires_at
+
+    if not expired:
+        return None  # cache still hot — caller returns applied
+
+    idem = getattr(helper_module, "idempotency_check", None)
+    if not callable(idem):
+        # Helper does not expose idempotency_check; fail open and refresh
+        # the cache marker so we do not loop on every hook tick.
+        _refresh_external_validated_at(
+            stage_id, now=now,
+            home=home, repo_root=repo_root, repo_identity=repo_identity,
+        )
+        return ("applied", "external TTL expired but helper exposes no idempotency_check; cache refreshed")
+
+    try:
+        from types import SimpleNamespace
+        ctx = SimpleNamespace(home=home, repo_root=repo_root, repo_identity=repo_identity)
+        result = idem(ctx)
+    except Exception as exc:  # noqa: BLE001 — fail open on live-IO error
+        return ("applied", f"external TTL expired but live IO raised: {exc}; deferring to next tick")
+
+    if isinstance(result, dict) and result.get("present") is True:
+        _refresh_external_validated_at(
+            stage_id, now=now,
+            home=home, repo_root=repo_root, repo_identity=repo_identity,
+        )
+        return ("applied", "external TTL expired; live IO confirmed target present; cache refreshed")
+
+    return ("drifted", "external TTL expired; live IO observed target missing")
+
+
+def _parse_iso_timestamp(value: str) -> _dt.datetime | None:
+    """Parse an ISO 8601 / RFC-3339 timestamp; tolerate trailing Z and naive forms."""
+    s = value.strip()
+    if s.endswith("Z"):
+        s = s[:-1] + "+00:00"
+    try:
+        parsed = _dt.datetime.fromisoformat(s)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=_dt.timezone.utc)
+    return parsed
+
+
+def _refresh_external_validated_at(
+    stage_id: str,
+    *,
+    now: _dt.datetime,
+    home: Path,
+    repo_root: Path,
+    repo_identity: str,
+) -> None:
+    """Append-merge external_validated_at into modules.lifecycle.<stage_id>.
+
+    Uses update_module_section's read-modify-write semantics so peer stages'
+    lifecycle entries (and any other module sections) are preserved. This is
+    the lifecycle invariant: append-merge-only, never bulk-overwrite.
+    """
+    iso = now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    try:
+        # update_module_section preserves all sibling lifecycle entries; we
+        # merge ONLY the single stage_id key by doing a focused dict.
+        existing = read_settings("repo-shared", home=home, repo_root=repo_root, repo_identity=repo_identity)
+        modules = existing.setdefault("modules", {}) if isinstance(existing, dict) else {}
+        if not isinstance(modules, dict):
+            return
+        lifecycle = modules.setdefault("lifecycle", {})
+        if not isinstance(lifecycle, dict):
+            return
+        entry = lifecycle.get(stage_id)
+        if not isinstance(entry, dict):
+            return
+        entry["external_validated_at"] = iso
+        # Re-write via update_module_section so the merge is centralised.
+        update_module_section(
+            "repo-shared", "lifecycle", lifecycle,
+            home=home, repo_root=repo_root, repo_identity=repo_identity,
+        )
+    except Exception:
+        # Cache refresh is best-effort; an IO failure here must not flip the
+        # caller's verdict. The next hook tick will re-evaluate.
+        return
 
 
 def _result(stage_id, state, reason, p_gen, r_gen, p_hash, r_hash, s_diff) -> dict:

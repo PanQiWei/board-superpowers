@@ -285,3 +285,203 @@ def test_compute_target_state_validates_against_registry_schema(ctx):
     schema = stage["target_state_schema"]
     ts = compute_target_state(ctx)
     jsonschema.validate(instance=ts, schema=schema)
+
+
+# ---------------------------------------------------------------------------
+# Audit A3 — load-merge invariant
+#
+# The v0.5.0 executor() literal-constructed `data = {...}` and called
+# write_settings(...), atomically replacing the file and vaporizing every
+# peer-written modules.lifecycle.<stage_id> entry. Lifecycle invariant
+# (SETUP_STAGES_DEVELOPMENT.md § "Lifecycle invariant: append-merge-only")
+# requires load-merge, never bulk overwrite.
+# ---------------------------------------------------------------------------
+
+
+from stages_lib._partitioned_settings import read_settings, write_settings  # noqa: E402
+
+
+def _read_back(ctx) -> dict:
+    return read_settings(
+        "repo-shared",
+        home=Path(ctx.home), repo_root=Path(ctx.repo_root), repo_identity=ctx.repo_identity,
+    )
+
+
+def test_executor_preserves_existing_lifecycle_entries(ctx):
+    """A3-1: peer-written modules.lifecycle.<stage_id> entries MUST survive a
+    subsequent m1.repo.write-state-yml.executor() invocation that needs to
+    re-write the file (idempotency_check returns present=False).
+
+    RED before A3 fix lands: the literal-construct write clobbers the entries.
+    GREEN after fix: load-merge preserves them.
+
+    We simulate the realistic re-write trigger by pre-populating with a
+    stale repo_identity. idempotency_check then returns present=False and the
+    executor proceeds with the write — exercising the bulk-overwrite path.
+    """
+    existing = {
+        "setup": {
+            "generated_at": "2026-04-30T10:00:00+00:00",
+            "plugin_version": "v0.4.9",
+            "repo_identity": "stale/identity",  # forces re-write
+            "schema_version": 1,
+        },
+        "stages_completed": [],
+        "modules": {
+            "lifecycle": {
+                "schema_version": 1,
+                "m3.repo.ensure-labels": {
+                    "status": "applied",
+                    "generation": 1,
+                    "target_state_hash": "abc123",
+                    "external_validated_at": "2026-05-01T12:00:00Z",
+                },
+                "m4.repo.apply-audit-ddl": {
+                    "status": "applied",
+                    "generation": 2,
+                    "target_state_hash": "def456",
+                },
+            },
+            "m1_plugin_runtime": {
+                "bootstrapped_at": "2026-04-30T10:00:00+00:00",
+                "schema_version": 1,
+            },
+            "m4_audit": {
+                "audit_rows_landed": 0,
+                "dsn_recorded": False,
+                "pending_count": 0,
+                "schema_version": 1,
+            },
+            "m7_routing": {"detected_form": "", "schema_version": 1},
+        },
+    }
+    write_settings(
+        "repo-shared", existing,
+        home=Path(ctx.home), repo_root=Path(ctx.repo_root), repo_identity=ctx.repo_identity,
+    )
+
+    # Re-run executor — idempotency_check returns present (matching schema +
+    # repo_identity), so this is the most realistic post-bootstrap path.
+    executor(ctx)
+
+    data = _read_back(ctx)
+    lifecycle = data.get("modules", {}).get("lifecycle", {})
+
+    assert "m3.repo.ensure-labels" in lifecycle, (
+        "m3.repo.ensure-labels lifecycle entry vaporized — "
+        "executor() bulk-overwrote modules.lifecycle"
+    )
+    assert lifecycle["m3.repo.ensure-labels"]["status"] == "applied"
+    assert lifecycle["m3.repo.ensure-labels"]["generation"] == 1
+    assert lifecycle["m3.repo.ensure-labels"]["target_state_hash"] == "abc123"
+    # external_validated_at may be a string OR a datetime (PyYAML auto-parse)
+    # depending on how the YAML emitter quoted the value. Either survives.
+    assert "external_validated_at" in lifecycle["m3.repo.ensure-labels"]
+
+    assert "m4.repo.apply-audit-ddl" in lifecycle, (
+        "m4.repo.apply-audit-ddl lifecycle entry vaporized"
+    )
+    assert lifecycle["m4.repo.apply-audit-ddl"]["status"] == "applied"
+
+    # Schema marker also intact.
+    assert lifecycle.get("schema_version") == 1
+
+
+def test_executor_preserves_other_module_sections(ctx):
+    """A3-2: peer-written modules.<other_module> sections (m4_audit DSN choice,
+    m7_routing form selection, m10_kanban projection) MUST survive when the
+    executor re-writes the file.
+
+    RED before fix: hardcoded skeleton overwrites architect-supplied fields.
+    GREEN after fix: load-merge preserves them.
+    """
+    existing = {
+        "setup": {
+            "generated_at": "2026-04-30T10:00:00+00:00",
+            "plugin_version": "v0.4.9",
+            "repo_identity": "stale/identity",  # forces re-write
+            "schema_version": 1,
+        },
+        "stages_completed": [],
+        "modules": {
+            "lifecycle": {"schema_version": 1},
+            "m1_plugin_runtime": {
+                "bootstrapped_at": "2026-04-30T10:00:00+00:00", "schema_version": 1,
+            },
+            "m4_audit": {
+                "audit_rows_landed": 42,
+                "dsn_recorded": True,
+                "dsn_scheme": "sqlite",
+                "pending_count": 3,
+                "schema_version": 1,
+            },
+            "m7_routing": {"detected_form": "form-a", "schema_version": 1},
+            "m10_kanban": {
+                "projection": "github-project-v2",
+                "project_ref": "PanQiWei/board-superpowers",
+                "schema_version": 1,
+            },
+        },
+    }
+    write_settings(
+        "repo-shared", existing,
+        home=Path(ctx.home), repo_root=Path(ctx.repo_root), repo_identity=ctx.repo_identity,
+    )
+
+    executor(ctx)
+    data = _read_back(ctx)
+    modules = data.get("modules", {})
+
+    assert modules["m4_audit"]["audit_rows_landed"] == 42, (
+        "m4_audit.audit_rows_landed reset by bulk overwrite"
+    )
+    assert modules["m4_audit"]["dsn_recorded"] is True
+    assert modules["m4_audit"].get("dsn_scheme") == "sqlite"
+    assert modules["m4_audit"]["pending_count"] == 3
+
+    assert modules["m7_routing"]["detected_form"] == "form-a"
+
+    # m10_kanban — not pre-created by the v0.5.0 skeleton, must survive.
+    assert "m10_kanban" in modules, (
+        "m10_kanban module section vaporized — executor() did not "
+        "load-merge non-skeleton modules"
+    )
+    assert modules["m10_kanban"]["projection"] == "github-project-v2"
+
+
+def test_executor_preserves_non_setup_top_level_keys(ctx):
+    """A3-3: top-level keys beyond setup/modules/stages_completed must survive
+    a re-write.
+
+    Belt-and-suspenders: future-version metadata or peer-stage opt-ins should
+    not be silently dropped on the next executor() tick.
+    """
+    existing = {
+        "setup": {
+            "generated_at": "2026-04-30T10:00:00+00:00",
+            "plugin_version": "v0.4.9",
+            "repo_identity": "stale/identity",  # forces re-write
+            "schema_version": 1,
+        },
+        "stages_completed": [{"stage_id": "m0.host.dep-check", "status": "applied"}],
+        "modules": {"lifecycle": {"schema_version": 1}},
+        "experimental_telemetry": {"opt_in": True, "endpoint": "https://example/x"},
+    }
+    write_settings(
+        "repo-shared", existing,
+        home=Path(ctx.home), repo_root=Path(ctx.repo_root), repo_identity=ctx.repo_identity,
+    )
+
+    executor(ctx)
+    data = _read_back(ctx)
+
+    assert "experimental_telemetry" in data, (
+        "Unknown top-level key vaporized — executor() did not preserve "
+        "non-setup top-level keys"
+    )
+    assert data["experimental_telemetry"]["opt_in"] is True
+    assert any(
+        e.get("stage_id") == "m0.host.dep-check"
+        for e in data.get("stages_completed", [])
+    ), "stages_completed history vaporized"

@@ -217,43 +217,70 @@ AGENTIC_DEFAULTS = {
 }
 
 # -------------------------------------------------------------------------
-# Pass 1: run executors / apply_choice to produce side-effects.
-# Collect (stage_id, target_state, status) tuples for bulk lifecycle write.
-# Rationale: m1.repo.write-state-yml.executor() initialises repo-shared
-# settings.yml (resetting modules.lifecycle), so lifecycle entries MUST be
-# written AFTER all executors have run (Pass 2), not interleaved.
+# Single-pass: run executors / apply_choice and write each lifecycle
+# entry inline. Per Phase 5 Stage 5.1 (audit A3 fix),
+# m1.repo.write-state-yml.executor() now load-merges existing
+# settings.yml — it no longer clobbers modules.lifecycle. Inlining the
+# writes implicitly verifies that A3 contract holds across the full
+# 22-stage walk: any regression in m1's load-merge would silently
+# vaporize prior lifecycle entries and this test would fail.
 # -------------------------------------------------------------------------
-pending_lifecycle = []  # list of (stage_id, target_state, status)
+now = datetime.datetime.utcnow().isoformat() + "Z"
+applied_count = 0
+not_applicable_count = 0
 errors = []
 
 for stage_id in STAGE_ORDER:
     try:
-        # m9 is codex-only — not-applicable on CC.
+        # Resolve target_state + status for this stage.
         if stage_id == "m9.host.register-codex-hooks":
-            pending_lifecycle.append((stage_id, {}, "not-applicable"))
-            continue
-
-        # Mocked external stages: use pre-defined target state.
-        if stage_id in MOCK_TARGET_STATES:
-            pending_lifecycle.append((stage_id, MOCK_TARGET_STATES[stage_id], "applied"))
-            continue
-
-        mod = load_stage_module(stage_id)
-        if mod is None:
-            errors.append(f"{stage_id}: module not found")
-            continue
-
-        # Agentic stages: call apply_choice() with default value.
-        if stage_id in AGENTIC_DEFAULTS:
-            mod.apply_choice(ctx, AGENTIC_DEFAULTS[stage_id])
+            # m9 is codex-only — not-applicable on CC.
+            ts = {}
+            status = "not-applicable"
+            reason = "platform predicate: codex-only stage skipped on CC"
+        elif stage_id in MOCK_TARGET_STATES:
+            ts = MOCK_TARGET_STATES[stage_id]
+            status = "applied"
+            reason = None
+        else:
+            mod = load_stage_module(stage_id)
+            if mod is None:
+                errors.append(f"{stage_id}: module not found")
+                continue
+            if stage_id in AGENTIC_DEFAULTS:
+                mod.apply_choice(ctx, AGENTIC_DEFAULTS[stage_id])
+            else:
+                mod.executor(ctx)
             ts = mod.compute_target_state(ctx)
-            pending_lifecycle.append((stage_id, ts, "applied"))
-            continue
+            status = "applied"
+            reason = None
 
-        # Automated stages: run executor() for side-effects.
-        mod.executor(ctx)
-        ts = mod.compute_target_state(ctx)
-        pending_lifecycle.append((stage_id, ts, "applied"))
+        # Inline lifecycle write (A3 fix: m1 load-merges, no clobber).
+        data = read_settings(
+            "repo-shared", home=home, repo_root=repo_root, repo_identity=repo_identity
+        )
+        lc = data.setdefault("modules", {}).setdefault("lifecycle", {})
+        if status == "not-applicable":
+            lc[stage_id] = {
+                "status": "not-applicable",
+                "generation": 0,
+                "target_state_hash": "",
+                "reason": reason,
+                "applied_at": now,
+            }
+            not_applicable_count += 1
+        else:
+            lc[stage_id] = {
+                "status": "applied",
+                "generation": 1,
+                "target_state_hash": fingerprint(ts),
+                "target_state": ts,
+                "applied_at": now,
+            }
+            applied_count += 1
+        write_settings(
+            "repo-shared", data, home=home, repo_root=repo_root, repo_identity=repo_identity
+        )
 
     except Exception as exc:
         errors.append(f"{stage_id}: {exc}")
@@ -262,44 +289,6 @@ if errors:
     for e in errors:
         print(f"  ERROR: {e}", file=sys.stderr)
     sys.exit(1)
-
-# -------------------------------------------------------------------------
-# Pass 2: write all 22 lifecycle entries to repo-shared settings.yml in
-# one batch, AFTER all executors have run (so m1.repo.write-state-yml's
-# initialisation of modules.lifecycle has already happened).
-# -------------------------------------------------------------------------
-now = datetime.datetime.utcnow().isoformat() + "Z"
-data = read_settings(
-    "repo-shared", home=home, repo_root=repo_root, repo_identity=repo_identity
-)
-lc = data.setdefault("modules", {}).setdefault("lifecycle", {})
-
-applied_count = 0
-not_applicable_count = 0
-
-for stage_id, ts, status in pending_lifecycle:
-    if status == "not-applicable":
-        lc[stage_id] = {
-            "status": "not-applicable",
-            "generation": 0,
-            "target_state_hash": "",
-            "reason": "platform predicate: codex-only stage skipped on CC",
-            "applied_at": now,
-        }
-        not_applicable_count += 1
-    else:
-        lc[stage_id] = {
-            "status": "applied",
-            "generation": 1,
-            "target_state_hash": fingerprint(ts),
-            "target_state": ts,
-            "applied_at": now,
-        }
-        applied_count += 1
-
-write_settings(
-    "repo-shared", data, home=home, repo_root=repo_root, repo_identity=repo_identity
-)
 
 print(f"applied={applied_count} not_applicable={not_applicable_count} errors=0")
 PYEOF

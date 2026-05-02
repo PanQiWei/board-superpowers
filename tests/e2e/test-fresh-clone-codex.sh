@@ -269,41 +269,54 @@ M9_TARGET_STATE = {
 }
 
 # -------------------------------------------------------------------------
-# Pass 1: run executors / apply_choice for side-effects.
-# Collect (stage_id, target_state, status) tuples for bulk lifecycle write.
-# Rationale: m1.repo.write-state-yml.executor() initialises repo-shared
-# settings.yml (resetting modules.lifecycle), so lifecycle entries MUST be
-# written after all executors run (Pass 2).
+# Single-pass: run executors / apply_choice and write each lifecycle
+# entry inline. Per Phase 5 Stage 5.1 (audit A3 fix),
+# m1.repo.write-state-yml.executor() now load-merges existing
+# settings.yml — it no longer clobbers modules.lifecycle. Inlining the
+# writes implicitly verifies that A3 contract holds across the full
+# 22-stage walk: any regression in m1's load-merge would silently
+# vaporize prior lifecycle entries and this test would fail.
 # -------------------------------------------------------------------------
-pending_lifecycle = []
+now = datetime.datetime.utcnow().isoformat() + "Z"
+applied_count = 0
 errors = []
 
 for stage_id in STAGE_ORDER:
     try:
+        # Resolve target_state for this stage.
         if stage_id == "m9.host.register-codex-hooks":
-            # Codex: m9 is applicable; record it applied with M9_TARGET_STATE.
-            # (hooks.json was already written by register-codex-hooks.sh in Phase B.)
-            pending_lifecycle.append((stage_id, M9_TARGET_STATE, "applied"))
-            continue
-
-        if stage_id in MOCK_TARGET_STATES:
-            pending_lifecycle.append((stage_id, MOCK_TARGET_STATES[stage_id], "applied"))
-            continue
-
-        mod = load_stage_module(stage_id)
-        if mod is None:
-            errors.append(f"{stage_id}: module not found")
-            continue
-
-        if stage_id in AGENTIC_DEFAULTS:
-            mod.apply_choice(ctx, AGENTIC_DEFAULTS[stage_id])
+            # Codex: m9 is applicable; hooks.json was written by
+            # register-codex-hooks.sh in Phase B.
+            ts = M9_TARGET_STATE
+        elif stage_id in MOCK_TARGET_STATES:
+            ts = MOCK_TARGET_STATES[stage_id]
+        else:
+            mod = load_stage_module(stage_id)
+            if mod is None:
+                errors.append(f"{stage_id}: module not found")
+                continue
+            if stage_id in AGENTIC_DEFAULTS:
+                mod.apply_choice(ctx, AGENTIC_DEFAULTS[stage_id])
+            else:
+                mod.executor(ctx)
             ts = mod.compute_target_state(ctx)
-            pending_lifecycle.append((stage_id, ts, "applied"))
-            continue
 
-        mod.executor(ctx)
-        ts = mod.compute_target_state(ctx)
-        pending_lifecycle.append((stage_id, ts, "applied"))
+        # Inline lifecycle write (A3 fix: m1 load-merges, no clobber).
+        data = read_settings(
+            "repo-shared", home=home, repo_root=repo_root, repo_identity=repo_identity
+        )
+        lc = data.setdefault("modules", {}).setdefault("lifecycle", {})
+        lc[stage_id] = {
+            "status": "applied",
+            "generation": 1,
+            "target_state_hash": fingerprint(ts),
+            "target_state": ts,
+            "applied_at": now,
+        }
+        write_settings(
+            "repo-shared", data, home=home, repo_root=repo_root, repo_identity=repo_identity
+        )
+        applied_count += 1
 
     except Exception as exc:
         errors.append(f"{stage_id}: {exc}")
@@ -312,30 +325,6 @@ if errors:
     for e in errors:
         print(f"  ERROR: {e}", file=sys.stderr)
     sys.exit(1)
-
-# -------------------------------------------------------------------------
-# Pass 2: batch-write all 22 lifecycle entries to repo-shared settings.yml.
-# -------------------------------------------------------------------------
-now = datetime.datetime.utcnow().isoformat() + "Z"
-data = read_settings(
-    "repo-shared", home=home, repo_root=repo_root, repo_identity=repo_identity
-)
-lc = data.setdefault("modules", {}).setdefault("lifecycle", {})
-
-applied_count = 0
-for stage_id, ts, status in pending_lifecycle:
-    lc[stage_id] = {
-        "status": "applied",
-        "generation": 1,
-        "target_state_hash": fingerprint(ts),
-        "target_state": ts,
-        "applied_at": now,
-    }
-    applied_count += 1
-
-write_settings(
-    "repo-shared", data, home=home, repo_root=repo_root, repo_identity=repo_identity
-)
 
 print(f"applied={applied_count} not_applicable=0 errors=0")
 PYEOF

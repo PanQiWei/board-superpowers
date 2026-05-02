@@ -34,11 +34,12 @@
 11. [Kanban projection capability dispatch — M3-conditioning](#11-kanban-projection-capability-dispatch--m3-conditioning)
 12. [Cross-version evolution — `generation` bumps & `schema_version`](#12-cross-version-evolution--generation-bumps--schema_version)
 13. [The canonicalization invariant — agent footguns](#13-the-canonicalization-invariant--agent-footguns)
-14. [Recipe — adding a new stage end-to-end](#14-recipe--adding-a-new-stage-end-to-end)
-15. [Testing — what CI gates and what you must hand-test](#15-testing--what-ci-gates-and-what-you-must-hand-test)
-16. [Anti-patterns](#16-anti-patterns)
-17. [Failure-mode philosophy — graceful degradation](#17-failure-mode-philosophy--graceful-degradation)
-18. [Cross-cutting reading map](#18-cross-cutting-reading-map)
+14. [Lifecycle invariant — append-merge-only](#14-lifecycle-invariant--append-merge-only)
+15. [Recipe — adding a new stage end-to-end](#15-recipe--adding-a-new-stage-end-to-end)
+16. [Testing — what CI gates and what you must hand-test](#16-testing--what-ci-gates-and-what-you-must-hand-test)
+17. [Anti-patterns](#17-anti-patterns)
+18. [Failure-mode philosophy — graceful degradation](#18-failure-mode-philosophy--graceful-degradation)
+19. [Cross-cutting reading map](#19-cross-cutting-reading-map)
 
 ---
 
@@ -643,7 +644,84 @@ breaks, write a CI round-trip test that demonstrates the break
 before patching. We've been burned by "well-intentioned" hash
 fixes that broke other stages silently.
 
-## 14. Recipe — adding a new stage end-to-end
+## 14. Lifecycle invariant — append-merge-only
+
+Setup-stages state under `modules.lifecycle.<stage_id>` (and any module
+section under `modules.*` more generally) is **append-merge-only** and
+never bulk-overwritten. Two related rules follow from this invariant;
+violating either produces silent data loss or silent staleness.
+
+### 14.1 Executors that write `settings.yml` MUST load-merge
+
+Any stage callable (`executor` or `apply_choice`) that writes to a
+`settings.yml` family file MUST:
+
+1. Load the existing file content first.
+2. Preserve every sibling module section (especially
+   `modules.lifecycle.*` written by peer stages).
+3. Preserve any non-`setup` top-level keys.
+4. Overwrite ONLY its own keys.
+
+A fresh `data = {... "modules": {"lifecycle": {...}}, ...}` literal
+followed by `write_settings(...)` is the **canonical anti-pattern**.
+It clobbers peer state and rolls all 22 stages back to `pending` on
+re-bootstrap. The fix is structural: read → modify → write, not write
+fresh.
+
+This rule applies even when the executor "owns" the file (e.g.,
+`m1.repo.write-state-yml` owns repo-shared `settings.yml`). Owning a
+file means owning its lifecycle / structure invariants, not "may
+clobber its other contents."
+
+### 14.2 `locality: external` stages with TTL are cache-coherent
+
+When a stage declares `locality: external` AND `external_ttl_seconds`,
+the lifecycle eval (`_lifecycle.py:evaluate_stage`) treats `applied`
+as **provisional**. After `external_ttl_seconds` elapses since
+`external_validated_at`, the eval re-runs `target_state_predicate`
+(live IO) to validate that the external system still matches the
+recorded target state. The `external_validated_at` timestamp is the
+cache marker — observable, not drift-tolerant.
+
+A regression that ignores `external_ttl_seconds` produces silent
+staleness: an external resource (GitHub label, audit DDL, Status
+field) deleted out-of-band stays "applied" forever, and bootstrap
+never detects the drift.
+
+### 14.3 Type note — `external_validated_at`
+
+`external_validated_at` may be either an ISO 8601 string or a Python
+`datetime` object, depending on serializer:
+
+- `yaml.safe_load(...)` auto-parses ISO 8601 timestamps into
+  `datetime` objects (PyYAML feature, not bug).
+- `json.loads(...)` keeps them as strings.
+
+Code reading `external_validated_at` MUST coerce both shapes via
+`_coerce_datetime` (defined in `_lifecycle.py`) before comparing
+against TTL. Naive `datetime.fromisoformat(value)` fails with
+`TypeError` when `value` is already a `datetime`.
+
+### 14.4 Why this invariant matters
+
+Both shapes — bulk-overwrite and TTL-ignore — were diagnosed by
+independent audit during PR #75 review and fixed in Phase 5 Stage 5.1.
+The historical fresh-clone E2E walked all 22 stages with a two-pass
+workaround that batched lifecycle writes after `m1.repo.write-state-
+yml` ran, masking the bulk-overwrite bug from CI. Production
+re-bootstrap had no such workaround — silent vaporization on every
+schema_version bump.
+
+The invariant exists in this guide so future executors do not
+re-introduce either bug class. When in doubt, read the canonical
+implementations:
+
+- `scripts/stages_lib/m1_repo_write_state_yml.py:executor` — load-
+  merge reference.
+- `scripts/stages_lib/_lifecycle.py:evaluate_stage` — TTL-aware
+  cache coherency reference.
+
+## 15. Recipe — adding a new stage end-to-end
 
 The full procedure as a checklist for a PR-prep self-review:
 
@@ -708,7 +786,7 @@ The PR review questions a reviewer should ask:
 7. Is `generation` bumped if any persisted shape changed?
 8. Is the design doc table updated to match?
 
-## 15. Testing — what CI gates and what you must hand-test
+## 16. Testing — what CI gates and what you must hand-test
 
 CI-gated:
 
@@ -742,7 +820,7 @@ NOT CI-gated (you must hand-test):
   bootstrap end-to-end at least once before opening a PR
   that adds an agentic stage.
 
-## 16. Anti-patterns
+## 17. Anti-patterns
 
 ### A1. "I'll add a stage just for this one debug helper."
 
@@ -823,7 +901,7 @@ collapse them into one stage with richer
 `target_state_schema`, or split the module / re-classify the
 locality so the triples differ.
 
-## 17. Failure-mode philosophy — graceful degradation
+## 18. Failure-mode philosophy — graceful degradation
 
 The setup-stages system follows a strict graceful-degradation
 discipline. Three principles:
@@ -880,7 +958,7 @@ auto-continue. Architect-input stages exist *because* a
 default would be wrong; substituting a default at agent-time
 defeats the protocol.
 
-## 18. Cross-cutting reading map
+## 19. Cross-cutting reading map
 
 When your work touches setup-stages, the right reading order
 depends on which seam you're modifying. Quick map:
@@ -906,7 +984,7 @@ is the authoritative reference. The 13 setup-stages ADRs
 
 If your stage-touching change makes a contract in this guide
 stale (e.g., a new prompt-renderer kind ships, a new
-applicable_when form lands, the recipe in § 14 grows a step),
+applicable_when form lands, the recipe in § 15 grows a step),
 fix this guide in the **same PR** — not a follow-up. Doc lag
 is the failure mode this whole companion-doc pattern exists to
 prevent.
