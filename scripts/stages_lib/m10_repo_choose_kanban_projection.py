@@ -31,11 +31,6 @@ Storage format (ADR-0026 v1.0 shorthand — matched by bsp_resolve_active_projec
       projection: github-project-v2
       schema_version: 1
 
-  The 'primary' kanban_id nesting form is reserved for when multi-kanban
-  kanbans-list support lands in v0.6.x. Using nested primary.projection at
-  v0.5.0 breaks bsp_resolve_active_projection's awk parser (which only reads
-  4-space-indented projection: or 8-space-indented inside a kanbans list).
-
 ctx contract: any object with attributes home, repo_root, repo_identity.
 """
 

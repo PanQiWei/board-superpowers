@@ -259,9 +259,6 @@ stages:
         project_ref:
           type: string
           description: "owner/<project-number> reference (per-projection-specific identity)."
-        kanban_id:
-          type: string
-          description: "ADR-0026 multi-kanban id; defaults to `primary`."
     target_state_schema_version: 1
     default_value: github-project-v2
     validation_kind: single-choice
