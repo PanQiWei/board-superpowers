@@ -1,44 +1,61 @@
 # board-superpowers routing block — source of truth
 
-This file holds the canonical bytes that `scripts/bootstrap-project.sh`
-step 4 injects into a consuming repo's AGENTS.md and CLAUDE.md,
-between the marker pair (the literal HTML-comment opening + closing
-sentinels are deliberately not shown verbatim in this header so that
-the helper's marker-scan does not match against them; see
+This file holds the canonical bytes that the M7 setup-stages inject
+into a consuming repo's AGENTS.md and CLAUDE.md, between the marker
+pair (the literal HTML-comment opening + closing sentinels are
+deliberately not shown verbatim in this header so that the helpers'
+marker-scan does not match against them; see
 `skills/using-board-superpowers/SKILL.md` Step 1 for the verbatim
-form, and `scripts/lib/common.sh:bsp_inject_routing_block` for the
-matcher).
+form).
 
-**Injection contract** (the routing-block injection step of the
-per-repo bootstrap, implemented in
-`scripts/lib/common.sh:bsp_inject_routing_block`):
+**Injection contract** (per ADR-0018, multi-stage routing-block
+protocol):
 
-1. The injection helper reads THIS file and locates the fence
-   sentinels — `<!-- routing-block:start -->` and
-   `<!-- routing-block:end -->` — to extract ONLY the bytes between
-   them. The docstring header above the fence (this prose) is NOT
-   injected. Anything outside the fence is treated as
-   maintainer-facing notes.
-2. The extracted bytes are normalized — strip UTF-8 BOM if present,
-   replace CRLF / CR with LF, strip leading + trailing whitespace
-   newlines so the injected block is tight.
-3. SHA256 over the normalized fence-bounded bytes (with a single
-   trailing newline trimmed) yields the recorded hash.
-4. The helper writes the block between the target's marker pair
-   (`<!-- board-superpowers:routing -->` /
-   `<!-- /board-superpowers:routing -->`) into AGENTS.md and CLAUDE.md
-   and records one entry per file —
-   `{target_file, block_hash: "sha256:<hex>", injected_at: <iso8601>}`
-   — into `~/.board-superpowers/repos/<normalized>/state.yml`'s
-   `routing_blocks:` list.
-5. The `board-superpowers:bootstrapping-repo` skill consumes
-   `state.yml:routing_blocks[]` hashes for tamper detection on
-   subsequent sessions — including plugin-upgrade reconvergence,
-   per ADR-0012's absorption of version-transition migrations into
-   the unified setup-stages flow.
+1. Two M7 setup-stages own the injection — `m7.repo.inject-block-
+   routing-rule` (writes the routing-rule block) and
+   `m7.repo.inject-block-skill-routing` (writes the skill-routing
+   block). Helpers live in
+   `scripts/stages_lib/m7_repo_inject_block_routing_rule.py` and
+   `scripts/stages_lib/m7_repo_inject_block_skill_routing.py`.
+2. Each M7 stage hard-codes its half of the canonical bytes inline
+   as a Python module-level constant — `_ROUTING_RULE_CONTENT` and
+   `_SKILL_ROUTING_CONTENT` respectively — for atomic-stage purity
+   (no runtime file IO inside a deterministic stage). The bytes
+   between this file's `<!-- routing-block:start -->` and
+   `<!-- routing-block:end -->` fence are the maintainer-facing
+   source-of-truth; the inline constants and the fence are kept in
+   strict byte-equality by
+   `scripts/stages_lib/test_m7_routing_block_parity.py` (any
+   maintainer edit to one location MUST be paired with an edit to the
+   other or CI fails loudly).
+3. The fence content is split into two halves at the H3 marker
+   `### How to compose gstack and superpowers`:
+   - First half (everything before the H3 line) → `_ROUTING_RULE_CONTENT`.
+   - Second half (the H3 line and everything after) → `_SKILL_ROUTING_CONTENT`.
+4. Each stage's `executor()` writes its block between the target's
+   marker pair (`<!-- board-superpowers:routing -->` /
+   `<!-- /board-superpowers:routing -->` for the routing-rule stage;
+   `<!-- board-superpowers:skill-routing -->` /
+   `<!-- /board-superpowers:skill-routing -->` for the skill-routing
+   stage) into AGENTS.md and CLAUDE.md. Each stage records a SHA256
+   hash of its inline constant into `modules.lifecycle.<stage_id>`
+   inside the repo-shared `settings.yml` per ADR-0013 (lifecycle
+   schema) + ADR-0024 (settings.yml file family).
+5. The `board-superpowers:bootstrapping-repo` skill consumes the M7
+   stages' lifecycle entries for tamper detection on subsequent
+   sessions — including plugin-upgrade reconvergence, per ADR-0012's
+   absorption of version-transition migrations into the unified
+   setup-stages flow.
 
 LF-only line endings. No BOM. Final line of the block ends with a
 single LF.
+
+**Editing the canonical bytes.** Edit the bytes between the fence
+sentinels in this file, then update the matching inline constant in
+the M7 stage helper. The CI parity test will fail if either half
+drifts. The two-location authoring discipline is intentional: inline
+constants give M7 stages atomic-stage purity, and the parity test
+prevents drift.
 
 **Why the fence sentinels differ from the target marker pair.** The
 fence keywords (`routing-block:start` / `routing-block:end`) are
