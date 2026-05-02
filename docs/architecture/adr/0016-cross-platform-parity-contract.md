@@ -184,7 +184,7 @@ migration logic.
   statement; ADR-0016 is the data-shape encoding.
 - ADR-0012 — Unified check-script trigger model; consumer
   of the `platforms` filter.
-- ADR-0013 — Declarative state schema + 5-state lifecycle.
+- ADR-0013 — Declarative state schema + 6-state lifecycle.
 - ADR-0014 — Stage registry contract; the JSON Schema
   that enforces `platforms`-required at load time.
 - ADR-0015, ADR-0017, ADR-0018, ADR-0019 — sibling

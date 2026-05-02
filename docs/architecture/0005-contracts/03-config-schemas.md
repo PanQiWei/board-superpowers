@@ -357,7 +357,7 @@ repo-git file. The repo-git file does not carry routing block state
 > `<repo>/.board-superpowers/settings.yml` (per ADR-0024 settings
 > rename) under main's M10 module key (per ADR-0021 settings
 > modular layering). Bootstrap writes happen via the M10 config-
-> item stage `m10.repo.choose-kanban-backend` (ADR-0024 § Part B);
+> item stage `m10.repo.choose-kanban-projection` (ADR-0024 § Part B);
 > runtime reads happen via the v0.5.0 `operating-kanban` atomic
 > skill (ADR-0025 + [`00-kanban-protocol.md`](./00-kanban-protocol.md)).
 > Documented here so consuming code authored against v0.5.0 has a
@@ -746,7 +746,7 @@ migration logic ships. Architects upgrading from v0.4.0:
 
 - I-12 (canonical invariant).
 - ADR-0012 — unified check-script trigger model.
-- ADR-0013 — three-layer fingerprint + 5-state lifecycle.
+- ADR-0013 — three-layer fingerprint + 6-state lifecycle.
 - ADR-0014 — stage registry `generation` / `compute_target_state()`.
 - `0002-product-features-and-flows/05-bootstrap-surface.md`
   § "Schema-migration seam" + § "Cross-version evolution".

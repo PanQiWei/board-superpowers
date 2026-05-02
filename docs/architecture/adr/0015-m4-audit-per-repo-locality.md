@@ -77,7 +77,7 @@ changes.
   swap (SQLite → Postgres) — all scoped to one repo at a time.
 - **Per-repo backend choice.** One repo on Postgres, another
   on the zero-config SQLite default. No host-level coupling.
-- **M4 siblings co-locate with M1's `state.yml`** under one
+- **M4 siblings co-locate with M1's `settings.yml`** under one
   normalized-name parent at mode `0700` — matching ADR-0009's
   path convention.
 
@@ -166,7 +166,7 @@ alone is the surface this ADR moves.
   breaking-change procedure relies on the lifecycle diff
   seeing `m4.repo.acquire-dsn` as `never-run` after the
   architect deletes host-shared state.
-- ADR-0013 — Declarative state schema + 5-state lifecycle. M4
+- ADR-0013 — Declarative state schema + 6-state lifecycle. M4
   stages' `target_state` carries per-repo identity into their
   hash, making per-repo isolation observable from the diff.
 - [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)

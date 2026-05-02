@@ -98,7 +98,7 @@ no SKILL prompt code is written per item.
    plus required-or-optional, default, and enum option list
    with `introduced_in_version` per option for graceful
    enum-bump compatibility.
-2. **Detection** — the lifecycle 5-state model (per ADR-0013
+2. **Detection** — the lifecycle 6-state model (per ADR-0013
    + ADR-0020) computes whether the item needs eliciting.
    `never-run` / `stale` ⇒ elicit; `completed` ⇒ skip;
    `deprecated` / `not-applicable` ⇒ ignore. No bespoke "is
@@ -127,7 +127,7 @@ no SKILL prompt code is written per item.
 
 An empty / null / "no presets selected" choice is itself a valid
 `target_state` value (when the schema permits empty list / null)
-and produces `completed`. The 5-state lifecycle (ADR-0013 +
+and produces `completed`. The 6-state lifecycle (ADR-0013 +
 ADR-0020) covers all observable architect states; no `skipped` /
 `deferred` state is introduced.
 
@@ -221,7 +221,7 @@ The 5th lifecycle state `not-applicable` (per the redesign's
 semantics. `not-applicable` is computed from predicate
 evaluation (e.g., M3 GitHub-Project stages become
 `not-applicable` when the architect chooses Linear via
-`m10.repo.choose-kanban-backend`); no architect interaction is
+`m10.repo.choose-kanban-projection`); no architect interaction is
 required or offered. Skip semantics, by contrast, would have
 expressed "architect declined to interact with a stage that
 **is** applicable" — the protocol replaces that with "valid
@@ -250,7 +250,7 @@ empty `target_state`."
 - ADR-0024 — settings.yml rename + new config-item stages;
   the pre-v1 file-naming change that the protocol's persistence
   file paths consume, plus the two new stages
-  (`m5.repo.set-wip-limit`, `m10.repo.choose-kanban-backend`)
+  (`m5.repo.set-wip-limit`, `m10.repo.choose-kanban-projection`)
   that exemplify the protocol.
 - [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   § "Architect UX" — authoritative reference for the reframe,
