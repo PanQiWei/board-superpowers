@@ -416,17 +416,18 @@ stages:
   - stage_id: m4.repo.acquire-dsn
     stage_name: audit DSN
     description: >-
-      Acquire BYO RDBMS DSN; write per-repo `credentials.yml` (chmod 0600);
-      first-time agentic, re-use automated. Per ADR-0015 (M4 audit per-repo
-      locality).
+      Acquire BYO RDBMS DSN; write per-repo `credentials.yml` (chmod 0600).
+      Auto-applies SQLite zero-config default on first bootstrap per
+      ADR-0019; architect override via env-var DSN or manual `credentials.yml`
+      edit. Per ADR-0015 (M4 audit per-repo locality) and ADR-0009 (6 DSN
+      schemes).
     module: M4
-    character: agentic
+    character: automated
     locality: repo-shared
     platforms: both
-    flags:
-      - confirm-only
+    flags: []
     introduced_in_version: v0.3.0
-    executor: "SKILL: bootstrapping-repo (first-time) / scripts/bootstrap-project.sh (re-use)"
+    executor: "SKILL: bootstrapping-repo / scripts/bootstrap-project.sh"
     generation: 1
     depends_on:
       - m1.repo.write-state-yml
@@ -449,18 +450,10 @@ stages:
           type: string
           pattern: "^[0-7]{4}$"
     target_state_schema_version: 1
-    default_value: sqlite
-    validation_kind: single-choice
-    interactive_prompt:
-      kind: single-choice
-      prompt: >-
-        Choose the audit-log RDBMS scheme: [sqlite] (default, zero-config per
-        ADR-0009), postgres, or mysql.
-      options_source: computed-from-schema-enum
     re_prompt_trigger: >-
-      Per ADR-0013 lifecycle (generation bump). Architect can also force
-      re-prompt by deleting `credentials.yml` (file-presence-driven re-prompt
-      via lifecycle stale).
+      Per ADR-0013 lifecycle (generation bump). Architect can force
+      re-acquire by deleting `credentials.yml` (file-presence-driven
+      re-evaluation via lifecycle stale).
     module_section_path: modules.m4_audit
 
   - stage_id: m4.repo.apply-audit-ddl
