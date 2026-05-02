@@ -288,11 +288,6 @@
                   "minLength": 1,
                   "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
                   "description": "Per ADR-0027 § 2. Capability name as declared in the active projection's reference file under `skills/operating-kanban/references/<projection-id>.md § 'Setup capabilities'`. Lowercase-kebab-case. Resolved at evaluation time by reading `<repo>/.board-superpowers/settings.yml § modules.m10_kanban.<kanban-id>.projection`, loading the matching reference file, and checking whether the named capability is declared. Predicate true → stage runs; false → `not-applicable`."
-                },
-                "kanban_id": {
-                  "type": "string",
-                  "minLength": 1,
-                  "description": "Per ADR-0026 multi-kanban schema. Kanban id whose projection is consulted. Defaults to `primary` when omitted."
                 }
               }
             },
