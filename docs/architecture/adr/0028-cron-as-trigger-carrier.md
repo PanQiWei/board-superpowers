@@ -1,4 +1,4 @@
-# ADR 0027: Cron as a trigger carrier — external schedulers as a first-class plugin entry mechanism
+# ADR 0028: Cron as a trigger carrier — external schedulers as a first-class plugin entry mechanism
 
 **Status:** accepted
 **Date:** 2026-04-29
@@ -111,7 +111,7 @@ supersede:
 
 - ADR-0007 (C-PLUGIN-2) prohibits **daemon threads inside
   plugin sessions** — still binding.
-- ADR-0027 permits **discrete external invocations of
+- ADR-0028 permits **discrete external invocations of
   plugin entry points by an external scheduler** — a
   separate concern.
 
@@ -271,7 +271,7 @@ cron-side compute + hook-side present).
 - Bootstrap surface (05) expands to include a
   cron-schedule config-item stage in v1-complete (or v1.x,
   depending on which cron-J2 nodes ship in v1-complete).
-- ADR-0007 body unchanged. ADR-0027 lives alongside as a
+- ADR-0007 body unchanged. ADR-0028 lives alongside as a
   complementary rule. Both are accepted-status, neither
   supersedes the other.
 - `docs/architecture/AGENTS.md` spec change-impact matrix
