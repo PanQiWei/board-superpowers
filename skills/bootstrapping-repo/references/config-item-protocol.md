@@ -139,12 +139,18 @@ For all prompt kinds:
 
 ## Persistence rules
 
-After accepting a valid response, the SKILL:
+After accepting a valid response, the SKILL persists via the helper's 5th callable:
 
-1. Calls `stage.executor(validated_input, repo_path, settings)` — the executor writes to the locality settings file via `_partitioned_settings.write_settings()` (Python) or `bsp_stage_state_set` (bash).
+1. **Persistence path for agentic stages**:
+   1. SKILL calls `helper.executor(ctx)` — returns `{requires_input: True, prompt: {...}, default: ...}` when not yet configured.
+   2. SKILL surfaces the prompt to the architect.
+   3. Architect responds with a value.
+   4. SKILL calls `helper.target_state_predicate(value)` to confirm the value is a valid shape.
+   5. SKILL calls `helper.apply_choice(ctx, validated_value)` — the helper persists the choice to the stage's locality settings file via `_partitioned_settings.update_module_section` and returns `{applied: True, message: ..., side_effects: [...]}`.
+   6. Subsequent `executor(ctx)` calls return `{applied: False}` — no-op, already configured.
 2. Calls `stage.compute_target_state(ctx)` — reads back what was just written.
 3. Strips `hash_excluded_fields` from target_state; computes `target_state_hash = _canonical.fingerprint(hashable)`.
-4. Writes the `modules.lifecycle.<stage_id>` entry to the locality settings file.
+4. Writes the `modules.lifecycle.<stage_id>` entry to the locality settings file via `bsp_stage_state_set <stage_id> applied <generation> <target_state_hash>`.
 5. Invokes `board-superpowers:classifying-actions` + `board-superpowers:auditing-actions` with the completed state.
 
 The executor is responsible for writing exactly one conceptual change. Multi-field config items use a single executor that writes all fields atomically.

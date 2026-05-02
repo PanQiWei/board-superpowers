@@ -120,6 +120,18 @@ Each stage MAY additionally provide (per ADR-0020 / ADR-0021):
   `modules.<derived>` projection target if the stage's
   `target_state` should be visible to architects under a
   custom path in the settings file's modular layering.
+- An `apply_choice(ctx, validated_value) -> dict` callable
+  (optional 5th callable for stages with `character: agentic`)
+  — invoked by the SKILL after the architect provides input and
+  `target_state_predicate` confirms the value's shape. The
+  helper persists to the stage's locality settings file via
+  `_partitioned_settings.update_module_section` and returns
+  `{applied: True, message: ..., side_effects: [...]}`. This
+  split ensures agentic stages use a prompt-mediated
+  persistence path: `executor(ctx)` signals `requires_input`
+  (never writes); `apply_choice` writes (never prompts). The
+  four standard callables remain mandatory; `apply_choice` is
+  opt-in for agentic stages only.
 
 The schema validates declarative fields; CI round-trip-tests
 each callable to validate the dynamic contract.

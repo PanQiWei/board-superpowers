@@ -177,12 +177,16 @@ On non-zero:
 
 ```
 Announce: "⚙ Setup choice — <stage_name>"
-Surface the stage's interactive_prompt to the architect verbatim.
+Call helper.executor(ctx) — returns {applied: False, requires_input: True, prompt: {...}, default: ...}
+  when the stage is not yet configured.
+Surface the prompt to the architect verbatim.
 Wait for architect response.
-Validate against target_state_schema (see references/config-item-protocol.md for
-  validation rules per prompt kind).
+Validate the response against target_state_schema using helper.target_state_predicate(value)
+  (see references/config-item-protocol.md for validation rules per prompt kind).
 On valid:
-  - Run executor to persist target_state to the stage's locality settings file
+  - Call helper.apply_choice(ctx, validated_value) — the helper persists the choice to the
+    stage's locality settings file via _partitioned_settings.update_module_section.
+  - Subsequent executor(ctx) calls return {applied: False} (no-op — already configured).
   - Record status → applied
   - Classify + audit (same as automated)
   - Announce: "  ✓ <stage_id> applied"
