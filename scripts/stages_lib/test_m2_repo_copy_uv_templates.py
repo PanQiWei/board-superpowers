@@ -1,20 +1,23 @@
-"""Tests for stages_lib.m1_host_write_manifest.
+"""Tests for stages_lib.m2_repo_copy_uv_templates.
 
 TDD: tests written first; run RED before implementation, GREEN after.
 Run: cd scripts && python3 -m pytest stages_lib/ -v
+
+Stage copies pyproject.toml + uv.lock from plugin's scripts/templates/
+into <repo>/.board-superpowers/.
 """
 
+import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-import yaml
 
 
 # ---------------------------------------------------------------------------
 # Import guard — fails RED until module exists
 # ---------------------------------------------------------------------------
-from stages_lib.m1_host_write_manifest import (  # noqa: E402
+from stages_lib.m2_repo_copy_uv_templates import (  # noqa: E402
     compute_target_state,
     executor,
     idempotency_check,
@@ -23,17 +26,40 @@ from stages_lib.m1_host_write_manifest import (  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+# ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
-def ctx(tmp_path):
-    return SimpleNamespace(
+def plugin_templates(tmp_path):
+    """Fake plugin templates directory with pyproject.toml + uv.lock."""
+    tpl = tmp_path / "plugin" / "scripts" / "templates"
+    tpl.mkdir(parents=True)
+    (tpl / "pyproject.toml").write_text("[project]\nname = 'board-superpowers-runtime'\n")
+    (tpl / "uv.lock").write_text("# uv lock file\nversion = 1\n")
+    return tpl
+
+
+@pytest.fixture
+def ctx(tmp_path, plugin_templates):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    ns = SimpleNamespace(
         home=tmp_path / "home",
-        repo_root=tmp_path / "repo",
+        repo_root=repo,
         repo_identity="test/repo",
+        _plugin_templates_dir=plugin_templates,  # test-only override
     )
+    return ns
 
 
 # ---------------------------------------------------------------------------
@@ -46,36 +72,32 @@ def test_compute_target_state_returns_dict(ctx):
     assert isinstance(state, dict)
 
 
-def test_compute_target_state_has_path(ctx):
+def test_compute_target_state_has_pyproject_path(ctx):
     state = compute_target_state(ctx)
-    assert "path" in state
-    assert isinstance(state["path"], str)
+    assert "pyproject_path" in state
+    assert isinstance(state["pyproject_path"], str)
 
 
-def test_compute_target_state_path_value(ctx):
+def test_compute_target_state_has_uv_lock_path(ctx):
     state = compute_target_state(ctx)
-    expected = str(ctx.home / ".board-superpowers" / "settings.yml")
-    assert state["path"] == expected
+    assert "uv_lock_path" in state
+    assert isinstance(state["uv_lock_path"], str)
 
 
-def test_compute_target_state_has_schema_version(ctx):
+def test_compute_target_state_paths_under_repo_board_superpowers(ctx):
     state = compute_target_state(ctx)
-    assert "schema_version" in state
-    assert isinstance(state["schema_version"], int)
-    assert state["schema_version"] >= 1
+    bsp_dir = str(ctx.repo_root / ".board-superpowers")
+    assert state["pyproject_path"].startswith(bsp_dir)
+    assert state["uv_lock_path"].startswith(bsp_dir)
 
 
-def test_compute_target_state_has_last_seen_version(ctx):
+def test_compute_target_state_includes_sha256s(ctx):
     state = compute_target_state(ctx)
-    assert "last_seen_version" in state
-    lsv = state["last_seen_version"]
-    assert isinstance(lsv, str)
-    assert len(lsv) > 0
-    # Must match semver pattern: v<digits>.<digits>.<digits>[-suffix]
-    import re
-    assert re.match(r"^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$", lsv), (
-        f"last_seen_version {lsv!r} does not match semver pattern"
-    )
+    # sha256 fields optional in schema but must be strings if present
+    if "pyproject_sha256" in state:
+        assert isinstance(state["pyproject_sha256"], str)
+    if "uv_lock_sha256" in state:
+        assert isinstance(state["uv_lock_sha256"], str)
 
 
 def test_compute_target_state_is_pure(ctx):
@@ -94,32 +116,30 @@ def test_target_state_predicate_valid(ctx):
     assert target_state_predicate(state) is True
 
 
-def test_target_state_predicate_invalid_missing_path():
-    assert target_state_predicate({"schema_version": 1, "last_seen_version": "v0.5.0"}) is False
+def test_target_state_predicate_missing_pyproject_path():
+    assert target_state_predicate({"uv_lock_path": "/repo/.board-superpowers/uv.lock"}) is False
 
 
-def test_target_state_predicate_invalid_missing_schema_version():
-    assert target_state_predicate({"path": "/tmp/x.yml", "last_seen_version": "v0.5.0"}) is False
+def test_target_state_predicate_missing_uv_lock_path():
+    assert target_state_predicate({"pyproject_path": "/repo/.board-superpowers/pyproject.toml"}) is False
 
 
-def test_target_state_predicate_invalid_missing_last_seen_version():
-    assert target_state_predicate({"path": "/tmp/x.yml", "schema_version": 1}) is False
+def test_target_state_predicate_empty_pyproject_path():
+    state = {"pyproject_path": "", "uv_lock_path": "/repo/.board-superpowers/uv.lock"}
+    assert target_state_predicate(state) is False
 
 
-def test_target_state_predicate_invalid_schema_version_zero():
-    assert target_state_predicate({"path": "/tmp/x.yml", "schema_version": 0, "last_seen_version": "v0.5.0"}) is False
+def test_target_state_predicate_empty_uv_lock_path():
+    state = {"pyproject_path": "/repo/.board-superpowers/pyproject.toml", "uv_lock_path": ""}
+    assert target_state_predicate(state) is False
 
 
-def test_target_state_predicate_invalid_last_seen_version_empty():
-    assert target_state_predicate({"path": "/tmp/x.yml", "schema_version": 1, "last_seen_version": ""}) is False
-
-
-def test_target_state_predicate_invalid_not_dict():
+def test_target_state_predicate_not_dict():
     assert target_state_predicate("string") is False
 
 
 # ---------------------------------------------------------------------------
-# idempotency_check() — file absent
+# idempotency_check() — files absent
 # ---------------------------------------------------------------------------
 
 
@@ -130,82 +150,61 @@ def test_idempotency_check_absent(ctx):
 
 
 # ---------------------------------------------------------------------------
-# idempotency_check() — file present with matching state
+# idempotency_check() — files present and matching
 # ---------------------------------------------------------------------------
 
 
 def test_idempotency_check_present_matching(ctx):
-    # Pre-create the settings.yml with content matching target
+    # Copy templates to repo dir first
     executor(ctx)
     result = idempotency_check(ctx)
     assert result["present"] is True
 
 
 # ---------------------------------------------------------------------------
-# idempotency_check() — file present but schema_version differs
+# idempotency_check() — files present but drifted
 # ---------------------------------------------------------------------------
 
 
-def test_idempotency_check_present_wrong_schema_version(ctx):
-    settings_dir = ctx.home / ".board-superpowers"
-    settings_dir.mkdir(parents=True)
-    settings_path = settings_dir / "settings.yml"
-    # Write a settings.yml with wrong schema_version
-    data = {
-        "setup": {
-            "schema_version": 99,
-            "last_seen_version": "v0.4.0",
-        },
-        "modules": {},
-    }
-    settings_path.write_text(yaml.safe_dump(data))
+def test_idempotency_check_present_but_drifted(ctx):
+    """If files exist but content differs from templates, present=False."""
+    executor(ctx)
+    # Modify one file to simulate drift
+    bsp_dir = ctx.repo_root / ".board-superpowers"
+    (bsp_dir / "pyproject.toml").write_text("[project]\nname = 'something-else'\n")
     result = idempotency_check(ctx)
     assert result["present"] is False
 
 
 # ---------------------------------------------------------------------------
-# executor() — creates settings.yml
+# executor() — copies files
 # ---------------------------------------------------------------------------
 
 
-def test_executor_creates_file(ctx):
-    # Ensure parent dir exists
-    (ctx.home / ".board-superpowers").mkdir(parents=True)
+def test_executor_creates_bsp_dir(ctx):
     result = executor(ctx)
     assert result["applied"] is True
-    settings_path = ctx.home / ".board-superpowers" / "settings.yml"
-    assert settings_path.exists()
+    bsp_dir = ctx.repo_root / ".board-superpowers"
+    assert bsp_dir.is_dir()
 
 
-def test_executor_creates_parent_dir_if_needed(ctx):
-    # Parent dir does NOT exist; executor must create it
-    result = executor(ctx)
-    assert result["applied"] is True
-    settings_path = ctx.home / ".board-superpowers" / "settings.yml"
-    assert settings_path.exists()
-
-
-def test_executor_writes_valid_yaml(ctx):
+def test_executor_copies_pyproject_toml(ctx):
     executor(ctx)
-    settings_path = ctx.home / ".board-superpowers" / "settings.yml"
-    data = yaml.safe_load(settings_path.read_text())
-    assert isinstance(data, dict)
+    dest = ctx.repo_root / ".board-superpowers" / "pyproject.toml"
+    assert dest.exists()
 
 
-def test_executor_writes_setup_section(ctx):
+def test_executor_copies_uv_lock(ctx):
     executor(ctx)
-    settings_path = ctx.home / ".board-superpowers" / "settings.yml"
-    data = yaml.safe_load(settings_path.read_text())
-    assert "setup" in data
-    assert "schema_version" in data["setup"]
-    assert data["setup"]["schema_version"] >= 1
+    dest = ctx.repo_root / ".board-superpowers" / "uv.lock"
+    assert dest.exists()
 
 
-def test_executor_writes_modules_section(ctx):
+def test_executor_content_matches_template(ctx):
     executor(ctx)
-    settings_path = ctx.home / ".board-superpowers" / "settings.yml"
-    data = yaml.safe_load(settings_path.read_text())
-    assert "modules" in data
+    src_py = ctx._plugin_templates_dir / "pyproject.toml"
+    dst_py = ctx.repo_root / ".board-superpowers" / "pyproject.toml"
+    assert dst_py.read_bytes() == src_py.read_bytes()
 
 
 def test_executor_returns_side_effects(ctx):
@@ -215,7 +214,7 @@ def test_executor_returns_side_effects(ctx):
 
 
 # ---------------------------------------------------------------------------
-# executor() — idempotency (no-op on second run)
+# executor() — idempotency
 # ---------------------------------------------------------------------------
 
 
@@ -228,11 +227,11 @@ def test_executor_idempotent(ctx):
 
 def test_executor_second_run_preserves_content(ctx):
     executor(ctx)
-    settings_path = ctx.home / ".board-superpowers" / "settings.yml"
-    content_1 = settings_path.read_text()
+    dst_py = ctx.repo_root / ".board-superpowers" / "pyproject.toml"
+    content_before = dst_py.read_bytes()
     executor(ctx)
-    content_2 = settings_path.read_text()
-    assert content_1 == content_2
+    content_after = dst_py.read_bytes()
+    assert content_before == content_after
 
 
 # ---------------------------------------------------------------------------
@@ -244,12 +243,12 @@ def test_compute_target_state_validates_against_registry_schema(ctx):
     """Round-trip: compute_target_state output MUST validate against the
     stage's target_state_schema declared in scripts/stages-registry.yml.
     Prevents registry/impl drift from being invisible to the test suite."""
-    from pathlib import Path
     import yaml
     import jsonschema
     registry_path = Path(__file__).parent.parent / "stages-registry.yml"
     registry = yaml.safe_load(registry_path.read_text())
-    stage = next(s for s in registry["stages"] if s["stage_id"] == "m1.host.write-manifest")
+    stage = next(s for s in registry["stages"] if s["stage_id"] == "m2.repo.copy-uv-templates")
     schema = stage["target_state_schema"]
+    # ctx fixture provides _plugin_templates_dir override for compute_target_state
     ts = compute_target_state(ctx)
     jsonschema.validate(instance=ts, schema=schema)

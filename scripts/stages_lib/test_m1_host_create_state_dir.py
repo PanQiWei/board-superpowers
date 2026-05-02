@@ -223,3 +223,22 @@ def test_executor_repairs_wrong_mode(ctx):
     assert result["applied"] is True
     mode = stat.S_IMODE(os.stat(target).st_mode)
     assert mode == 0o700
+
+
+# ---------------------------------------------------------------------------
+# Round-trip: compute_target_state output validates against registry schema
+# ---------------------------------------------------------------------------
+
+
+def test_compute_target_state_validates_against_registry_schema(ctx):
+    """Round-trip: compute_target_state output MUST validate against the
+    stage's target_state_schema declared in scripts/stages-registry.yml.
+    Prevents registry/impl drift from being invisible to the test suite."""
+    import yaml
+    import jsonschema
+    registry_path = Path(__file__).parent.parent / "stages-registry.yml"
+    registry = yaml.safe_load(registry_path.read_text())
+    stage = next(s for s in registry["stages"] if s["stage_id"] == "m1.host.create-state-dir")
+    schema = stage["target_state_schema"]
+    ts = compute_target_state(ctx)
+    jsonschema.validate(instance=ts, schema=schema)

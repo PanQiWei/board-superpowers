@@ -267,3 +267,21 @@ def test_executor_isolates_repo_identities(ctx):
     data2 = yaml.safe_load(path2.read_text())
     assert data1["setup"]["repo_identity"] == "test/repo"
     assert data2["setup"]["repo_identity"] == "owner/other-repo"
+
+
+# ---------------------------------------------------------------------------
+# Round-trip: compute_target_state output validates against registry schema
+# ---------------------------------------------------------------------------
+
+
+def test_compute_target_state_validates_against_registry_schema(ctx):
+    """Round-trip: compute_target_state output MUST validate against the
+    stage's target_state_schema declared in scripts/stages-registry.yml.
+    Prevents registry/impl drift from being invisible to the test suite."""
+    import jsonschema
+    registry_path = Path(__file__).parent.parent / "stages-registry.yml"
+    registry = yaml.safe_load(registry_path.read_text())
+    stage = next(s for s in registry["stages"] if s["stage_id"] == "m1.repo.write-state-yml")
+    schema = stage["target_state_schema"]
+    ts = compute_target_state(ctx)
+    jsonschema.validate(instance=ts, schema=schema)

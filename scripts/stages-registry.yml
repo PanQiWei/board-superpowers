@@ -153,9 +153,11 @@ stages:
         uv_present:
           type: boolean
         uv_version:
-          type: string
+          type: ["string", "null"]
+          description: "uv version string (e.g., '0.4.18') when present; null when uv is not installed on the host"
         uv_path:
-          type: string
+          type: ["string", "null"]
+          description: "absolute path to uv binary when present; null when uv is not installed on the host"
     target_state_schema_version: 1
 
   - stage_id: m2.repo.copy-uv-templates
@@ -206,20 +208,15 @@ stages:
       - m2.repo.copy-uv-templates
     target_state_schema:
       type: object
-      required: [venv_path, python_version]
+      required: [venv_path, uv_lock_hash]
       properties:
         venv_path:
           type: string
-        python_version:
+          description: "Absolute path to <repo>/.board-superpowers/.venv/"
+        uv_lock_hash:
           type: string
-        installed_packages:
-          type: array
-          items:
-            type: object
-            required: [name, version]
-            properties:
-              name: { type: string }
-              version: { type: string }
+          description: "sha256 hex of the uv.lock used to materialize the venv; idempotency key"
+          pattern: '^[0-9a-f]{64}$'
     target_state_schema_version: 1
 
   # =========================================================================
