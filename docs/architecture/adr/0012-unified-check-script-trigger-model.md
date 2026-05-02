@@ -68,7 +68,7 @@ Concretely:
   logic is one.
 
 The hook's pseudo-code is captured in
-[`05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+[`05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
 § "Trigger model" → "Hook flow (pseudocode)".
 
 ## Consequences
@@ -186,7 +186,7 @@ Invariants 1-3.
 - ADR-0011 — Defer Producer routines to v1.x; this ADR removes
   `migrating-repo-version` from the deferred list (absorbed,
   not deferred).
-- [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+- [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   — Living design doc carrying the full context;
   § "Trigger model" is this ADR's authoritative reference.
 - [`../0005-contracts/02-hook-contracts.md`](../0005-contracts/02-hook-contracts.md)

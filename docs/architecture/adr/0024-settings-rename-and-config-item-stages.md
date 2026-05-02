@@ -8,7 +8,7 @@
 
 Two related decisions emerge from the v0.5.0 bootstrap redesign
 (per
-[`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md))
+[`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md))
 sharing the "redesign the architect-facing settings surface"
 context. Bundling keeps review pair-programmed — the rename
 rationale alongside the first two stages that consume it.
@@ -202,7 +202,7 @@ unless the change introduces architectural-grade decisions.
   selection persisted by `m10.repo.choose-kanban-backend`.
 - ADR-0023 — Architect UX + config item protocol; both new
   stages exemplify it.
-- [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+- [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   — § "Declarative state schema" → "Four settings files",
   § "Stages" rows, § "Decided" resolution items.
 - [`../0005-contracts/03-config-schemas.md`](../0005-contracts/03-config-schemas.md)

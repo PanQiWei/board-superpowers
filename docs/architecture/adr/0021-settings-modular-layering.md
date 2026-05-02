@@ -212,7 +212,7 @@ case where a stage projects into a sibling module's section
 - ADR-0017 — I-13 invariant revision; per-locality file
   partitioning relies on the `(host, GitHub repo)`
   repo-identity scheme.
-- [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+- [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   § "Declarative state schema" → "Settings modular layering"
   / "Why both sections" / "Per-module schema versioning" /
   "Module naming convention" / "Future-module inclusion

@@ -1,7 +1,7 @@
 # board-superpowers stage registry — 22 stages.
 #
 # Authoritative reference: docs/architecture/0002-product-features-and-flows/
-# 05-bootstrap-surface-redesign.md § "Stages" (the 22-row table). M3 + M10 rows
+# 05-bootstrap-surface.md § "Stages" (the 22-row table). M3 + M10 rows
 # follow ADR-0027 vocabulary (kanban_projection_capability predicate +
 # m10.repo.choose-kanban-projection canonical name) — NOT the pre-#70 wording
 # in the design-doc table itself (Phase 4 cutover updates the design-doc table).

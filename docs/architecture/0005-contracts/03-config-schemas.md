@@ -146,7 +146,7 @@ modules:
 - ADR-0021 — two-section layout + per-module `schema_version`.
 - ADR-0013 — per-stage entry shape (three-layer fingerprint).
 - 0003 § 3.3.5 HostBootstrap aggregate — entity-level home.
-- `0002-product-features-and-flows/05-bootstrap-surface-redesign.md`
+- `0002-product-features-and-flows/05-bootstrap-surface.md`
   § "Four settings files" — design authority.
 
 ---
@@ -748,7 +748,7 @@ migration logic ships. Architects upgrading from v0.4.0:
 - ADR-0012 — unified check-script trigger model.
 - ADR-0013 — three-layer fingerprint + 5-state lifecycle.
 - ADR-0014 — stage registry `generation` / `compute_target_state()`.
-- `0002-product-features-and-flows/05-bootstrap-surface-redesign.md`
+- `0002-product-features-and-flows/05-bootstrap-surface.md`
   § "Schema-migration seam" + § "Cross-version evolution".
 
 ---
@@ -788,7 +788,7 @@ migration logic ships. Architects upgrading from v0.4.0:
   schema folded into `settings.yml:modules.m8_autonomy`).
 - ADR-0007 C-PLUGIN-1/-2/-3 (constrains which contracts are even
   allowed).
-- `0002-product-features-and-flows/05-bootstrap-surface-redesign.md`
+- `0002-product-features-and-flows/05-bootstrap-surface.md`
   — design authority for the four settings files.
 - 0003 § 3.3.5–3.3.8 (entity-level homes for each file).
 - I-10, I-11, I-12, I-13 (the four invariants this file

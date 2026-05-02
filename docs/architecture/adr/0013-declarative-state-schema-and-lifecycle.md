@@ -10,7 +10,7 @@ Today's bootstrap mechanism (per
 [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md))
 infers completion from file presence — "is bootstrapped" =
 "`manifest.yml` exists with valid `schema_version`". Per
-[`05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+[`05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
 § "Why a redesign" item 1, this implicit-state model has three
 structural costs: no sub-step granularity (interruption
 recovery relies on per-executor idempotency hacks), no
@@ -313,7 +313,7 @@ with reason `"cascaded: dependency '<id>' is '<state>'"`.
   Plugin-runtime-derived constraints; the hook-cheapness
   invariant (C-PLUGIN) drives the requirement that Layer 1
   be O(1).
-- [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+- [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   — Living design doc; § "Per-stage entry shape" +
   § "Stage lifecycle states" +
   § "Hash-allowlist (fields excluded from hash)" +

@@ -29,7 +29,7 @@ conditionality:
    condition was false" — surfaces show
    "stage X completed in 0ms" for stages that did nothing.
 2. **M3 is hard-coded to GitHub Project.** Per
-   [`05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+   [`05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
    § "Functional modules" → M3, the redesign reframes M3 as
    "Board operations (BoardAdapter-driven)" — operations
    dispatched through the
@@ -231,7 +231,7 @@ drives execution.
 - ADR-0022 — BoardAdapter capability dispatch; defines how
   adapters declare capability sets that the
   `board_capability` predicate form resolves against.
-- [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+- [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   — Living design doc; § "Stage lifecycle states" (5-state
   table including `not-applicable`), § "Stage registry
   contract" → "Column / field semantics" (`applicable_when`

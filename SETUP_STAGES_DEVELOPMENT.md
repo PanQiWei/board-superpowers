@@ -80,17 +80,17 @@ guide.
 
 | Fact | Canonical home |
 |------|----------------|
-| Three axes (module / character / locality) — definitions | [`05-bootstrap-surface-redesign.md` § "The three axes"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#the-three-axes) |
-| Stages table (the 22-row registry view) | [§ "Stages"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#stages) |
-| Trigger model — hook flow + SKILL flow + hook–SKILL contract | [§ "Trigger model"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#trigger-model) + [ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md) |
-| 6-state lifecycle + three-layer fingerprint | [§ "Stage lifecycle states"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#stage-lifecycle-states) + [ADR-0013](./docs/architecture/adr/0013-declarative-state-schema-and-lifecycle.md) + [ADR-0020](./docs/architecture/adr/0020-stage-applicability-and-not-applicable-state.md) |
-| Stage registry contract (YAML + Python + JSON Schema) | [§ "Stage registry contract"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#stage-registry-contract) + [ADR-0014](./docs/architecture/adr/0014-stage-registry-contract.md) |
-| Per-stage entry shape (what gets persisted) | [§ "Per-stage entry shape"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#per-stage-entry-shape) |
-| Settings modular layering (4 files + `modules.<id>` + per-module `schema_version`) | [§ "Settings modular layering"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#settings-modular-layering-in-file-structure) + [ADR-0021](./docs/architecture/adr/0021-settings-modular-layering.md) |
+| Three axes (module / character / locality) — definitions | [`05-bootstrap-surface.md` § "The three axes"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#the-three-axes) |
+| Stages table (the 22-row registry view) | [§ "Stages"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#stages) |
+| Trigger model — hook flow + SKILL flow + hook–SKILL contract | [§ "Trigger model"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#trigger-model) + [ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md) |
+| 6-state lifecycle + three-layer fingerprint | [§ "Stage lifecycle states"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#stage-lifecycle-states) + [ADR-0013](./docs/architecture/adr/0013-declarative-state-schema-and-lifecycle.md) + [ADR-0020](./docs/architecture/adr/0020-stage-applicability-and-not-applicable-state.md) |
+| Stage registry contract (YAML + Python + JSON Schema) | [§ "Stage registry contract"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#stage-registry-contract) + [ADR-0014](./docs/architecture/adr/0014-stage-registry-contract.md) |
+| Per-stage entry shape (what gets persisted) | [§ "Per-stage entry shape"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#per-stage-entry-shape) |
+| Settings modular layering (4 files + `modules.<id>` + per-module `schema_version`) | [§ "Settings modular layering"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#settings-modular-layering-in-file-structure) + [ADR-0021](./docs/architecture/adr/0021-settings-modular-layering.md) |
 | `applicable_when` predicate forms (3 of them) | [ADR-0020](./docs/architecture/adr/0020-stage-applicability-and-not-applicable-state.md) § Decision |
 | `platforms` field semantics | [ADR-0016](./docs/architecture/adr/0016-cross-platform-parity-contract.md) |
-| Architect UX flow + 5-element config item protocol | [§ "Architect UX"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#architect-ux) + [ADR-0023](./docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md) |
-| Repo identity scheme + I-13 cross-clone state sharing | [§ "Repo identity"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#repo-identity) + [ADR-0017](./docs/architecture/adr/0017-i13-invariant-revision-cross-clone-state-sharing.md) |
+| Architect UX flow + 5-element config item protocol | [§ "Architect UX"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#architect-ux) + [ADR-0023](./docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md) |
+| Repo identity scheme + I-13 cross-clone state sharing | [§ "Repo identity"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#repo-identity) + [ADR-0017](./docs/architecture/adr/0017-i13-invariant-revision-cross-clone-state-sharing.md) |
 | Kanban projection capability dispatch (M3) + M10 projection selection | [ADR-0027](./docs/architecture/adr/0027-m3-dispatch-via-kanban-protocol-projection.md) |
 | M7 multi-stage AGENTS.md / CLAUDE.md routing-block protocol | [ADR-0018](./docs/architecture/adr/0018-m7-multi-stage-routing-block-protocol.md) |
 | Zero-config SQLite default audit backend | [ADR-0019](./docs/architecture/adr/0019-zero-config-sqlite-default-audit-backend.md) + [ADR-0009](./docs/architecture/adr/0009-allow-sqlite-as-byo-audit-db.md) |
@@ -222,7 +222,7 @@ has to wade through on every plugin upgrade.
 ### Module (functional axis)
 
 The 10 modules (M1–M10) are listed in [§ "Axis C — Functional
-module"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#axis-c--functional-module).
+module"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#axis-c--functional-module).
 Common misclassifications:
 
 - **"Audit DDL apply" feels like M1 plugin-runtime infra**
@@ -297,7 +297,7 @@ host-specific or architect-specific, it is `repo-clone` or
 
 Five required Python callables per stage in
 `scripts/stages_lib/<stage_id>.py`. Signatures and intent:
-[§ "What the lifecycle model asks of each stage"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#what-the-lifecycle-model-asks-of-each-stage).
+[§ "What the lifecycle model asks of each stage"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#what-the-lifecycle-model-asks-of-each-stage).
 
 The contract itself is in the spec; what follows is the
 judgment the spec doesn't encode.
@@ -344,7 +344,7 @@ makes the hash flap and every stage permanently `drifted`.
 
 If you genuinely need a per-run-derived value (timestamps,
 correlation IDs), put it in `hash_excluded_fields`
-([§ "Hash-allowlist"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#hash-allowlist-fields-excluded-from-hash)).
+([§ "Hash-allowlist"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#hash-allowlist-fields-excluded-from-hash)).
 
 ### `generation` int — declared in YAML, not Python
 
@@ -609,7 +609,7 @@ What you need to know operationally:
 Until v1 GA, **breaking changes are accepted without
 in-place migration**. If you're tempted to write a v0.x → v0.y
 migration helper, stop — the policy is to delete legacy state
-and re-bootstrap. See [§ "Open design choices > Decided"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#decided-by-this-draft).
+and re-bootstrap. See [§ "Open design choices > Decided"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#decided-by-this-draft).
 
 After v1 GA this changes — backward compatibility becomes
 load-bearing. Plan the v1 GA cutover deliberately.
@@ -617,7 +617,7 @@ load-bearing. Plan the v1 GA cutover deliberately.
 ## 13. The canonicalization invariant — agent footguns
 
 The five canonicalization steps are in
-[§ "Canonicalization invariant for hash stability"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#canonicalization-invariant-for-hash-stability).
+[§ "Canonicalization invariant for hash stability"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#canonicalization-invariant-for-hash-stability).
 
 Footguns specific to agents writing stage code:
 
@@ -666,7 +666,7 @@ The full procedure as a checklist for a PR-prep self-review:
 □ 6. If character: agentic, fill all 5 protocol elements
      (§ 7). Per-prompt-renderer kind must be one of the 5.
 □ 7. If locality: external, set external_ttl_seconds (per
-     [§ "External stage TTL cache"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md#external-stage-ttl-cache-in-repo-shared-stateyml)).
+     [§ "External stage TTL cache"](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md#external-stage-ttl-cache-in-repo-shared-stateyml)).
 □ 8. Set platforms (default both, see § 9). For codex-only or
      cc-only, justify in the per-stage Python module's
      module-level docstring.
@@ -898,7 +898,7 @@ depends on which seam you're modifying. Quick map:
 | Cross-version evolution / migration | This guide § 12 + § 13, ADR-0013 |
 
 For everything else: **the design doc**
-[`docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+[`docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md`](./docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md)
 is the authoritative reference. The 13 setup-stages ADRs
 (0012–0024) carry the per-decision rationale.
 

@@ -30,7 +30,7 @@ contract. The fix is contract-level: the locality of every M4
 stage needs to be per-repo, uniformly.
 
 The bootstrap-redesign design doc
-([`05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+([`05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
 § "Why a redesign" item 5; § "Functional modules" M4;
 § "Stages" table M4 rows; § "Decided" → "M4 audit module is
 per-repo, not host-shared") consolidates this. This ADR
@@ -169,7 +169,7 @@ alone is the surface this ADR moves.
 - ADR-0013 — Declarative state schema + 5-state lifecycle. M4
   stages' `target_state` carries per-repo identity into their
   hash, making per-repo isolation observable from the diff.
-- [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+- [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   — Living design doc; § "Why a redesign" item 5 + § "Functional
   modules" M4 + § "Stages" M4 rows + § "Decided" entries
   ("M4 audit module is per-repo" + "Pre-v1 breaking changes

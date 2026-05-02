@@ -31,7 +31,7 @@ be added by editing the SKILL. Three structural costs follow:
    implicit "skip me" branch.
 
 Per
-[`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+[`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
 § "Architect UX", the architect's interaction with bootstrap
 **is** the interactive configuration surface for the plugin.
 Every architect-facing item is the same shape of operation —
@@ -252,7 +252,7 @@ empty `target_state`."
   file paths consume, plus the two new stages
   (`m5.repo.set-wip-limit`, `m10.repo.choose-kanban-backend`)
   that exemplify the protocol.
-- [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+- [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   § "Architect UX" — authoritative reference for the reframe,
   the sequential flow, the 5-element protocol, the
   future-feature inclusion procedure, the settings file

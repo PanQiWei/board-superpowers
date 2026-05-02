@@ -12,7 +12,7 @@ registry every `SessionStart` and emits an
 model (ADR-0013) reports as `never-run` or `stale`. The registry
 is the single declaration of every bootstrap stage — its
 `(module, character, locality)` 3-tuple identity (per
-[`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+[`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
 § "The three axes"), dependencies, executor, and the five
 callables the lifecycle requires from each stage.
 
@@ -240,7 +240,7 @@ schema gates the gap.
   per-repo locality, repo identity, M7 routing-block protocol,
   M8 autonomy presets, M9 hook registration); each adds stages
   this contract describes.
-- [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+- [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   § "Stage registry contract" — authoritative reference for
   column semantics, canonicalization invariant, five-callable
   contract.

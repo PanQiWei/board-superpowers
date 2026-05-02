@@ -1085,5 +1085,5 @@ change-impact matrix walked top-to-bottom; SKILLS.md updated
 if new specific roles or skill cross-references emerge;
 cross-references audited. Mirrors the Replacement plan
 structure in
-[`05-bootstrap-surface-redesign.md`](./05-bootstrap-surface-redesign.md)
+[`05-bootstrap-surface.md`](./05-bootstrap-surface.md)
 § "Replacement plan".]

@@ -26,7 +26,7 @@ Linear adapter" requires editing every M3 stage's executor);
 and there is no skip path for non-applicable backends.
 
 The bootstrap-surface redesign
-([`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md))
+([`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md))
 closes this gap with two structural shifts: the `not-applicable`
 lifecycle state (per ADR-0020) gives stages a clean skip path,
 and the `applicable_when` predicate field on the stage registry
@@ -194,7 +194,7 @@ second-adapter experience informs the right vocabulary.
 - ADR-0013 / ADR-0014 — Lifecycle state schema + stage
   registry contract; carry the `applicable_when` field
   populated on M3 rows.
-- [`../0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+- [`../0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   — Living design doc; § "Functional modules" M3 + M10 and
   § "Stages" M3 + M10 rows are this ADR's authoritative
   reference.

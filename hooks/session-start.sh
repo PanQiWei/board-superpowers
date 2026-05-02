@@ -2,7 +2,7 @@
 # hooks/session-start.sh — board-superpowers SessionStart hook (Layer 1).
 #
 # Fires once per CC / Codex session at startup. Per
-# docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md
+# docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md
 # § "Hook lifecycle diff" the hook performs TWO roles:
 #   (a) dep alert — surface a banner when a dependency is missing or
 #       the consuming repo's AGENTS.md / CLAUDE.md lacks the routing block.
@@ -34,7 +34,7 @@
 #
 # SELF-CONTAINED: this script MUST NOT source scripts/lib/common.sh,
 # per 02-hook-contracts.md § "Self-containment" (line 297-298) and
-# 05-bootstrap-surface-redesign.md § "Cross-cutting principles". A broken
+# 05-bootstrap-surface.md § "Cross-cutting principles". A broken
 # or missing lib must never prevent session startup. The path
 # normalization helper bsp_normalize_repo_path (defined in
 # scripts/lib/common.sh) is duplicated INLINE below as
@@ -187,7 +187,7 @@ if [ -n "${DEP_RAW}" ]; then
 fi
 
 # --- Layer 1b: lifecycle-diff intent injection (REWRITE from v0.4.x) -----
-# Per 05-bootstrap-surface-redesign.md § "Hook lifecycle diff" and ADR-0012.
+# Per 05-bootstrap-surface.md § "Hook lifecycle diff" and ADR-0012.
 #
 # v0.5.0+ behavior:
 #   1. Resolve primary repo root (worktree-safe, same as before).

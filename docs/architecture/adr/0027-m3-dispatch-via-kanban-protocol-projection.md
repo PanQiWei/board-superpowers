@@ -378,7 +378,7 @@ two reference-file trees on every change.
 - [`skills/operating-kanban/`](../../../skills/operating-kanban/)
   — Per-projection setup-capability reference (lands v0.5.0
   with #68 AC3); the runtime owner of the dispatch.
-- [`docs/architecture/0002-product-features-and-flows/05-bootstrap-surface-redesign.md`](../0002-product-features-and-flows/05-bootstrap-surface-redesign.md)
+- [`docs/architecture/0002-product-features-and-flows/05-bootstrap-surface.md`](../0002-product-features-and-flows/05-bootstrap-surface.md)
   § "Modules" M3 / M10 — #67 paired-PR rebase target; #67's
   Phase 3 M3 + M10 stage implementations land per this ADR.
 - [`SKILLS.md`](../../../SKILLS.md) § "Atomic-layer boundary
