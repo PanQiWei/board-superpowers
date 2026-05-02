@@ -82,6 +82,13 @@ def _eval_form_b(when: dict, *, repo_root: Path) -> bool:
     Shells out to bsp_resolve_active_projection (bash awk-based helper in
     scripts/lib/common.sh). Parses "OK <projection> <ref>" / "EMPTY".
     Loads projection reference file and checks capability presence.
+
+    Fallback: if bsp_resolve_active_projection returns EMPTY (e.g. project_ref
+    not yet configured), attempt a direct settings.yml read for the flat shorthand
+    modules.m10_kanban.projection key. This lets M3 stages become applicable as
+    soon as M10 records the projection type — the project_ref is a separate
+    concern (which specific GitHub Project to use) orthogonal to the capability
+    predicate (which projection type is active).
     """
     capability = when.get("kanban_projection_capability", "")
     if not capability:
@@ -90,25 +97,67 @@ def _eval_form_b(when: dict, *, repo_root: Path) -> bool:
     common_sh = plugin_root / "scripts" / "lib" / "common.sh"
     if not common_sh.exists():
         return True  # pre-bootstrap — fail open
+
+    projection_id: str = ""
     try:
         result = subprocess.run(
             ["bash", "-c", f'source "{common_sh}" && bsp_resolve_active_projection "{repo_root}"'],
             capture_output=True, text=True, timeout=10,
         )
         output = result.stdout.strip()
+        if result.returncode == 0 and output and not output.startswith("EMPTY"):
+            # bsp_resolve_active_projection outputs "<projection> <ref>" on success
+            # (the awk produces "OK <proj> <ref>" internally; the bash wrapper
+            # strips the "OK " prefix with ${parsed#OK } before printing).
+            # Some callers/mocks pass "OK <proj> <ref>" directly — handle both.
+            if output.startswith("OK "):
+                parts = output.split(None, 2)  # ["OK", "<projection>", "<ref>"]
+                if len(parts) >= 2:
+                    projection_id = parts[1]
+            else:
+                parts = output.split(None, 1)  # ["<projection>", "<ref>"]
+                if parts:
+                    projection_id = parts[0]
     except (subprocess.TimeoutExpired, OSError):
-        return True
-    if not output.startswith("OK "):
+        return True  # fail open on subprocess error
+
+    # Fallback: awk returned EMPTY or non-zero (likely project_ref not yet set).
+    # Read the shorthand projection directly from settings.yml.
+    if not projection_id:
+        projection_id = _read_projection_from_settings(repo_root)
+
+    if not projection_id:
         return False
-    parts = output.split(None, 2)
-    if len(parts) < 2:
-        return False
-    projection_id = parts[1]
+
     ref_file = plugin_root / "skills" / "operating-kanban" / "references" / f"{projection_id}.md"
     if not ref_file.exists():
         return False
     ref_text = ref_file.read_text(encoding="utf-8")
     return _capability_in_ref(capability, ref_text)
+
+
+def _read_projection_from_settings(repo_root: Path) -> str:
+    """Direct settings.yml read fallback for Form B when awk returns EMPTY.
+
+    Reads modules.m10_kanban.projection (flat shorthand form, written by M10
+    apply_choice). Used when project_ref is not yet configured so
+    bsp_resolve_active_projection returns EMPTY rather than OK.
+    """
+    import yaml  # local import — only used in fallback path
+    settings_file = repo_root / ".board-superpowers" / "settings.yml"
+    if not settings_file.exists():
+        return ""
+    try:
+        data = yaml.safe_load(settings_file.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return ""
+        m10 = (data.get("modules") or {}).get("m10_kanban") or {}
+        if not isinstance(m10, dict):
+            return ""
+        proj = m10.get("projection", "")
+        return proj if isinstance(proj, str) else ""
+    except Exception:
+        return ""
 
 
 def _capability_in_ref(capability: str, ref_text: str) -> bool:

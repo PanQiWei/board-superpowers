@@ -229,8 +229,10 @@ stages:
     description: >-
       Prompt architect to choose the kanban projection used in this repo
       (per ADR-0027 § 4 + ADR-0024 Part B). At v0.5.0 the enum has only
-      `github-project-v2`. Persists to settings.yml § modules.m10_kanban.<id>.projection
-      (per-kanban scoped, NOT flat — per ADR-0026 multi-kanban schema).
+      `github-project-v2`. Persists to settings.yml § modules.m10_kanban.projection
+      (ADR-0026 v1.0 shorthand flat form — 4-space indented directly under m10_kanban,
+      readable by bsp_resolve_active_projection awk parser). The multi-kanban
+      kanbans-list form is reserved for v0.6.x.
       Future Linear / Jira projections add enum options carrying
       `introduced_in_version` per ADR-0023 so additive enum bumps don't
       gratuitously re-prompt repos that already picked an extant option.
