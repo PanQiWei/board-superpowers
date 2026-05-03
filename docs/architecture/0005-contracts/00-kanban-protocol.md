@@ -582,7 +582,7 @@ existing work hierarchy (per
 
 The leaf-most level is always the claimable `Card`. Upper tiers
 are organizational context, surfaced through Thread / Milestone
-aggregation in `managing-board` routines.
+aggregation in Producer routine skills (`briefing-daily`, `intaking-requirement`, etc.).
 
 ### What is explicitly NOT done
 
@@ -1023,7 +1023,7 @@ modules:
 
 | Level | Required actions | What it enables |
 |-------|------------------|-----------------|
-| **L0** (read-only) | `read_board`, `read_card` | `managing-board` daily routine; review-only Producer flows |
+| **L0** (read-only) | `read_board`, `read_card` | `briefing-daily` routine; review-only Producer flows |
 | **L1** (write) | L0 + `create_card`, `transition_card`, `comment_on_card` (optional flag) | Producer intake (F-08), `decomposing-into-milestones`, basic Manager mutation |
 | **L2** (claim) | L1 + `claim_card`, `release_claim`, `link_pr_to_card` | Full Consumer flow (F-C0..F-C14) |
 | **L3** (full v1) | L2 + verified body-schema preservation + custom-state folding documentation | All v1 features |
@@ -1184,8 +1184,8 @@ ADR-0025`.
 Each is a deliberate omission. Adding any requires a new ADR (or
 a v1 supersession of this protocol document).
 
-- **`delete_card`** — destructive action. Manager surface
-  (managing-board) handles archival via labels and status, not
+- **`delete_card`** — destructive action. Producer routine skills
+  (`triaging-board`) handle archival via labels and status, not
   deletion. Agents do not delete user data.
 - **`archive_card`** — backend-specific (GitHub doesn't have a
   dedicated archive concept; Linear does). Folded into
@@ -1244,9 +1244,10 @@ beyond what the projection's reference file documents.*
 **Falsification triggers**:
 
 1. **Multi-projection silent failure.** A second backend
-   projection ships, and an existing skill (managing-board /
-   consuming-card / decomposing-into-milestones / bootstrapping-
-   repo) requires source edits to work on it that go beyond
+   projection ships, and an existing skill (`briefing-daily` /
+   `intaking-requirement` / `reviewing-pr-queue` / `triaging-board` /
+   `consuming-card` / `decomposing-into-milestones` / `bootstrapping-
+   repo`) requires source edits to work on it that go beyond
    pointing at a different backend reference. Then the protocol
    is leaking projection details.
 2. **Projection-shape leakage.** Protocol document or any

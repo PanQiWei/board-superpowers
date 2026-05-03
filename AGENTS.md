@@ -6,19 +6,21 @@ user-facing overview.
 
 @SKILLS.md
 
-## Project status — v1 catalog 11/11 shipped
+## Project status — v1 catalog 14/14 shipped
 
 > **The plugin is loadable at runtime.** `hooks/`,
 > `scripts/`, and `skills/` directories exist at the repo root.
-> `SessionStart` fires. The 11 v1-catalog skills auto-match.
+> `SessionStart` fires. The 14 v1-catalog skills auto-match.
 > The plugin dogfoods itself for any new skill / script / hook.
 
-**v1 catalog = 11 of 11 skills shipped** (post-#71 —
-`composing-siblings` atomic lands as the SPOT for sibling-plugin
-invocation discipline), per [`SKILLS.md`](./SKILLS.md):
+**v1 catalog = 14 of 14 skills shipped** (post-#72 —
+`managing-board` mega-SKILL retired; 4 per-routine molecular SKILLs
+ship in its place: `briefing-daily`, `intaking-requirement`,
+`reviewing-pr-queue`, `triaging-board`), per [`SKILLS.md`](./SKILLS.md):
 
 - **Shipped**: `using-board-superpowers` (entry),
-  `managing-board` + `consuming-card` + `bootstrapping-repo` +
+  `briefing-daily` + `intaking-requirement` + `reviewing-pr-queue` +
+  `triaging-board` + `consuming-card` + `bootstrapping-repo` +
   `decomposing-into-milestones` (molecular), `board-canon` +
   `enforcing-pr-contract` + `classifying-actions` +
   `auditing-actions` + `operating-kanban` + `composing-siblings`
@@ -142,7 +144,8 @@ and `gstack`, packaged as a dual-platform plugin (Claude Code +
 OpenAI Codex CLI). At runtime — once v1 implementation lands —
 it does four things:
 
-1. **Routes** every session into Manager (board orchestration) or
+1. **Routes** every session into a Producer routine (board
+   orchestration — one of four dedicated routine SKILLs) or
    Consumer (one-card-to-PR) based on the first user message,
    first-time / version-transition state, or a hook-injected
    intent marker. Routing details:
@@ -167,7 +170,7 @@ it does four things:
    a local jsonl trace and the entry's `mode` field records the
    degradation cause (see spec 06 § "jsonl fallback mode-field").
 
-### Skills system — the v1 catalog (11 skills, 3 layers)
+### Skills system — the v1 catalog (14 skills, 3 layers)
 
 The `skills/` directory **is** the agent's action system. It is
 designed as a graph of nodes (skills) and edges (cross-skill
@@ -181,11 +184,20 @@ Entry layer (1) — first-touch router, routes only, never works
   using-board-superpowers     reliable dep gate + role routing
                               (consumes hook-injected INVOKE: markers)
 
-Molecular layer (4) — business workflows, state-machine-shaped
+Molecular layer (7) — business workflows, state-machine-shaped
 ─────────────────────────────────────────────────────────────────
-  managing-board              Producer (F-01..F-08, F-10..F-15)
+  briefing-daily              Producer daily orientation (board read,
+                              WIP flagging, stale-claim detection,
+                              recommended-next-action)
+  intaking-requirement        Producer intake (acknowledge, shape-judge,
+                              spec-first check, route / create card)
+  reviewing-pr-queue          Producer review queue (validate PRs via
+                              enforcing-pr-contract, comment, transition
+                              non-compliant cards, summarize)
+  triaging-board              Producer triage (Blocked scan + 3-class
+                              blocker remediation, stale-claim release)
   consuming-card              Consumer (F-C0..F-C14 lifecycle)
-  decomposing-into-milestones F-09 + INVEST + vertical slicing
+  decomposing-into-milestones INVEST + vertical slicing + card schema
   bootstrapping-repo          sole executor for setup-stages —
                               first-time setup + plugin-upgrade
                               reconvergence (absorbs the formerly
@@ -336,16 +348,16 @@ goes through the same two-role flow board-superpowers prescribes
 for any consuming repo:
 
 - **Spec architecture changes** (anything under
-  `docs/architecture/`) — flow through `managing-board` (intake
-  → decomposition handoff → cards on the board) →
+  `docs/architecture/`) — flow through `intaking-requirement`
+  (intake → decomposition handoff → cards on the board) →
   `consuming-card` (claim → worktree → implement → PR). Spec
-  changes that don't yet have decomposition support (since
-  `decomposing-into-milestones` is deferred) get hand-decomposed
-  by the architect into Ready cards, then claimed normally.
-- **Skill / script / hook implementation** — full Manager →
+  changes that don't yet have decomposition support get hand-
+  decomposed by the architect into Ready cards, then claimed
+  normally.
+- **Skill / script / hook implementation** — full Producer →
   Consumer flow against the plugin's own GitHub Project
   ([PanQiWei/board-superpowers](https://github.com/PanQiWei/board-superpowers)
-  Project, F-08 intake routine).
+  Project, via `intaking-requirement`).
 
 The only exception: changes to **the dogfood loop itself**
 (this Self-hosting section, the working tree discipline, the
@@ -535,16 +547,23 @@ cross-cutting checks that span multiple subdirectories.
 <!-- board-superpowers:routing -->
 ## board-superpowers session routing
 
-This project uses the `board-superpowers` plugin (v0.5.0).
+This project uses the `board-superpowers` plugin (v0.7.0).
 Any Claude Code session in this project plays one of two roles:
 
 - **Board Consumer** — if the first message contains `[board-card:#N]`,
   or the user asks to work on / claim / implement card N, invoke the
   `consuming-card` skill immediately. That skill owns the full
   lifecycle: claim → implement → PR → update board.
-- **Board Manager** — if the user asks about planning today's work,
-  reviewing the board, decomposing a requirement, triaging blocked
-  cards, or running a retro, invoke the `managing-board` skill.
+- **Board Producer** — route to the appropriate routine SKILL based on
+  the user's signal:
+  - "morning briefing" / "what should I work on" / "today's plan" /
+    "board overview" → `briefing-daily`
+  - "new requirement" / "intake this idea" / "I have a feature" →
+    `intaking-requirement`
+  - "review the PRs" / "what's in In Review" / "merge ready" →
+    `reviewing-pr-queue`
+  - "what's blocked" / "triage the board" / "release stale claims" →
+    `triaging-board`
 - When unsure, invoke `using-board-superpowers` first.
 
 board-superpowers depends on the `superpowers` and `gstack` plugins
@@ -629,17 +648,17 @@ a release process.
   skill's "start coding" suggestion does not excuse skipping
   Red → Green → Refactor.
 
-**Manager-mode mirror**: this section's composition rules are
+**Producer-mode mirror**: this section's composition rules are
 mirrored for the Producer's intake routine in
-[`skills/managing-board/references/skill-routing.md`](./skills/managing-board/references/skill-routing.md).
+[`skills/intaking-requirement/references/intake-decision-tree.md`](./skills/intaking-requirement/references/intake-decision-tree.md).
 The two files MUST stay in sync — see the change-impact-matrix
-row "AGENTS.md compose section ↔ skill-routing.md /
+row "AGENTS.md compose section ↔ intake-decision-tree.md /
 scope-shape-judgment.md" in
 [`docs/architecture/AGENTS.md`](./docs/architecture/AGENTS.md).
 If you edit one without the other, the PR is incomplete.
-The shape-level companion ([`scope-shape-judgment.md`](./skills/managing-board/references/scope-shape-judgment.md))
-and the spec-first companion ([`spec-first-checklist.md`](./skills/managing-board/references/spec-first-checklist.md))
-are the manager-mode SoT for shape decisions and spec
+The shape-level companion ([`scope-shape-judgment.md`](./skills/intaking-requirement/references/scope-shape-judgment.md))
+and the spec-first companion ([`spec-first-checklist.md`](./skills/intaking-requirement/references/spec-first-checklist.md))
+are the Producer-mode SoT for shape decisions and spec
 preconditions; this section provides the cross-plugin wiring
 they consume.
 

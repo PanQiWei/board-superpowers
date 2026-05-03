@@ -94,9 +94,10 @@ content invariants the cards themselves must satisfy.
   `skills/decomposing-into-milestones/references/card-schema.md`
   (decomposition-side authoring rules + filler detection); the
   schema's machine-readable bottom-marker
-  (`<!-- board-superpowers:card -->`) is what lets `managing-board`
-  and other tools distinguish board-superpowers cards from plain
-  issues.
+  (`<!-- board-superpowers:card -->`) is what lets the Producer
+  routine SKILLs (`briefing-daily` / `intaking-requirement` /
+  `reviewing-pr-queue` / `triaging-board`) and other tools
+  distinguish board-superpowers cards from plain issues.
 - **Thin-pointer block** (top of body, machine-readable):
   - `**Spec**:` — repo-relative path to the spec / plan / design
     doc, with section anchor. Multiple paths allowed (one per
@@ -146,8 +147,8 @@ content invariants the cards themselves must satisfy.
     straightforward)" is acceptable.
 - **Marker comment** — the trailing
   `<!-- board-superpowers:card -->` is protocol, not decoration.
-  Tooling (managing-board's Review Queue routine, the daily
-  briefing's filter logic) keys off the marker.
+  Tooling (`reviewing-pr-queue`'s Review Queue routine,
+  `briefing-daily`'s filter logic) keys off the marker.
 - **Maps to (canonical)**: Cohn 2004 (story format — the
   classic "As a <role>, I want <feature>, so that <reason>"
   narrative), but adapted: board-superpowers' Acceptance

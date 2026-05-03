@@ -1,18 +1,21 @@
-# Handoff points — 9 caller × scenario table
+# Handoff points — caller × scenario table
 
-> **Forward-looking note**: The 4 Producer routine SKILLs (`briefing-daily` /
-> `intaking-requirement` / `reviewing-pr-queue` / `triaging-board`) referenced
-> below land via Card #72 (Producer Shape Y refactor); the Consumer 5 lifecycle
-> handoff points (B1 / C1 / C2 / C3 / C4) are introduced via Card #73 (Consumer
-> Shape X refactor). Today (post-#71-merge baseline), the SKILLs invoking sibling
-> plugins are `managing-board` (intake routing — turns a new requirement into a
+> **Current state (post-#72-merge)**: The 4 Producer routine SKILLs
+> (`briefing-daily` / `intaking-requirement` / `reviewing-pr-queue` /
+> `triaging-board`) replace the prior single molecular skill. Current callers:
+> `intaking-requirement` (intake routing — turns a new requirement into a
 > design conversation or Ready card by delegating to gstack / superpowers),
+> `briefing-daily` (extended orientation — strategic question after the
+> daily briefing), `reviewing-pr-queue` (deep code review escalation),
+> `triaging-board` (investigation for decision-pending blockers),
 > `consuming-card` (implementation delegation + pre-PR verification chain +
-> conditional QA/security passes), `decomposing-into-milestones` (plan synthesis
-> + arch validation handoff). Same handoff semantics, different SKILL boundaries.
+> conditional QA/security passes), `decomposing-into-milestones` (plan
+> synthesis + arch validation handoff).
+> The Consumer 5 lifecycle handoff points (C1 / C2 / C3 / C4) will be
+> updated via Card #73 (Consumer Shape X refactor).
 
 This table is informational for the `composing-siblings` skill body. It tracks
-the current set of callers and their sibling-skill handoffs. The count (9) may
+the current set of callers and their sibling-skill handoffs. The count may
 grow or shrink as molecular skills evolve; the atomic body does not hard-code it.
 
 ## Phase labels
@@ -28,15 +31,18 @@ grow or shrink as molecular skills evolve; the atomic body does not hard-code it
 - **C4** — Conditional quality gates: UI or security-flagged cards trigger
   additional passes.
 
-## 9 caller × scenario table
+## Caller × scenario table
 
 | Caller skill | Phase | Trigger signal | Sibling(s) to invoke | Mode-2 safe? |
 |--------------|-------|---------------|----------------------|--------------|
-| `managing-board` (intake) | B1 | "is this worth doing", "should we build this", "real demand?" | `gstack:/office-hours` OR `gstack:/plan-ceo-review` | n/a (Producer, not Mode-2) |
-| `managing-board` (intake) | B1 | "rethink scope", "10-star product", "expand premise" | `gstack:/plan-ceo-review` | n/a |
-| `managing-board` (intake) | B1 | architecture trade-off: "which schema", "which adapter", "data flow" | `gstack:/plan-eng-review` | n/a |
-| `managing-board` (intake) | C1 | "explore this idea", direction set but design not locked | `superpowers:brainstorming` | n/a |
-| `managing-board` (decomp handoff) | C1 | design artifact exists, needs executable plan | `superpowers:writing-plans` | n/a |
+| `intaking-requirement` (intake) | B1 | "is this worth doing", "should we build this", "real demand?" | `gstack:/office-hours` OR `gstack:/plan-ceo-review` | n/a (Producer, not Mode-2) |
+| `intaking-requirement` (intake) | B1 | "rethink scope", "10-star product", "expand premise" | `gstack:/plan-ceo-review` | n/a |
+| `intaking-requirement` (intake) | B1 | architecture trade-off: "which schema", "which adapter", "data flow" | `gstack:/plan-eng-review` | n/a |
+| `intaking-requirement` (design sharpening) | B1 | "explore this idea", direction set but design not locked | `superpowers:brainstorming` | n/a |
+| `intaking-requirement` (decomp handoff) | B1 | design artifact exists, needs executable plan | `superpowers:writing-plans` | n/a |
+| `briefing-daily` (extended orientation) | B1 | "is this the right work?", strategic direction question after briefing | `gstack:/office-hours` OR `gstack:/plan-ceo-review` | n/a |
+| `reviewing-pr-queue` (deep review) | C3 | "give this a thorough review", large/sensitive PR | `gstack:/review`, `superpowers:requesting-code-review` | n/a |
+| `triaging-board` (investigation) | B1 | decision-pending blocker that needs technical investigation | `gstack:/investigate` | n/a |
 | `consuming-card` | C1 | plan phase before implementation | `superpowers:writing-plans` | yes — procedural |
 | `consuming-card` | C2 | implementation: TDD + debugging loop | `superpowers:test-driven-development`, `superpowers:subagent-driven-development` (TBD — see procedural-fallback-rules.md) | TBD — check procedural-fallback-rules.md |
 | `consuming-card` | C3 | pre-PR verification chain | `superpowers:verification-before-completion`, `superpowers:requesting-code-review`, `gstack:/review` | yes — all three are procedural |
@@ -47,23 +53,24 @@ grow or shrink as molecular skills evolve; the atomic body does not hard-code it
 
 ## Row count note
 
-The table has more than 9 rows because some callers have multiple scenario rows.
-The "9 callers" figure in the SKILLS.md SPOT table counts distinct
-caller × lifecycle-position pairs:
+The table has more rows than unique caller × phase pairs. Distinct pairs:
 
-1. `managing-board` B1 — direction question
-2. `managing-board` B1 — scope challenge
-3. `managing-board` B1 — architecture question
-4. `managing-board` C1 — brainstorming
-5. `managing-board` C1 — plan synthesis (decomp handoff)
-6. `consuming-card` C1 — planning
-7. `consuming-card` C2 — implementation
-8. `consuming-card` C3 — verification
-9. `consuming-card` C4 — conditional QA/security
+1. `intaking-requirement` B1 — direction question
+2. `intaking-requirement` B1 — scope challenge
+3. `intaking-requirement` B1 — architecture question
+4. `intaking-requirement` B1 — design sharpening
+5. `intaking-requirement` B1 — plan synthesis (decomp handoff)
+6. `briefing-daily` B1 — extended orientation
+7. `reviewing-pr-queue` C3 — deep code review
+8. `triaging-board` B1 — decision investigation
+9. `consuming-card` C1 — planning
+10. `consuming-card` C2 — implementation
+11. `consuming-card` C3 — verification
+12. `consuming-card` C4 — conditional QA/security
 
 `decomposing-into-milestones` shares the same sibling invocations as
-`managing-board` B1/C1 and is not counted as a separate position in the SPOT
-table because the wiring pattern is identical; it does, however, appear in the
+`intaking-requirement` B1 and is not counted as a separate SPOT position
+because the wiring pattern is identical; it does, however, appear in the
 table above for completeness.
 
 ## Updating this file

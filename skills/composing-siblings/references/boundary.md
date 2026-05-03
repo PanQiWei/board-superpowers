@@ -9,8 +9,10 @@ call-graph cycles and to preserve the SPOT (single-point-of-truth) property:
 each atomic consolidates one contract that would otherwise be inlined N times.
 
 Concretely:
-- `composing-siblings` MUST NOT invoke `board-superpowers:managing-board`,
-  `board-superpowers:consuming-card`, `board-superpowers:bootstrapping-repo`,
+- `composing-siblings` MUST NOT invoke `board-superpowers:briefing-daily`,
+  `board-superpowers:intaking-requirement`, `board-superpowers:reviewing-pr-queue`,
+  `board-superpowers:triaging-board`, `board-superpowers:consuming-card`,
+  `board-superpowers:bootstrapping-repo`,
   `board-superpowers:decomposing-into-milestones`, or any other skill in this
   plugin.
 - If a future change to `composing-siblings` seems to require calling another

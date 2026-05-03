@@ -12,7 +12,7 @@
     {
       "id": 2,
       "prompt": "what should I work on today",
-      "expected_output": "Routes to board-superpowers:managing-board (daily routine). Does NOT do the briefing inline — that's downstream-skill territory.",
+      "expected_output": "Routes to board-superpowers:briefing-daily. Does NOT do the briefing inline — that's downstream-skill territory.",
       "files": []
     },
     {
@@ -30,7 +30,7 @@
     {
       "id": 5,
       "prompt": "decompose this design doc into cards: <pasted spec>",
-      "expected_output": "Routes to board-superpowers:managing-board → intake routine (which then chooses whether to pass through superpowers:brainstorming for sharpening before the architect hand-decomposes into cards). Does NOT attempt to decompose itself.",
+      "expected_output": "Routes to board-superpowers:intaking-requirement (which then chooses whether to pass through superpowers:brainstorming for sharpening before the architect hand-decomposes into cards). Does NOT attempt to decompose itself.",
       "files": []
     },
     {

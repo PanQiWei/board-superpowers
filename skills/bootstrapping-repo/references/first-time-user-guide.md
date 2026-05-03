@@ -14,7 +14,7 @@ This is the path that gets you the most out of the plugin from day one. Open a f
 
 > "Let's intake this idea: <one-line description of the feature>"
 
-The router (`using-board-superpowers`) sees an intake-shaped phrase and routes to `managing-board` (intake routine). That skill walks you through the routing decision: is this a direction question (`gstack:/office-hours`), an architecture question (`gstack:/plan-eng-review`), a multi-step requirement (`superpowers:brainstorming`), or a single-card-sized piece of work (direct card creation)? After the appropriate sibling skill returns its artifact, the Manager session drafts cards and proposes them to you for `gh issue create`.
+The router (`using-board-superpowers`) sees an intake-shaped phrase and routes to `intaking-requirement`. That skill walks you through the routing decision: is this a direction question (`gstack:/office-hours`), an architecture question (`gstack:/plan-eng-review`), a multi-step requirement (`superpowers:brainstorming`), or a single-card-sized piece of work (direct card creation)? After the appropriate sibling skill returns its artifact, the Manager session drafts cards and proposes them to you for `gh issue create`.
 
 ### Path 2 — paste a card body in the GitHub UI
 
@@ -118,7 +118,10 @@ Do not edit anything **between** the markers by hand — your edits will be over
 
 This skill (`bootstrapping-repo`) does NOT fire again unless one of the state files goes missing. From here on:
 
-- "What should I work on" / "morning briefing" / "review the PRs" / "intake this feature" / "what's blocked" → `managing-board` (Producer routines).
+- "What should I work on" / "morning briefing" → `briefing-daily`.
+- "Intake this feature" / "let's intake this idea" → `intaking-requirement`.
+- "Review the PRs" / "review queue" → `reviewing-pr-queue`.
+- "What's blocked" / "triage the board" → `triaging-board`.
 - `[board-card:#N]` / "claim card N" / "work on card N" → `consuming-card` (Consumer lifecycle).
 - "What does this plugin do" / "how does this work" → answered inline by `using-board-superpowers` from `references/first-time-user-guide.md` (note: that's the entry-skill's first-time guide, separate from this one).
 

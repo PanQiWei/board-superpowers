@@ -1,4 +1,4 @@
-# Skills system — board-superpowers v1 catalog (11 skills total, all shipped, 3 layers)
+# Skills system — board-superpowers v1 catalog (14 skills total, all shipped, 3 layers)
 
 > **Always loaded.** This document is referenced from
 > [`AGENTS.md`](./AGENTS.md) via `@SKILLS.md` and rides into
@@ -31,7 +31,7 @@ The reverse also holds: an edit to this document without the
 matching `skills/` change makes the spec drift. Both halves
 land together.
 
-The skills system has three layers, eleven skills, and a fixed set
+The skills system has three layers, fourteen skills, and a fixed set
 of cross-plugin edges. None of these numbers should change
 without an explicit decision recorded here first.
 
@@ -106,8 +106,8 @@ rationale that motivates the split.
 
 ## v1 minimum vs v1 complete
 
-The v1 catalog defines **11 skills**. As of `v0.6.0`
-(post-#71-merge), **all 11 ship** — enough to make the plugin
+The v1 catalog defines **14 skills**. As of `v0.7.0`
+(post-#72-merge), **all 14 ship** — enough to make the plugin
 self-hostable on this very repo AND to bootstrap a fresh
 consuming repo from zero AND to govern every mutating action
 through classifying-actions + auditing-actions AND to decompose
@@ -115,7 +115,10 @@ design artifacts into INVEST-compliant vertically-sliced cards
 via decomposing-into-milestones AND to dispatch the eight Kanban
 Protocol actions through the active projection via
 operating-kanban AND to consolidate the single source of truth
-for sibling-plugin invocation discipline via composing-siblings.
+for sibling-plugin invocation discipline via composing-siblings
+AND to run each Producer routine as a dedicated SKILL
+(briefing-daily / intaking-requirement / reviewing-pr-queue /
+triaging-board, replacing the retired managing-board mega-SKILL).
 The `migrating-repo-version` molecular SKILL that v0.5.0 carried
 as deferred has been **absorbed into `bootstrapping-repo`** per
 [ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md)
@@ -125,7 +128,10 @@ transition migrations). No separate migration SKILL ships.
 | Skill | Layer | v1 status | Why this scoping |
 |-------|-------|-----------|-------------------|
 | `using-board-superpowers` | Entry | **v1-minimum** | Required for routing every session into the right role. |
-| `managing-board` | Molecular | **v1-minimum** | Producer surface — required for "what should I work on" / Review Queue / intake on this repo. v1 ships F-01 + F-02 + F-08 only; F-03..F-07 + F-10..F-15 deferred to v1.x per ADR-0011 (pending demand pull). |
+| `briefing-daily` | Molecular | **v1-complete** (shipped v0.7.0) | Producer daily-briefing routine — board read, WIP flagging, stale-claim detection, recommended-next-action. |
+| `intaking-requirement` | Molecular | **v1-complete** (shipped v0.7.0) | Producer intake routine — acknowledge, shape-judge, spec-first check, route / create card. Replaces the intake workflow of the retired `managing-board` skill. |
+| `reviewing-pr-queue` | Molecular | **v1-complete** (shipped v0.7.0) | Producer review-queue routine — list open PRs, validate via enforcing-pr-contract, comment, transition cards, summarize. |
+| `triaging-board` | Molecular | **v1-complete** (shipped v0.7.0) | Producer triage routine — Blocked scan with 3-class blocker remediation, stale-claim detection and release. |
 | `consuming-card` | Molecular | **v1-minimum** | Consumer surface — required for the F-C0..F-C14 lifecycle that delivers each card's PR. |
 | `decomposing-into-milestones` | Molecular | **v1-complete** (shipped v0.4.0) | F-09 + §1.6 INVEST + vertical-slicing + card schema + size calibration engine. Lands alongside the schema-drift double-collapse (board-canon ↔ spec § 1.6.3) so the converged terminal Card body schema becomes architecturally authoritative. |
 | `bootstrapping-repo` | Molecular | **v1-minimum** (shipped in v0.2.0; rebased v0.6.0) | Sole executor for setup-stages (per [ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md), [ADR-0023](./docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md), [ADR-0024](./docs/architecture/adr/0024-settings-rename-and-config-item-stages.md), [ADR-0027](./docs/architecture/adr/0027-board-projection-routes-through-operating-kanban.md)) — first-time setup, plugin-upgrade reconvergence (absorbs the formerly deferred `migrating-repo-version` scope), and agentic config-item elicitation. The entry-skill state probe routes here on first session and on every subsequent session that surfaces a never-run / stale stage. |
@@ -151,7 +157,7 @@ means for board-superpowers" #3 for the full rationale.
 > Per-skill `layer`, `type`, `mode`, `bounded-context` live in
 > `<skill-dir>/.skill-meta.yaml`. The catalog below tags each
 > skill name as `(shipped vX)` for every skill in the catalog —
-> all 11 ship as of v0.6.0 (post-#71-merge). Tier 2 frontmatter
+> all 14 ship as of v0.7.0 (post-#72-merge). Tier 2 frontmatter
 > recommendations are listed for every skill.
 
 ### Entry layer (1 skill)
@@ -159,7 +165,7 @@ means for board-superpowers" #3 for the full rationale.
 #### `using-board-superpowers` (v1-minimum)
 
 - **Role**: Manual page + first-touch router. Loaded every
-  session; provides full plugin orientation inline (11-skill
+  session; provides full plugin orientation inline (14-skill
   catalog, 6-state Card lifecycle, 5 bounded contexts,
   on-disk state, routing tree) AND routes ambiguous sessions
   or hook-injected `INVOKE:` markers to the right molecular
@@ -168,7 +174,7 @@ means for board-superpowers" #3 for the full rationale.
 - **Body target**: Entry-layer 200-line baseline intentionally
   exceeded (currently ~225 lines) to support the manual-page
   double duty — agents in community consumer projects must
-  one-shot-ingest the routing context (11-skill catalog,
+  one-shot-ingest the routing context (14-skill catalog,
   6-state lifecycle, 5 bounded contexts, on-disk state,
   routing tree), so progressive disclosure cannot replace
   inline content here. Keep additions justified by the same
@@ -182,51 +188,126 @@ means for board-superpowers" #3 for the full rationale.
   "what skills exist", "explain the architecture",
   `INVOKE:` marker injected by `SessionStart`.
 - **Composes (downstream)**: every molecular skill below
-  (routing target). When the routing target is deferred to
-  v1-complete, the entry skill responds with a friendly
-  "not implemented in v1-minimum" pointer instead.
+  (routing target).
 - **Tier 2 frontmatter**: `when_to_use` (extended trigger
   vocabulary outside the primary `description`).
 
-### Molecular layer (4 skills, all shipped)
+### Molecular layer (7 skills, all shipped)
 
-#### `managing-board` (v1-minimum)
+#### `briefing-daily` (v1-complete, shipped v0.7.0)
 
-- **Role**: Producer session main skill. Carries F-01 (daily) +
-  F-02 (review queue) + F-08 (intake) in v1-minimum;
-  F-03..F-07 + F-10..F-15 land in v1-complete. Per
-  [`docs/architecture/0002-product-features-and-flows/03-producer-surface.md`](./docs/architecture/0002-product-features-and-flows/03-producer-surface.md).
-- **Body target**: 300-400 lines.
+- **Role**: Producer daily-briefing routine. Reads the board,
+  groups cards by Status, highlights WIP situations and stale
+  claims, recommends ONE next action. Covers journey nodes
+  A1 (board overview) + A2 (ordered PR queue) + A3 ("what's
+  blocking me") + A4 (context-switch reload re-entry) + A5
+  (today's dispatch recommendation).
+- **Body target**: 250-400 lines (molecular budget).
 - **References folder**:
-  `references/{daily,intake,review-queue,triage,scope-shape-judgment,spec-first-checklist,skill-routing}.md`
-  (retro / weekly-report / harness / hygiene deferred to
-  v1-complete). The intake-routing trio
-  (`scope-shape-judgment` / `spec-first-checklist` /
-  `skill-routing`) lands alongside the extended
-  decision-tree in `intake.md`; together they encode the
-  shape + spec-first + sibling-routing judgments at
-  manager-mode intake. Anchored to four primary sources
+  `references/daily-detail.md` — empty-board case, single-
+  Consumer projects, stale-claim age computation, hot-card
+  formatting, tone.
+- **Composes (atomic)**: `board-canon` (WIP counting formula),
+  `board-superpowers:operating-kanban` (`read_board` protocol
+  action — board state grouped by Status),
+  `board-superpowers:composing-siblings` (sibling-plugin
+  invocation rules if delegation is needed),
+  `board-superpowers:classifying-actions` +
+  `board-superpowers:auditing-actions` (every mutating action;
+  read-only routine marker recorded directly via auditing-actions).
+- **Composes (cross-plugin)**: none typical (daily is read-only).
+- **Triggers**: "morning briefing" / "what should I work on" /
+  "today's plan" / "board overview" / "what's running".
+- **Tier 2 frontmatter**: `when_to_use` (extended trigger
+  vocabulary).
+
+#### `intaking-requirement` (v1-complete, shipped v0.7.0)
+
+- **Role**: Producer intake routine. Acknowledges the incoming
+  requirement, runs the 4-step shape judgment → spec-first
+  check → skill routing → card creation pipeline. Covers
+  journey nodes B1 (design conversation routing) + B3 (single-
+  card fast-path) + G4 (design discipline gate: intake →
+  decompose bridge cannot be skipped).
+- **Body target**: 250-420 lines (molecular budget).
+- **References folder**:
+  `references/{intake-decision-tree,scope-shape-judgment,spec-first-checklist}.md`
+  — the intake-routing trio that encodes shape + spec-first +
+  sibling-routing judgments. Anchored to four primary sources
   (Cohn 2005 Planning Onion / Patton 2014 Story Map /
-  Cockburn 2004 Walking Skeleton / Denne 2003 MMF/MMR);
-  `skill-routing.md` is the manager-mode mirror of
-  `AGENTS.md` § "How to compose gstack and superpowers"
-  (paired same-PR per the change-impact-matrix row in
-  `docs/architecture/AGENTS.md`).
-- **Composes (atomic)**: `board-canon`,
-  `board-superpowers:operating-kanban` (`read_board` for daily
-  briefing + triage Blocked scan, `transition_card` for
-  review-queue Status flips back to `In Progress`,
-  `release_claim` for triage cancel-claim of stale claims,
-  `create_card` for intake card creation —
-  protocol-action dispatch over the active projection),
-  `enforcing-pr-contract` (Review Queue contract-violation
-  check), `classifying-actions` + `auditing-actions` (every
-  mutating action).
-- **Composes (cross-plugin)**: see § "Cross-plugin edges" below.
-- **Tier 2 frontmatter**: `when_to_use` (intake / daily /
-  review-queue / triage trigger phrases) +
-  `argument-hint: "[routine]"` (autocomplete shows which
-  routine the user wants to run).
+  Cockburn 2004 Walking Skeleton / Denne 2003 MMF/MMR).
+- **Composes (atomic)**: `board-canon` (Card body schema for
+  direct card creation), `board-superpowers:operating-kanban`
+  (`create_card` protocol action), `board-superpowers:composing-siblings`
+  (B1 design-conversation routing to `gstack:/*` /
+  `superpowers:*` sibling skills),
+  `board-superpowers:classifying-actions` +
+  `board-superpowers:auditing-actions` (every mutating action).
+- **Composes (cross-plugin)**: `gstack:/office-hours`,
+  `gstack:/plan-ceo-review`, `gstack:/plan-eng-review`,
+  `superpowers:brainstorming` (pre-card design routing),
+  `superpowers:writing-plans` (plan synthesis); routes to
+  `board-superpowers:decomposing-into-milestones` for multi-card
+  requirements.
+- **Triggers**: "new requirement" / "intake this idea" / "I have
+  a feature" / "add a card" / "new card".
+- **Tier 2 frontmatter**: `when_to_use` (extended trigger
+  vocabulary for intake scenarios).
+
+#### `reviewing-pr-queue` (v1-complete, shipped v0.7.0)
+
+- **Role**: Producer review-queue routine. Lists open PRs linked
+  to cards, validates each against the three-section PR contract,
+  comments on violations, transitions non-compliant cards back to
+  `In Progress`, summarizes the queue. Covers journey nodes C1
+  (review PR) + C2 (return to In Progress, nested in C1).
+- **Body target**: 250-380 lines (molecular budget).
+- **References folder**:
+  `references/review-queue-detail.md` — merge-conflict handling,
+  multi-card PRs, Producer self-review, approve-vs-request-changes
+  boundary, PR opened against non-claim branch edge cases.
+- **Composes (atomic)**: `board-canon` (state machine for Status
+  transition validity), `board-superpowers:operating-kanban`
+  (`transition_card` protocol action — Status flip to `In Progress`
+  on contract violation), `board-superpowers:enforcing-pr-contract`
+  (Contract A PR body shape + Contract B AC terminal-state + Contract
+  C auto-close keyword validation),
+  `board-superpowers:composing-siblings` (invocation rules),
+  `board-superpowers:classifying-actions` +
+  `board-superpowers:auditing-actions` (every mutating action).
+- **Composes (cross-plugin)**: none (review-queue is
+  board-superpowers-internal).
+- **Triggers**: "review the PRs" / "what's in In Review" / "merge
+  ready" / "check the review queue" / "PR queue".
+- **Tier 2 frontmatter**: `when_to_use` (extended trigger
+  vocabulary for review-queue scenarios).
+
+#### `triaging-board` (v1-complete, shipped v0.7.0)
+
+- **Role**: Producer triage routine. Scans Blocked cards (3-class
+  blocker remediation: external-dependency / decision-pending /
+  stale-block) and stale claim branches (>72h flag; >7 days
+  release recommendation). Covers journey nodes C4 (unblock blocked
+  card) + C5 (cancel stale claim).
+- **Body target**: 250-350 lines (molecular budget).
+- **References folder**:
+  `references/triage-detail.md` — blocker classification,
+  stale-claim release procedure, suspended-card review schedule,
+  what triage does NOT cover.
+- **Composes (atomic)**: `board-canon` (state machine — Blocked
+  status semantics), `board-superpowers:operating-kanban`
+  (`read_board` with status filter `Blocked`, `release_claim`
+  for stale-claim cancellation, `transition_card` for
+  Blocked → In Progress unblock),
+  `board-superpowers:composing-siblings` (invocation rules),
+  `board-superpowers:classifying-actions` +
+  `board-superpowers:auditing-actions` (every mutating action).
+- **Composes (cross-plugin)**: none typical (triage is
+  board-superpowers-internal).
+- **Triggers**: "what's blocked" / "triage the board" / "release
+  stale claims" / "check blockers" / "stale claims".
+- **Tier 2 frontmatter**: `when_to_use` (extended trigger
+  vocabulary for triage scenarios).
 
 #### `consuming-card` (v1-minimum)
 
@@ -339,8 +420,9 @@ means for board-superpowers" #3 for the full rationale.
 - **Body target**: 200-300 lines.
 - **References folder**:
   `references/{state-machine,card-body-schema,claim-protocol,wip-counting,branch-naming}.md`.
-- **Called by**: every molecular skill (all 4 of them —
-  `managing-board`, `consuming-card`,
+- **Called by**: every molecular skill (all 7 of them —
+  `briefing-daily`, `intaking-requirement`, `reviewing-pr-queue`,
+  `triaging-board`, `consuming-card`,
   `decomposing-into-milestones`, `bootstrapping-repo`).
 - **Calls**: nothing. Atomic = reflexive.
 - **Tier 2 frontmatter**: `user-invocable: false` (atomic
@@ -363,8 +445,8 @@ means for board-superpowers" #3 for the full rationale.
 - **References folder**:
   `references/{section-templates,validation-rules,filler-detection}.md`.
 - **Called by**: `consuming-card` (Step 9.5 card body sync +
-  Step 10 PR submit), `managing-board` (F-02 Review Queue
-  contract-violation flagging).
+  Step 10 PR submit), `reviewing-pr-queue` (contract-violation
+  flagging for each open PR in the review queue).
 - **Calls**: nothing.
 - **SPOT consolidates**: Contract A (PR three-section shape)
   and Contract B (AC terminal-state rule) would otherwise be
@@ -392,9 +474,10 @@ means for board-superpowers" #3 for the full rationale.
   + future per-projection reference files (`linear.md` /
   `jira.md` ship with their projections).
 - **Called by**: every molecular skill that touches the board
-  (`managing-board`, `consuming-card`, `decomposing-into-milestones`,
-  and once the v0.5.0 `bootstrapping-repo` rebase per #67 lands —
-  the bootstrap-side setup-capability dispatch).
+  (`briefing-daily`, `intaking-requirement`, `reviewing-pr-queue`,
+  `triaging-board`, `consuming-card`, `decomposing-into-milestones`,
+  `bootstrapping-repo` — the bootstrap-side setup-capability
+  dispatch).
 - **Calls**: nothing in-plugin. Atomic = reflexive. Externally,
   invokes the active projection (bash `gh` / MCP tool / REST
   endpoint) per the projection's reference file.
@@ -422,8 +505,9 @@ means for board-superpowers" #3 for the full rationale.
 - **Body target**: ≤ 200 lines (frequently-loaded atomic; current 81).
 - **References folder**:
   `references/{matrix,triage-rule,override-parsing,action-id-catalog}.md`.
-- **Called by**: every mutating skill (all 4 molecular —
-  `managing-board`, `consuming-card`,
+- **Called by**: every mutating skill (all 7 molecular —
+  `briefing-daily`, `intaking-requirement`, `reviewing-pr-queue`,
+  `triaging-board`, `consuming-card`,
   `decomposing-into-milestones`, `bootstrapping-repo`).
 - **Calls**: nothing.
 - **SPOT consolidates**: ADR-0006 matrix would otherwise be
@@ -443,7 +527,7 @@ means for board-superpowers" #3 for the full rationale.
 - **Body target**: ≤ 200 lines (frequently-loaded atomic; current 84).
 - **References folder**:
   `references/{schema,two-entry-rule,db-write-conventions,degradation-mode}.md`.
-- **Called by**: every mutating skill (all 4 molecular) — invoked
+- **Called by**: every mutating skill (all 7 molecular) — invoked
   immediately after `classifying-actions` returns A or R.
 - **Calls**: external RDBMS via
   `${CLAUDE_PLUGIN_ROOT}/scripts/audit-log-write.sh`.
@@ -473,13 +557,15 @@ means for board-superpowers" #3 for the full rationale.
 - **References folder**:
   `references/{handoff-points,sibling-plugin-table,procedural-fallback-rules,boundary}.md`.
 - **Called by**: every molecular skill that delegates to sibling
-  plugins — today: `managing-board` (F-08 intake routing to
-  `gstack:/*` / `superpowers:*`), `consuming-card` (F-C4
+  plugins — `intaking-requirement` (B1 design-conversation routing
+  to `gstack:/*` / `superpowers:*`), `consuming-card` (F-C4
   implement, F-C9 verify, F-C11 conditional QA/security),
   `decomposing-into-milestones` (plan synthesis + arch
-  validation handoff). Post Card #72 + #73 lifecycle
-  re-encode: same handoff semantics, named B1 / C1-C4
-  instead of F-08 / F-C4 etc.
+  validation handoff). All four Producer routine SKILLs carry
+  the `composing-siblings` invocation declaration; only
+  `intaking-requirement` and `reviewing-pr-queue` typically
+  invoke sibling plugins, but all four declare the dependency
+  for consistency and future-proofing.
 - **Calls**: nothing in-plugin. Atomic = reflexive.
 - **SPOT consolidates**: sibling-plugin invocation rules and
   Mode-2 compatibility decision would otherwise be inlined into
@@ -492,45 +578,48 @@ means for board-superpowers" #3 for the full rationale.
 ## Call graph
 
 ```
-                       ┌──────────────────────────────┐
-                       │   using-board-superpowers    │  ENTRY
-                       │ (router + dep gate + INVOKE) │
-                       └─┬───────┬─────────┬────────┬─┘
-                         │ routes│         │        │
-            ┌────────────┘       │         │        └──────────────┐
-            │                    │         │                       │
-            ▼                    ▼         ▼                       ▼   (Molecular — 4 skills)
-      ┌─────────────┐ ┌──────┐ ┌──────┐ ┌──────────┐
-      │ managing-   │ │consu-│ │decom-│ │bootstrap-│
-      │   board     │ │ ming-│ │posing│ │ ping-repo│
-      │ (Producer)  │ │ card │ │      │ │          │
-      └──┬───┬───┬──┘ └─┬──┬─┘ └──┬───┘ └────┬─────┘
-         │   │   │      │  │      │          │
-         │   │   │  ┌───┼──┼──────┼──┐ (sibling-plugin handoff — 9 callers)
-         │   │   │  │   │  │      │  └──────────────────────────────┐
-         │   │   │  │   │  │      │                                  ▼
-         │   │   │  └───┴──┴──────┴──┐                    ┌──────────────────┐
-   ┌─────┼───┼───┼──────────────────►│                    │ composing-       │
-   │     │   │   │                   └────────────────────►  siblings        │
-   ▼     ▼   ▼   ▼      (Atomic — 反射弧 — 6 skills)      └──────────────────┘
-   ┌────────────┐  ┌─────────────────┐  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────┐
-   │ board-canon│  │enforcing-pr-    │  │ operating-   │  │classifying-      │  │ auditing-actions │
-   │ (read-only │  │   contract      │  │   kanban     │  │   actions        │  │ (audit schema +  │
-   │   schema)  │  │ (PR 三段式)     │  │ (8-action    │  │ (D-AUTONOMY-1 +  │  │   DB 写入约定)   │
-   │            │  │                 │  │  dispatch)   │  │  override 解析)  │  │                  │
-   └────────────┘  └─────────────────┘  └──────────────┘  └──────────────────┘  └──────────────────┘
-                                                                  │
-                                                                  └─── after A/R decision ───┐
-                                                                                              ▼
-                                                                   (mutating skill MUST also call auditing-actions)
+                         ┌──────────────────────────────┐
+                         │   using-board-superpowers    │  ENTRY
+                         │ (router + dep gate + INVOKE) │
+                         └─┬──┬──┬──┬──┬──┬──┬─────────┘
+                           │  │  │  │  │  │  │
+      ┌────────────────────┘  │  │  │  │  │  └──────────────────────────────┐
+      │  ┌────────────────────┘  │  │  │  └──────────────────┐              │
+      │  │  ┌────────────────────┘  │  └──────────┐          │              │
+      │  │  │  ┌────────────────────┘             │          │              │
+      ▼  ▼  ▼  ▼  (Molecular — 7 skills)          ▼          ▼              ▼
+  ┌────────┐┌──────┐┌────────┐┌───────┐  ┌──────────┐┌──────────┐  ┌──────────────┐
+  │briefing││intak-││review- ││triag- │  │consum-   ││decompos- │  │bootstrapping-│
+  │-daily  ││ing-  ││ing-pr- ││ing-   │  │ing-card  ││ing-into- │  │repo          │
+  │        ││reqt  ││queue   ││board  │  │          ││milestone │  │              │
+  └──┬─────┘└──┬───┘└───┬────┘└──┬────┘  └──┬────┬──┘└──┬───┬──┘  └──┬───────────┘
+     │         │         │        │           │    │       │    │        │
+     │    ┌────┼─────────┼────────┼──────────┬┘    │       └────┼────────┼──┐
+     │    │    │         │        │           │  (sibling-plugin handoff)    │
+     │    │    └─────────┼────────┼───────────┴─────────────────┤            │
+     │    │              │        │                              ▼            │
+     └────┼──────────────┼────────┼─────────────────────┌──────────────┐    │
+          │              │        │                      │composing-    │    │
+          └──────────────┴────────┴─────────────────��───►siblings      │    │
+                                                         └──────────────┘    │
+          │                                                                   │
+          └──────────────────────────────────────────────────────────────────┘
+          (all 7 molecular → atomics below)
+
+   ┌────────────┐ ┌──────────────────┐ ┌──────────────┐ ┌──────────────────┐ ┌──────────────────┐
+   │ board-canon│ │enforcing-pr-     │ │ operating-   │ │classifying-      │ │ auditing-actions │
+   │ (read-only │ │   contract       │ │   kanban     │ │   actions        │ │ (audit schema +  │
+   │   schema)  │ │ (PR 三段式)      │ │ (8-action    │ │ (D-AUTONOMY-1 +  │ │   DB 写入约定)   │
+   │            │ │                  │ │  dispatch)   │ │  override 解析)  │ │                  │
+   └────────────┘ └──────────────────┘ └──────────────┘ └──────────────────┘ └──────────────────┘
+   (Atomic — 反射弧 — 6 skills, all called by relevant molecular skills above)
+                                                               │
+                                                               └─── after A/R decision ───┐
+                                                                                           ▼
+                                                                (mutating skill MUST also call auditing-actions)
 ```
 
-> The `composing-siblings` inbound edges above aggregate from 9 distinct
-> handoff points across the 3 (today) → 6 (post-#72/#73) caller SKILLs.
-> See the `composing-siblings` catalog row "Called by" field for the full
-> per-SKILL enumeration with spec-phase labels.
-
-## SPOT derivation — why exactly 6 atomic skills
+## SPOT derivation — why exactly 6 atomic skills (unchanged by molecular split)
 
 The atomic-layer count is not preference; it's the result of a
 SPOT (single-point-of-truth) census. Any contract that
@@ -539,18 +628,25 @@ candidate that MUST be promoted to atomic. v1 census:
 
 | Contract | Without atomic, inlined by | Atomic that consolidates |
 |----------|---------------------------|--------------------------|
-| State machine + Card schema + branch naming + WIP rules | All 4 molecular | `board-canon` |
-| PR three-section shape + filler detection | `consuming-card` (write) + `managing-board` (validate) | `enforcing-pr-contract` |
-| 8-action protocol dispatch + projection routing + setup-capability registry | All 4 board-touching molecular (`managing-board`, `consuming-card`, `decomposing-into-milestones`, `bootstrapping-repo`) | `operating-kanban` |
-| D-AUTONOMY-1 matrix + override parsing | All 4 mutating molecular | `classifying-actions` |
-| Audit log schema + two-entry rule | All 4 mutating molecular | `auditing-actions` |
-| How to invoke sibling-plugin discipline (`gstack:*` / `superpowers:*`) + Mode-2 max_depth=1 compatibility + `<plugin>:<skill>` namespace prefix rule | 3 sibling-invoking molecular SKILLs today (`managing-board` / `consuming-card` / `decomposing-into-milestones`); 9 distinct handoff points across them, growing to 6 SKILL × 9 handoff points after Card #72 (Producer Shape Y) + Card #73 (Consumer Shape X) land | `composing-siblings` |
+| State machine + Card schema + branch naming + WIP rules | All 7 molecular | `board-canon` |
+| PR three-section shape + filler detection | `consuming-card` (write) + `reviewing-pr-queue` (validate) | `enforcing-pr-contract` |
+| 8-action protocol dispatch + projection routing + setup-capability registry | All 7 board-touching molecular (`briefing-daily`, `intaking-requirement`, `reviewing-pr-queue`, `triaging-board`, `consuming-card`, `decomposing-into-milestones`, `bootstrapping-repo`) | `operating-kanban` |
+| D-AUTONOMY-1 matrix + override parsing | All 7 mutating molecular | `classifying-actions` |
+| Audit log schema + two-entry rule | All 7 mutating molecular | `auditing-actions` |
+| How to invoke sibling-plugin discipline (`gstack:*` / `superpowers:*`) + Mode-2 max_depth=1 compatibility + `<plugin>:<skill>` namespace prefix rule | All 4 Producer routine SKILLs + `consuming-card` + `decomposing-into-milestones` — 6 molecular callers with handoff points across the routines | `composing-siblings` |
 
 Contracts that would NOT meet the SPOT threshold (only 1
 molecular inlines) stay inline:
 
-- F-08 intake routing logic → only `managing-board`.
-- F-15 kanban hygiene rules → only `managing-board`.
+- Daily briefing format / stale-claim detection mechanics →
+  only `briefing-daily` (`references/daily-detail.md`).
+- Intake decision tree + scope-shape judgment + spec-first
+  checklist → only `intaking-requirement` (`references/`).
+- Review-queue contract details (merge conflict, self-review,
+  multi-card PR, non-claim branch edge cases) → only
+  `reviewing-pr-queue` (`references/review-queue-detail.md`).
+- Triage blocker classification + release procedure → only
+  `triaging-board` (`references/triage-detail.md`).
 - F-C0 manual-pull selection → only `consuming-card`.
 - §1.5.0 dep-check details → `bootstrapping-repo` and
   `using-board-superpowers` (a single reference file inside
@@ -564,8 +660,8 @@ Per
 
 | Bounded context | Owns / reads | Skill(s) acting on it |
 |-----------------|--------------|------------------------|
-| **Board** | Card + PR aggregates; GitHub Project + Issues + git refs | `managing-board` (R), `consuming-card` (R + W own card), `decomposing-into-milestones` (W new cards), `bootstrapping-repo` (R Status field), `board-canon` (schema authority), `operating-kanban` (per-projection dispatch authority) |
-| **Session** | ProducerSession + ConsumerLogical aggregates; OS processes + worktrees | `managing-board` (R lifecycle), `consuming-card` (own session), `composing-siblings` (read-only invocation rules for sibling-plugin handoffs in both roles) |
+| **Board** | Card + PR aggregates; GitHub Project + Issues + git refs | `briefing-daily` (R board state), `intaking-requirement` (W new cards via `create_card`), `reviewing-pr-queue` (R + W card Status via `transition_card`), `triaging-board` (R Blocked + W release via `release_claim`), `consuming-card` (R + W own card), `decomposing-into-milestones` (W new cards), `bootstrapping-repo` (R Status field), `board-canon` (schema authority), `operating-kanban` (per-projection dispatch authority) |
+| **Session** | ProducerSession + ConsumerLogical aggregates; OS processes + worktrees | `briefing-daily` (R board state for daily orientation), `intaking-requirement` (Producer intake lifecycle), `reviewing-pr-queue` (Producer review-queue lifecycle), `triaging-board` (Producer triage lifecycle), `consuming-card` (own session), `composing-siblings` (read-only invocation rules for sibling-plugin handoffs in both roles) |
 | **Bootstrap** | HostBootstrap + RepoBootstrap + RepoConfig | `bootstrapping-repo` (R + W — sole executor for first-time setup AND plugin-upgrade reconvergence per ADR-0012), `using-board-superpowers` (R for state checks) |
 | **Audit** | AuditTrail aggregate; BYO RDBMS | `auditing-actions` (W via DB script) |
 | **Spec** | SpecPointer (thin) | `consuming-card` (R via thin pointer in F-C2) |
@@ -582,9 +678,8 @@ spawn).
 
 | From | To | Use |
 |------|-----|-----|
-| `managing-board` (intake F-08) | `gstack:/office-hours`, `/plan-ceo-review`, `/plan-eng-review`, `superpowers:brainstorming` | Pre-card design conversation routing |
-| `managing-board` (decomposition handoff) | `superpowers:writing-plans` | Spec → executable plan |
-| `managing-board` (overnight batch F-07) | `superpowers:dispatching-parallel-agents` (TBD verification) | Mode-2 Consumer dispatch |
+| `intaking-requirement` (B1 design conversation routing) | `gstack:/office-hours`, `/plan-ceo-review`, `/plan-eng-review`, `superpowers:brainstorming` | Pre-card design conversation routing |
+| `intaking-requirement` (decomposition handoff) | `superpowers:writing-plans` | Spec → executable plan |
 | `decomposing-into-milestones` | `superpowers:writing-plans`, `gstack:/plan-eng-review` | Plan synthesis + arch validation |
 | `consuming-card` (F-C4 implement) | `superpowers:subagent-driven-development` (TBD) → `superpowers:executing-plans` (Mode-2 fallback), `test-driven-development`, `systematic-debugging`; `gstack:/investigate` | TDD-driven implementation |
 | `consuming-card` (F-C9 verify) | `superpowers:verification-before-completion`, `requesting-code-review`; `gstack:/review` | Pre-PR verification chain |

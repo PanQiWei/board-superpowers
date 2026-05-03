@@ -23,7 +23,7 @@ End-to-end picture of what happens between "the user types a message" and "a dow
            ▼         ▼
 ┌─────────────────────────┐
 │   Molecular skill body  │   reads contract from atomic skills,
-│  (managing-board /       │  invokes scripts under ${CLAUDE_PLUGIN_ROOT}/scripts/,
+│  (briefing-daily /       │  invokes scripts under ${CLAUDE_PLUGIN_ROOT}/scripts/,
 │   consuming-card / etc)  │  delegates discipline-work to superpowers/gstack
 └──────────┬──────────────┘
            │ on every mutating action

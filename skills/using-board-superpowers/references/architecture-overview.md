@@ -36,7 +36,10 @@ This split is what lets board-superpowers stay small. Roughly: planning, slicing
                                    │ routes to
                     ┌──────────────▼───────────────┐
                     │       Molecular layer        │   4 skills
-                    │  managing-board ·            │
+                    │  briefing-daily ·            │
+                    │  intaking-requirement ·      │
+                    │  reviewing-pr-queue ·        │
+                    │  triaging-board ·            │
                     │  consuming-card ·            │
                     │  decomposing-into-milestones │
                     │  bootstrapping-repo          │
@@ -81,7 +84,7 @@ Atomic skills are not a free-form convenience layer. Each one consolidates a con
 | Contract | Inlined by, without atomic | SPOT consolidator |
 |----------|----------------------------|-------------------|
 | State machine + Card body schema + branch naming + WIP rules (backend-agnostic — *what is legal*) | All 4 molecular skills | `board-canon` |
-| PR three-section shape + filler detection + Card AC sync | `consuming-card` (write side) + `managing-board` (validate side) | `enforcing-pr-contract` |
+| PR three-section shape + filler detection + Card AC sync | `consuming-card` (write side) + `reviewing-pr-queue` (validate side) | `enforcing-pr-contract` |
 | 8-action protocol dispatch over the active backend projection (Form A bash CLI / Form B MCP / Form C REST) + projection-routing logic + bootstrap-side setup-capability registry (backend-aware — *how to act on this repo's backend*) | All 4 board-touching molecular skills | `operating-kanban` |
 | 14-row autonomy matrix + 5-step triage + override parsing | All 4 mutating molecular skills | `classifying-actions` |
 | Audit log schema + propose-resolve sequencing + degradation rules | All 4 mutating molecular skills | `auditing-actions` |
@@ -102,8 +105,8 @@ The domain divides into five bounded contexts. Each context has its own vocabula
 
 | Context | Aggregates | Backing store | Skills |
 |---------|------------|---------------|--------|
-| **Board** | Card + PR | GitHub Project + Issues + git refs | `managing-board` (read), `consuming-card` (read + write own card), `decomposing-into-milestones` (write new cards), `bootstrapping-repo` (read Status field), `board-canon` (schema authority) |
-| **Session** | ProducerSession + ConsumerLogical | OS processes + worktrees | `managing-board` (lifecycle read), `consuming-card` (own session) |
+| **Board** | Card + PR | GitHub Project + Issues + git refs | `briefing-daily`, `intaking-requirement`, `reviewing-pr-queue`, `triaging-board` (read/write board), `consuming-card` (read + write own card), `decomposing-into-milestones` (write new cards), `bootstrapping-repo` (read Status field), `board-canon` (schema authority) |
+| **Session** | ProducerSession + ConsumerLogical | OS processes + worktrees | `briefing-daily`, `intaking-requirement`, `reviewing-pr-queue`, `triaging-board` (Producer lifecycle read), `consuming-card` (own session) |
 | **Bootstrap** | HostBootstrap + RepoBootstrap + RepoConfig | `~/.board-superpowers/manifest.yml`, per-repo `config.yml`, host-local `state.yml` | `bootstrapping-repo` (read + write — sole executor for setup-stages including version-transition migrations per ADR-0012), `using-board-superpowers` (read for state probes) |
 | **Audit** | AuditTrail | BYO RDBMS, jsonl on degradation | `auditing-actions` (write via `audit-log-write.sh`) |
 | **Spec** | SpecPointer (thin) | Card body's first line | `consuming-card` (read at claim time) |

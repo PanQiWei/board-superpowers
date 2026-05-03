@@ -95,7 +95,7 @@ If the Card Status did not flip, two distinct causes need different responses: a
 
 ## Failure paths
 
-- **Stale claim** — Consumer abandoned mid-implementation. Architect runs the `managing-board` triage routine to release the claim, which re-flips Status to `Ready` and (optionally) preserves the worktree for human takeover.
+- **Stale claim** — Consumer abandoned mid-implementation. Architect runs `triaging-board` to release the claim, which re-flips Status to `Ready` and (optionally) preserves the worktree for human takeover.
 - **Failed PR** — verification chain failed to pass; Consumer surfaces the failure to the architect rather than opening a half-baked PR.
 - **Blocked card cycle** — repeated `Blocked` ↔ `In Progress` cycling on the same Card is a smell; the architect should re-shape or split the Card.
 

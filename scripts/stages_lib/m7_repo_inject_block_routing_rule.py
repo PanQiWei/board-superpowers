@@ -52,16 +52,23 @@ _BLOCK_MAX_BYTES = 4096
 _ROUTING_RULE_CONTENT = """\
 ## board-superpowers session routing
 
-This project uses the `board-superpowers` plugin (v0.5.0).
+This project uses the `board-superpowers` plugin (v0.7.0).
 Any Claude Code session in this project plays one of two roles:
 
 - **Board Consumer** — if the first message contains `[board-card:#N]`,
   or the user asks to work on / claim / implement card N, invoke the
   `consuming-card` skill immediately. That skill owns the full
   lifecycle: claim → implement → PR → update board.
-- **Board Manager** — if the user asks about planning today's work,
-  reviewing the board, decomposing a requirement, triaging blocked
-  cards, or running a retro, invoke the `managing-board` skill.
+- **Board Producer** — route to the appropriate routine SKILL based on
+  the user's signal:
+  - "morning briefing" / "what should I work on" / "today's plan" →
+    `briefing-daily`
+  - "new requirement" / "intake this idea" / "I have a feature" →
+    `intaking-requirement`
+  - "review the PRs" / "what's in In Review" / "merge ready" →
+    `reviewing-pr-queue`
+  - "what's blocked" / "triage the board" / "release stale claims" →
+    `triaging-board`
 - When unsure, invoke `using-board-superpowers` first.
 
 board-superpowers depends on the `superpowers` and `gstack` plugins

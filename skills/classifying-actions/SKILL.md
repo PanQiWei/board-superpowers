@@ -7,7 +7,8 @@ description: |
   credentials, deleting a worktree, deleting a branch — and needs to
   know whether the action proceeds automatically or waits for architect
   approval. Apply at every mutating-action decision point inside any
-  board-superpowers skill (managing-board / consuming-card /
+  board-superpowers skill (briefing-daily / intaking-requirement /
+  reviewing-pr-queue / triaging-board / consuming-card /
   bootstrapping-repo). Apply even when the action looks obviously safe;
   the decision table is the source of truth, not intuition. Do NOT use
   for read-only actions or for queries that surface information without
@@ -88,7 +89,7 @@ without a working venv).
 - **Writing the audit row** — that's `board-superpowers:auditing-actions`.
   This skill decides; the other records.
 - **Surfacing the proposal to the architect** — that's the molecular
-  caller's UX responsibility (managing-board / consuming-card /
+  caller's UX responsibility (the four Producer routines / consuming-card /
   bootstrapping-repo).
 - **Tracking proposal acks across architect prompts** — that's the
   caller's session-state responsibility.

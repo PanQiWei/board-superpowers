@@ -62,8 +62,10 @@ architect-initiated commands (the architect prompts; Manager
 preflights then responds). Per C-PLUGIN-2 there is no daemon
 — Manager only acts in response to architect prompts.
 
-**Trigger phrases** (route via the `managing-board` skill
-description matching, per `PLUGIN_DEVELOPMENT.md`):
+**Trigger phrases** (route via the 4 Producer routine SKILL
+descriptions matching — `briefing-daily` / `intaking-requirement`
+/ `reviewing-pr-queue` / `triaging-board` — per
+`PLUGIN_DEVELOPMENT.md`):
 
 | Architect says | Manager activates (features) | Flow it composes (Part 2) |
 |----------------|------------------------------|---------------------------|

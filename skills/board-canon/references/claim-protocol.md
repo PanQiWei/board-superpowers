@@ -15,7 +15,7 @@ Scenario: Consumer A and Consumer B both decide to claim the same card (key `12`
 
 Scenario: a Consumer claimed a card (key `47`) days ago, then went silent (closed the laptop, branch never pushed past the empty marker).
 
-1. **Detection**: the `managing-board` triage routine flags claims older than 72 hours with no commits beyond the claim marker.
+1. **Detection**: `triaging-board` flags claims older than 72 hours with no commits beyond the claim marker.
 2. **Surface**: Producer notifies the original Consumer via card comment.
 3. **No-response policy**: after 7 days no-response, Producer can `git push origin --delete <claim-branch>` to release the claim. Status field reverts to Ready in the same transaction.
 4. **Audit**: 2 entries — one for the proposal, one for the actual delete.
@@ -26,6 +26,6 @@ Released claims are re-claimable normally — the same Consumer who held the ori
 
 ## Producer-spawned Consumer claim
 
-When the Producer's `managing-board` skill spawns a Consumer subagent that runs `consuming-card` for a specific card, the Consumer subagent uses the same `scripts/claim-card.sh` — there's no separate path. The only difference: the spawned Consumer's `gh` CLI inherits the Producer's auth context, so claims appear to come from the same identity.
+When a Producer routine skill spawns a Consumer subagent that runs `consuming-card` for a specific card, the Consumer subagent uses the same `scripts/claim-card.sh` — there's no separate path. The only difference: the spawned Consumer's `gh` CLI inherits the Producer's auth context, so claims appear to come from the same identity.
 
 This Producer-spawned-Consumer mode is currently Claude Code only (Claude Code subagents have a depth-1 budget that constrains nested orchestration). On Codex CLI only architect-spawned Consumer is supported.
