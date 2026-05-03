@@ -302,3 +302,7 @@ If `AGENTS.md` ever drifts from this canonical text (anchor
 missing, wording diverged), the change-impact-matrix row
 referenced in the quote is the recovery path — re-injecting
 this anchor is a same-PR contract obligation.
+
+**Runtime authority**: see `board-superpowers:composing-siblings` skill for the
+single source of truth on invocation rules, Mode-2 compatibility, and namespace
+prefix discipline at each sibling-plugin handoff point.

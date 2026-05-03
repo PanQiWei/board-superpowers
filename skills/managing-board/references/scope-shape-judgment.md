@@ -223,3 +223,7 @@ a shape decision that the architect overrides, that is the
 signal to revise this file in the same PR as the override.
 The file is calibrated to project reality, not aspirational —
 overrides are evidence the calibration drifted.
+
+**Runtime authority**: see `board-superpowers:composing-siblings` skill for the
+single source of truth on sibling-plugin invocation rules (Mode-2 compatibility +
+`<plugin>:<skill>` namespace prefix discipline).

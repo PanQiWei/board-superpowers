@@ -156,17 +156,22 @@ ships.
 
 ## board-superpowers' own SKILL surface
 
-Five skills ship at v1. All five use only the portable
-(`name`, `description`) frontmatter subset, so all five are
-Codex-portable.
+Eleven skills ship at v1 (post-#71): 1 entry + 4 molecular + 6 atomic. All use
+only the portable (`name`, `description`) frontmatter subset and are Codex-portable.
 
-| Skill | Description (one-line summary) | Composes (sibling skills it invokes) | Mode-2 safe? |
-|-------|--------------------------------|--------------------------------------|--------------|
-| `using-board-superpowers` | Entry skill: preflight + role disambiguation + first-time bootstrap | `managing-board`, `consuming-card` (its own siblings) | yes — procedural |
-| `board-canon` | Shared contract: card schema + state machine + branching + WIP — the in-session SPOT for Kanban Protocol semantics (per [`00-kanban-protocol.md`](./00-kanban-protocol.md) + ADR-0025). | none (read-only) | yes — procedural, read-only |
-| `managing-board` | Manager session main skill (orchestration, not coding) | `decomposing-into-milestones` (own sibling); `gstack:/office-hours`, `/plan-eng-review`, `/review`, `/qa`, `/cso`; `superpowers:brainstorming`, `writing-plans`, `dispatching-parallel-agents` | yes — procedural; sibling-skill invocations are SKILL-invoked, not spawned |
-| `decomposing-into-milestones` | Producer's INVEST + slicing engine (turns design doc into cards) | `superpowers:writing-plans`; `gstack:/plan-eng-review` | yes — procedural |
-| `consuming-card` | Consumer session main skill (claim → implement → PR) | `superpowers:subagent-driven-development` (default; **TBD per F-C4**), `executing-plans` (fallback), `verification-before-completion`, `requesting-code-review`; `gstack:/review`, `/qa`, `/codex`, `/cso` | yes for the SKILL body itself; the F-C4 delegation depends on per-sibling verification |
+| Skill | Layer | Description (one-line summary) | Composes (sibling skills it invokes) | Mode-2 safe? |
+|-------|-------|--------------------------------|--------------------------------------|--------------|
+| `using-board-superpowers` | Entry | Entry skill: preflight + role disambiguation + first-time bootstrap | `managing-board`, `consuming-card` (its own siblings) | yes — procedural |
+| `managing-board` | Molecular | Manager session main skill (orchestration, not coding) | `decomposing-into-milestones` (own sibling); `gstack:/office-hours`, `/plan-eng-review`, `/review`, `/qa`, `/cso`; `superpowers:brainstorming`, `writing-plans`, `dispatching-parallel-agents` | yes — procedural; sibling-skill invocations are SKILL-invoked, not spawned |
+| `consuming-card` | Molecular | Consumer session main skill (claim → implement → PR) | `superpowers:subagent-driven-development` (default; **TBD per F-C4**), `executing-plans` (fallback), `verification-before-completion`, `requesting-code-review`; `gstack:/review`, `/qa`, `/codex`, `/cso` | yes for the SKILL body itself; the F-C4 delegation depends on per-sibling verification |
+| `decomposing-into-milestones` | Molecular | Producer's INVEST + slicing engine (turns design doc into cards) | `superpowers:writing-plans`; `gstack:/plan-eng-review` | yes — procedural |
+| `bootstrapping-repo` | Molecular | Sole executor for setup-stages — first-time setup + plugin-upgrade reconvergence | none | yes — procedural |
+| `board-canon` | Atomic | Shared contract: card schema + state machine + branching + WIP — the in-session SPOT for Kanban Protocol semantics (per [`00-kanban-protocol.md`](./00-kanban-protocol.md) + ADR-0025). | none (read-only) | yes — procedural, read-only |
+| `enforcing-pr-contract` | Atomic | PR three-section shape enforcement + card body AC sync | none | yes — procedural |
+| `operating-kanban` | Atomic | 8-action Kanban Protocol dispatch over the active backend projection | none in-plugin (dispatches to `gh` / MCP / REST externally) | yes — procedural |
+| `classifying-actions` | Atomic | D-AUTONOMY-1 matrix + override parsing — returns A/R/N decision | none | yes — procedural |
+| `auditing-actions` | Atomic | Audit log schema + two-entry rule + BYO RDBMS write | none in-plugin (invokes `audit-log-write.sh`) | yes — procedural |
+| `composing-siblings` | Atomic | Sibling-plugin invocation SPOT — namespace prefix rules + Mode-2 max_depth=1 compatibility for all `gstack:*` / `superpowers:*` handoffs | none in-plugin (defines rules, does not itself invoke siblings) | yes — procedural |
 
 ### Procedural-skill commitment (own surface)
 

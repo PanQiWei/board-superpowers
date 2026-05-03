@@ -1,6 +1,6 @@
 {
   "name": "board-superpowers",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Agile scheduling layer for Claude Code: turn GitHub Projects into the central dispatcher, turn one session into one deliverable milestone (one PR). Depends on superpowers and gstack.",
   "author": {
     "name": "board-superpowers contributors"

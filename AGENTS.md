@@ -6,23 +6,23 @@ user-facing overview.
 
 @SKILLS.md
 
-## Project status — v1 catalog 10/10 shipped
+## Project status — v1 catalog 11/11 shipped
 
 > **The plugin is loadable at runtime.** `hooks/`,
 > `scripts/`, and `skills/` directories exist at the repo root.
-> `SessionStart` fires. The 10 v1-catalog skills auto-match.
+> `SessionStart` fires. The 11 v1-catalog skills auto-match.
 > The plugin dogfoods itself for any new skill / script / hook.
 
-**v1 catalog = 10 of 10 skills shipped** (post-#67 —
-`migrating-repo-version` absorbed into `bootstrapping-repo` per
-[ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md);
-no separate SKILL ships), per [`SKILLS.md`](./SKILLS.md):
+**v1 catalog = 11 of 11 skills shipped** (post-#71 —
+`composing-siblings` atomic lands as the SPOT for sibling-plugin
+invocation discipline), per [`SKILLS.md`](./SKILLS.md):
 
 - **Shipped**: `using-board-superpowers` (entry),
   `managing-board` + `consuming-card` + `bootstrapping-repo` +
   `decomposing-into-milestones` (molecular), `board-canon` +
   `enforcing-pr-contract` + `classifying-actions` +
-  `auditing-actions` + `operating-kanban` (atomic).
+  `auditing-actions` + `operating-kanban` + `composing-siblings`
+  (atomic).
 
 **Remaining degraded behavior**: v1 catalog complete; no
 remaining v1-minimum workarounds. Plugin-upgrade reconvergence
@@ -167,7 +167,7 @@ it does four things:
    a local jsonl trace and the entry's `mode` field records the
    degradation cause (see spec 06 § "jsonl fallback mode-field").
 
-### Skills system — the v1 catalog (10 skills, 3 layers)
+### Skills system — the v1 catalog (11 skills, 3 layers)
 
 The `skills/` directory **is** the agent's action system. It is
 designed as a graph of nodes (skills) and edges (cross-skill
@@ -193,7 +193,7 @@ Molecular layer (4) — business workflows, state-machine-shaped
                               ADR-0012) + agentic config-item
                               elicitation
 
-Atomic layer (5) — single-purpose primitives, reflexive (no upward calls)
+Atomic layer (6) — single-purpose primitives, reflexive (no upward calls)
 ─────────────────────────────────────────────────────────────────
   board-canon                 state machine + Card schema + branch
                               naming + WIP rules (read-only contract)
@@ -202,6 +202,8 @@ Atomic layer (5) — single-purpose primitives, reflexive (no upward calls)
   auditing-actions            audit log schema + two-entry rule + BYO DB
   operating-kanban            8-action protocol dispatch over the active
                               projection (backend selection + Form A/B/C)
+  composing-siblings          sibling-plugin invocation SPOT — namespace
+                              prefix rules + Mode-2 compatibility checks
 ```
 
 Dependency direction is **strictly downward**: Entry → Molecular
@@ -640,6 +642,10 @@ and the spec-first companion ([`spec-first-checklist.md`](./skills/managing-boar
 are the manager-mode SoT for shape decisions and spec
 preconditions; this section provides the cross-plugin wiring
 they consume.
+
+**Runtime authority**: see `board-superpowers:composing-siblings` skill for the
+single source of truth on invocation rules, Mode-2 compatibility, and namespace
+prefix discipline at each sibling-plugin handoff point.
 <!-- /board-superpowers:routing -->
 
 ## Do Not
