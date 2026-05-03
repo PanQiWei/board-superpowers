@@ -1,4 +1,4 @@
-# Skills system — board-superpowers v1 catalog (10 skills total, all shipped, 3 layers)
+# Skills system — board-superpowers v1 catalog (11 skills total, all shipped, 3 layers)
 
 > **Always loaded.** This document is referenced from
 > [`AGENTS.md`](./AGENTS.md) via `@SKILLS.md` and rides into
@@ -31,7 +31,7 @@ The reverse also holds: an edit to this document without the
 matching `skills/` change makes the spec drift. Both halves
 land together.
 
-The skills system has three layers, ten skills, and a fixed set
+The skills system has three layers, eleven skills, and a fixed set
 of cross-plugin edges. None of these numbers should change
 without an explicit decision recorded here first.
 
@@ -106,17 +106,18 @@ rationale that motivates the split.
 
 ## v1 minimum vs v1 complete
 
-The full v1 catalog defines **10 skills**. As of `v0.6.0`
-(post-#67-merge), **all 10 ship** — enough to make the plugin
+The v1 catalog defines **11 skills**. As of `v0.6.0`
+(post-#71-merge), **all 11 ship** — enough to make the plugin
 self-hostable on this very repo AND to bootstrap a fresh
 consuming repo from zero AND to govern every mutating action
 through classifying-actions + auditing-actions AND to decompose
 design artifacts into INVEST-compliant vertically-sliced cards
 via decomposing-into-milestones AND to dispatch the eight Kanban
 Protocol actions through the active projection via
-operating-kanban. The `migrating-repo-version` molecular SKILL
-that v0.5.0 carried as deferred has been **absorbed into
-`bootstrapping-repo`** per
+operating-kanban AND to consolidate the single source of truth
+for sibling-plugin invocation discipline via composing-siblings.
+The `migrating-repo-version` molecular SKILL that v0.5.0 carried
+as deferred has been **absorbed into `bootstrapping-repo`** per
 [ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md)
 (single sole-executor for setup-stages, including version-
 transition migrations). No separate migration SKILL ships.
@@ -133,6 +134,7 @@ transition migrations). No separate migration SKILL ships.
 | `operating-kanban` | Atomic | shipped (v0.5.0) | True SPOT shipped in v0.5.0 — every molecular SKILL routes the eight Kanban Protocol actions (per ADR-0025) and the bootstrap-side setup capabilities (per ADR-0027) through this skill's per-projection reference files. |
 | `classifying-actions` | Atomic | shipped (v0.3.0) | True SPOT shipped in v0.3.0 — every mutating SKILL consumes its D-AUTONOMY-1 matrix (14 Producer + 14 Consumer + 9 Bootstrap rows) + 5-step triage rule + autonomy_overrides parsing. |
 | `auditing-actions` | Atomic | shipped (v0.3.0) | True SPOT shipped in v0.3.0 — every mutating SKILL invokes audit-log-write.sh through this skill's payload templates and propose/resolve sequencing rules. |
+| `composing-siblings` | Atomic | shipped (v0.6.0) | True SPOT shipped in v0.6.0 — every molecular SKILL that delegates to `gstack:*` or `superpowers:*` consults this skill for invocation rules, procedural-vs-subagent decision, and Mode-2 max_depth=1 compatibility. |
 
 **Cross-platform hook delivery**: `hooks/session-start.sh` is
 identical on both platforms (uses `bsp_plugin_root()` from
@@ -149,7 +151,7 @@ means for board-superpowers" #3 for the full rationale.
 > Per-skill `layer`, `type`, `mode`, `bounded-context` live in
 > `<skill-dir>/.skill-meta.yaml`. The catalog below tags each
 > skill name as `(shipped vX)` for every skill in the catalog —
-> all 10 ship as of v0.6.0 (post-#67-merge). Tier 2 frontmatter
+> all 11 ship as of v0.6.0 (post-#71-merge). Tier 2 frontmatter
 > recommendations are listed for every skill.
 
 ### Entry layer (1 skill)
@@ -323,7 +325,7 @@ means for board-superpowers" #3 for the full rationale.
   vocabulary covering the architect-spoken fallback phrases plus
   the entry-skill state-probe trigger).
 
-### Atomic layer (5 skills, all shipped)
+### Atomic layer (6 skills, all shipped)
 
 #### `board-canon` (v1-minimum)
 
@@ -450,6 +452,43 @@ means for board-superpowers" #3 for the full rationale.
 - **Tier 2 frontmatter**: `user-invocable: false` (atomic
   reflex, never user-driven directly).
 
+#### `composing-siblings` (shipped v0.6.0)
+
+- **Role**: Sibling-plugin invocation discipline SPOT — owns
+  "how to invoke `gstack:*` / `superpowers:*` skills correctly"
+  across all 9 molecular handoff points. Consolidates: (a) the
+  invocation rules (SKILL invocation = content-loading, NOT
+  subagent spawn, per ADR-0008); (b) Mode-2 `max_depth=1`
+  compatibility check — procedural-vs-subagent decision tree
+  for every currently-composed sibling skill; (c) per-phase
+  skill routing (gstack bookends + superpowers middle per
+  ADR-0004); (d) `<plugin>:<skill>` namespace prefix rule
+  (cross-platform, prevents bare-reference ambiguity). See
+  `references/handoff-points.md` for the 9 caller × scenario
+  table; `references/sibling-plugin-table.md` for the current
+  sibling-skill quick-reference; `references/procedural-fallback-rules.md`
+  for the Mode-2 decision tree; `references/boundary.md` for
+  the atomic reflex constraint.
+- **Body target**: ≤ 200 lines (atomic budget).
+- **References folder**:
+  `references/{handoff-points,sibling-plugin-table,procedural-fallback-rules,boundary}.md`.
+- **Called by**: every molecular skill that delegates to sibling
+  plugins — today: `managing-board` (F-08 intake routing to
+  `gstack:/*` / `superpowers:*`), `consuming-card` (F-C4
+  implement, F-C9 verify, F-C11 conditional QA/security),
+  `decomposing-into-milestones` (plan synthesis + arch
+  validation handoff). Post Card #72 + #73 lifecycle
+  re-encode: same handoff semantics, named B1 / C1-C4
+  instead of F-08 / F-C4 etc.
+- **Calls**: nothing in-plugin. Atomic = reflexive.
+- **SPOT consolidates**: sibling-plugin invocation rules and
+  Mode-2 compatibility decision would otherwise be inlined into
+  3+ molecular callers (4 Producer routine SKILLs + 5 Consumer
+  lifecycle handoff points = 9 inline copies drifting
+  independently).
+- **Tier 2 frontmatter**: `user-invocable: false` (atomic
+  reflex, never user-driven directly).
+
 ## Call graph
 
 ```
@@ -467,11 +506,13 @@ means for board-superpowers" #3 for the full rationale.
       │ (Producer)  │ │ card │ │      │ │          │
       └──┬───┬───┬──┘ └─┬──┬─┘ └──┬───┘ └────┬─────┘
          │   │   │      │  │      │          │
-         │   │   │  (cross-plugin: 见 § "Cross-plugin edges")
-         │   │   │      │  │      │          │
-   ┌─────┼───┼───┼──────┼──┼──────┼──────────┘
-   │     │   │   │      │  │      │
-   ▼     ▼   ▼   ▼      ▼  ▼      ▼              (Atomic — 反射弧 — 5 skills)
+         │   │   │  ┌───┼──┼──────┼──┐ (sibling-plugin handoff — 9 callers)
+         │   │   │  │   │  │      │  └──────────────────────────────┐
+         │   │   │  │   │  │      │                                  ▼
+         │   │   │  └───┴──┴──────┴──┐                    ┌──────────────────┐
+   ┌─────┼───┼───┼──────────────────►│                    │ composing-       │
+   │     │   │   │                   └────────────────────►  siblings        │
+   ▼     ▼   ▼   ▼      (Atomic — 反射弧 — 6 skills)      └──────────────────┘
    ┌────────────┐  ┌─────────────────┐  ┌──────────────┐  ┌──────────────────┐  ┌──────────────────┐
    │ board-canon│  │enforcing-pr-    │  │ operating-   │  │classifying-      │  │ auditing-actions │
    │ (read-only │  │   contract      │  │   kanban     │  │   actions        │  │ (audit schema +  │
@@ -484,7 +525,12 @@ means for board-superpowers" #3 for the full rationale.
                                                                    (mutating skill MUST also call auditing-actions)
 ```
 
-## SPOT derivation — why exactly 5 atomic skills
+> The `composing-siblings` inbound edges above aggregate from 9 distinct
+> handoff points across the 3 (today) → 6 (post-#72/#73) caller SKILLs.
+> See the `composing-siblings` catalog row "Called by" field for the full
+> per-SKILL enumeration with spec-phase labels.
+
+## SPOT derivation — why exactly 6 atomic skills
 
 The atomic-layer count is not preference; it's the result of a
 SPOT (single-point-of-truth) census. Any contract that
@@ -498,6 +544,7 @@ candidate that MUST be promoted to atomic. v1 census:
 | 8-action protocol dispatch + projection routing + setup-capability registry | All 4 board-touching molecular (`managing-board`, `consuming-card`, `decomposing-into-milestones`, `bootstrapping-repo`) | `operating-kanban` |
 | D-AUTONOMY-1 matrix + override parsing | All 4 mutating molecular | `classifying-actions` |
 | Audit log schema + two-entry rule | All 4 mutating molecular | `auditing-actions` |
+| How to invoke sibling-plugin discipline (`gstack:*` / `superpowers:*`) + Mode-2 max_depth=1 compatibility + `<plugin>:<skill>` namespace prefix rule | 3 sibling-invoking molecular SKILLs today (`managing-board` / `consuming-card` / `decomposing-into-milestones`); 9 distinct handoff points across them, growing to 6 SKILL × 9 handoff points after Card #72 (Producer Shape Y) + Card #73 (Consumer Shape X) land | `composing-siblings` |
 
 Contracts that would NOT meet the SPOT threshold (only 1
 molecular inlines) stay inline:
@@ -518,7 +565,7 @@ Per
 | Bounded context | Owns / reads | Skill(s) acting on it |
 |-----------------|--------------|------------------------|
 | **Board** | Card + PR aggregates; GitHub Project + Issues + git refs | `managing-board` (R), `consuming-card` (R + W own card), `decomposing-into-milestones` (W new cards), `bootstrapping-repo` (R Status field), `board-canon` (schema authority), `operating-kanban` (per-projection dispatch authority) |
-| **Session** | ProducerSession + ConsumerLogical aggregates; OS processes + worktrees | `managing-board` (R lifecycle), `consuming-card` (own session) |
+| **Session** | ProducerSession + ConsumerLogical aggregates; OS processes + worktrees | `managing-board` (R lifecycle), `consuming-card` (own session), `composing-siblings` (read-only invocation rules for sibling-plugin handoffs in both roles) |
 | **Bootstrap** | HostBootstrap + RepoBootstrap + RepoConfig | `bootstrapping-repo` (R + W — sole executor for first-time setup AND plugin-upgrade reconvergence per ADR-0012), `using-board-superpowers` (R for state checks) |
 | **Audit** | AuditTrail aggregate; BYO RDBMS | `auditing-actions` (W via DB script) |
 | **Spec** | SpecPointer (thin) | `consuming-card` (R via thin pointer in F-C2) |

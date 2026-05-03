@@ -1,6 +1,6 @@
 {
   "name": "board-superpowers",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Agile scheduling layer for Codex CLI: turn GitHub Projects into the central dispatcher, one session = one PR. Depends on superpowers and gstack.",
   "author": "board-superpowers contributors",
   "license": "MIT",
@@ -8,7 +8,7 @@
   "interface": {
     "displayName": "board-superpowers",
     "shortDescription": "GitHub-Project-driven scheduling for AI coding sessions",
-    "longDescription": "board-superpowers turns a GitHub Project into the central dispatcher for AI-driven coding sessions. Routes every session into Manager (board orchestration) or Consumer (one-card-to-PR) mode. Delegates real work — TDD, debugging, review, QA, security — to superpowers and gstack. v1 catalog complete: 1 entry + 4 molecular + 5 atomic = 10 skills, all shipped. Setup-stages substrate (per ADR-0012, which absorbs the formerly deferred migrating-repo-version SKILL into bootstrapping-repo as the single executor) shipped in v0.5.0 (#67).",
+    "longDescription": "board-superpowers turns a GitHub Project into the central dispatcher for AI-driven coding sessions. Routes every session into Manager (board orchestration) or Consumer (one-card-to-PR) mode. Delegates real work — TDD, debugging, review, QA, security — to superpowers and gstack. v1 catalog complete: 1 entry + 4 molecular + 6 atomic = 11 skills, all shipped. Sibling-plugin invocation SPOT (`composing-siblings` atomic) shipped in v0.6.0 (#71); setup-stages substrate shipped in v0.5.0 (#67).",
     "developerName": "board-superpowers contributors",
     "category": "developer-tools",
     "websiteURL": "https://github.com/PanQiWei/board-superpowers"
