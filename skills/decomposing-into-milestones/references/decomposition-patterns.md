@@ -19,15 +19,11 @@ the canonical refusals applied during the vertical-slicing gate.
 
 > **Upward pointer — when this file is invoked**: this skill
 > (`decomposing-into-milestones`) is routed to from the
-> manager-side intake when shape judgment lands at "multi-card"
-> or "milestone-grouped". The shape decision lives at
-> [`skills/managing-board/references/scope-shape-judgment.md`](../../managing-board/references/scope-shape-judgment.md)
-> Table 1; the manager skill's intake also clears spec-first
-> preconditions ([`spec-first-checklist.md`](../../managing-board/references/spec-first-checklist.md))
-> and picks the sibling skill ([`skill-routing.md`](../../managing-board/references/skill-routing.md))
-> before the artifact reaches this skill. If the manager
-> skill attaches a "walking-skeleton hint" (per Cockburn —
-> brand-new feature surface), the vertical-slicing gate in
+> `intaking-requirement` routine when shape judgment lands at "multi-card"
+> or "milestone-grouped". The shape decision and spec-first preconditions
+> are evaluated by `intaking-requirement` before the artifact reaches
+> this skill. If the intake attaches a "walking-skeleton hint" (per
+> Cockburn — brand-new feature surface), the vertical-slicing gate in
 > § "Five splitting mistakes" below enforces the hint via the
 > existing layer-only and trailing-wire-up refusals; no
 > separate hint-handling logic is needed.

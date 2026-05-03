@@ -1,7 +1,7 @@
 ---
 name: decomposing-into-milestones
-description: Use when the user has a design artifact (brainstorming output, eng-review notes, requirements doc, intake batch) and asks for cards / milestones / a slice plan, OR when `managing-board`'s decomposition routine triggers a handoff. Typical phrasings include "decompose this feature", "split into cards", "break this into milestones", "拆解这个 feature", "拆成卡", "拆里程碑", "intake 后落卡", "decompose the eng-review output". Apply this skill even when the user does NOT say "decompose" — any message that brings a multi-card-shaped requirement routes here. Do NOT use this skill for single-card edits, refactors with no new capability, or already-decomposed batches that just need creation — use `managing-board` intake routine for those.
-when_to_use: Additional trigger vocabulary beyond `description`'s primary phrases — "milestone planning", "create the cards for X", "set up the work for X", "scope this out", "拆 sprint 工作", "本月路线图". Quick decision rule — a multi-capability artifact routes here; a single-capability one routes to `managing-board` intake.
+description: Use when the user has a design artifact (brainstorming output, eng-review notes, requirements doc, intake batch) and asks for cards / milestones / a slice plan, OR when the intake routine triggers a handoff. Typical phrasings include "decompose this feature", "split into cards", "break this into milestones", "拆解这个 feature", "拆成卡", "拆里程碑", "intake 后落卡", "decompose the eng-review output". Apply this skill even when the user does NOT say "decompose" — any message that brings a multi-card-shaped requirement routes here. Do NOT use this skill for single-card edits, refactors with no new capability, or already-decomposed batches that just need creation — use `intaking-requirement` for those.
+when_to_use: Additional trigger vocabulary beyond `description`'s primary phrases — "milestone planning", "create the cards for X", "set up the work for X", "scope this out", "拆 sprint 工作", "本月路线图". Quick decision rule — a multi-capability artifact routes here; a single-capability one routes to `intaking-requirement`.
 argument-hint: "[design-artifact-path | design-artifact-dir | -]"
 arguments: [artifact_path]
 ---
@@ -26,13 +26,13 @@ The skill **composes** sibling skills — it does not reimplement plan synthesis
 Symptoms that route here:
 
 - The user brings a multi-card-shaped requirement (a feature, a milestone, an eng-review artifact, an intake batch).
-- `managing-board`'s decomposition routine routes the work here.
+- The `intaking-requirement` routine routes the work here when shape judgment lands at "multi-card".
 - The user says "decompose / 拆 / split / break this into cards" or "intake 后落卡".
 - A design discussion has converged enough that the next step is "ok now turn this into cards".
 
 When NOT to use:
 
-- Single-card edits, body refinements, or AC clarifications — that's `managing-board` intake.
+- Single-card edits, body refinements, or AC clarifications — that's `intaking-requirement`.
 - Pure refactors with no new user-visible / developer-visible capability — those don't need INVEST gating; route to direct claim.
 - Already-decomposed batches that just need creation — skip straight to batch `gh issue create`; no INVEST-gating loop required.
 
@@ -80,7 +80,7 @@ Argument shape determines mode:
 
   Read the architect's pasted reply and proceed with Step 2. If the architect indicates the artifact is too large to paste, abort the freeform pass and ask them to write the artifact to a temp file (e.g., `/tmp/<feature>-design.md`), then re-invoke the skill with that path.
 
-If the artifact is shorter than ~30 lines, surface to architect: this skill is for multi-card decompositions, not single-card intake — route back to `managing-board` intake.
+If the artifact is shorter than ~30 lines, surface to architect: this skill is for multi-card decompositions, not single-card intake — route back to `intaking-requirement`.
 
 Optional: if the artifact has not been through arch review, invoke `gstack:/plan-eng-review` to lock the architecture before decomposing. Skip if the artifact is already eng-review-validated.
 
@@ -183,7 +183,7 @@ The batch creation is a mutating action governed by the atomic SKILLs:
    constraints, and `skills/operating-kanban/SKILL.md` for the dispatch contract.
 4. If R: surface the Step 7 artifact to the architect; wait for ack; on approve, run step 3.
 5. Invoke `board-superpowers:auditing-actions` with `action_id=1, decision_class=A|R, summary` carrying the batch metadata: `{batch_size: N, card_numbers: [...], total_loc_estimate: X, source_artifact_sha256: ...}`.
-6. Hand the batch back to `managing-board` to close out the intake (the board now has the new Ready cards; `managing-board` resumes its intake routine).
+6. Hand the batch back to `intaking-requirement` to close out the intake (the board now has the new Ready cards; the intake routine confirms completion).
 
 ## Common Rationalizations
 
@@ -264,7 +264,7 @@ Things that can go wrong during the pipeline and the recovery move for each.
 
 | Failure | Recovery |
 |---|---|
-| **Artifact too short** (<30 lines) | Skill is for multi-card decompositions; surface back to architect with "this looks like single-card intake — route to `managing-board` intake routine instead". |
+| **Artifact too short** (<30 lines) | Skill is for multi-card decompositions; surface back to architect with "this looks like single-card intake — route to `intaking-requirement` instead". |
 | **Artifact has no clear capabilities** (rambling design notes, no concrete features) | Surface to architect: "I cannot identify distinct user-visible / developer-visible capabilities. The artifact reads as design discussion, not requirements. Suggest invoking `superpowers:brainstorming` to sharpen first." Do NOT force a decomposition through fog. |
 | **INVEST refuse loop > 3 iterations on the same candidate** | Escalate to architect with the candidate's text + which letter keeps failing + the last 3 reframe attempts. Loop-3 means the candidate is structurally wrong — usually it should not be a card at all (e.g., it's research that belongs in a spike, or it's a non-functional cross-cutting concern that belongs in a different vehicle). |
 | **Vertical-slicing reslice loop > 3 iterations** | Same escalation pattern. Loop-3 here means the underlying capability is genuinely large and the architect needs to decide on a strategy (e.g., behind-the-flag rollout where successive cards each ship a slice but flag-gated). |

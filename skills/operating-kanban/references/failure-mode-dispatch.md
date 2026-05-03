@@ -1,6 +1,6 @@
 # operating-kanban — failure-mode dispatch reference
 
-**When you arrive here**: the active projection's invocation has returned a non-success outcome, and you need to (a) classify the failure, (b) pick the right surfacing tier, and (c) decide whether to retry, log, write an audit row, or interrupt the architect synchronously. This file is the cross-Form aggregator: Form A exit codes, Form B MCP tool errors, and Form C HTTP status codes all funnel into typed failure categories below, and each category has a documented architect-visibility tier so callers (`managing-board`, `consuming-card`, `decomposing-into-milestones`, `bootstrapping-repo`) act consistently.
+**When you arrive here**: the active projection's invocation has returned a non-success outcome, and you need to (a) classify the failure, (b) pick the right surfacing tier, and (c) decide whether to retry, log, write an audit row, or interrupt the architect synchronously. This file is the cross-Form aggregator: Form A exit codes, Form B MCP tool errors, and Form C HTTP status codes all funnel into typed failure categories below, and each category has a documented architect-visibility tier so callers (`briefing-daily`, `intaking-requirement`, `reviewing-pr-queue`, `triaging-board`, `consuming-card`, `decomposing-into-milestones`, `bootstrapping-repo`) act consistently.
 
 ## How to use this file
 

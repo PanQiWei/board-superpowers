@@ -44,7 +44,7 @@ A "suspended" card is one a Consumer parked because of a deeper dependency or co
 
 ### Abandoned worktrees
 
-If a Consumer's local worktree is deleted but the card's claim branch still exists on origin, the card is still in "In Progress" and still counts. Recovery: either re-create the worktree (`git worktree add ... <claim-branch>`) or release the claim via the `managing-board` triage routine.
+If a Consumer's local worktree is deleted but the card's claim branch still exists on origin, the card is still in "In Progress" and still counts. Recovery: either re-create the worktree (`git worktree add ... <claim-branch>`) or release the claim via `triaging-board`.
 
 ### Post-merge lag
 
@@ -60,7 +60,7 @@ Setting `wip_limit: 0` in `.board-superpowers/config.local.yml` means "no claims
 
 ## Why Blocked is excluded
 
-Blocked cards are genuinely *not* active work — the Consumer is waiting on something external. Counting Blocked toward WIP would push Consumers toward acting on the wrong cards just to free their slot, which is the opposite of WIP's intent. The cost of excluding Blocked: a Consumer can in principle accumulate many Blocked cards. This is a known footgun; the `managing-board` triage routine surfaces it.
+Blocked cards are genuinely *not* active work — the Consumer is waiting on something external. Counting Blocked toward WIP would push Consumers toward acting on the wrong cards just to free their slot, which is the opposite of WIP's intent. The cost of excluding Blocked: a Consumer can in principle accumulate many Blocked cards. This is a known footgun; `triaging-board` surfaces it.
 
 ## Override mechanism
 

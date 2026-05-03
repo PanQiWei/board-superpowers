@@ -96,12 +96,14 @@ check 'preserves [board-card:#N] routing to consuming-card' \
     grep -qE '\[board-card:#N\].*consuming-card' "${SKILL_FILE}"
 check 'preserves "claim card" routing to consuming-card' \
     grep -qE 'claim card N.*consuming-card' "${SKILL_FILE}"
-check 'preserves morning briefing → managing-board (daily)' \
-    grep -qE 'morning briefing.*managing-board' "${SKILL_FILE}"
-check 'preserves review-the-PRs → managing-board (review-queue)' \
-    grep -qE 'review the PRs.*managing-board' "${SKILL_FILE}"
-check 'preserves intake routing → managing-board' \
-    grep -qE 'new requirement.*managing-board|intake.*managing-board' "${SKILL_FILE}"
+check 'preserves morning briefing → briefing-daily' \
+    grep -qE 'morning briefing.*briefing-daily' "${SKILL_FILE}"
+check 'preserves review-the-PRs → reviewing-pr-queue' \
+    grep -qE 'review the PRs.*reviewing-pr-queue' "${SKILL_FILE}"
+check 'preserves intake routing → intaking-requirement' \
+    grep -qE 'new requirement.*intaking-requirement|intake.*intaking-requirement' "${SKILL_FILE}"
+check 'preserves triage routing → triaging-board' \
+    grep -qE "what's blocked.*triaging-board|triage.*triaging-board" "${SKILL_FILE}"
 
 # ---------------------------------------------------------------------------
 # Frontmatter contract — name + description + when_to_use unchanged

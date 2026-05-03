@@ -1,6 +1,6 @@
 ---
 name: using-board-superpowers
-description: Use as the FIRST skill in any board-superpowers session AND as the plugin's manual page. Read this skill (body + references/) for a complete, self-contained orientation — what the plugin is, the 10-skill catalog, the 6-state Card lifecycle, on-disk state, and dispatch routing. Routes ambiguous sessions into Producer mode (managing-board, for "what should I work on" / "review the PRs" / "intake this idea") or Consumer mode (consuming-card, for claiming card N). Skip when the message clearly matches a downstream skill directly (e.g., "[board-card:#12]" → consuming-card).
+description: Use as the FIRST skill in any board-superpowers session AND as the plugin's manual page. Read this skill (body + references/) for a complete, self-contained orientation — what the plugin is, the 14-skill catalog, the 6-state Card lifecycle, on-disk state, and dispatch routing. Routes ambiguous sessions into the correct Producer routine (briefing-daily / intaking-requirement / reviewing-pr-queue / triaging-board) or Consumer mode (consuming-card, for claiming card N). Skip when the message clearly matches a downstream skill directly (e.g., "[board-card:#12]" → consuming-card).
 when_to_use: Use when intent is ambiguous, when no other board-superpowers skill matched, when the user asks "what is this plugin / how does this work / what skills exist / explain the architecture", OR when the SessionStart hook injected an INVOKE marker pointing at a downstream skill.
 ---
 
@@ -33,7 +33,10 @@ Four jobs:
 
 | Role | You're in this role when the user says ... | Routes to |
 |------|--------------------------------------------|-----------|
-| **Producer** | "what should I work on" / "morning briefing" / "review the PRs" / "what's in In Review" / "new requirement" / "intake this idea" / "what's blocked" / "triage the board" | `board-superpowers:managing-board` |
+| **Producer — daily** | "what should I work on" / "morning briefing" / "today's plan" / "board overview" | `board-superpowers:briefing-daily` |
+| **Producer — intake** | "new requirement" / "intake this idea" / "I have a feature" / "add a card" | `board-superpowers:intaking-requirement` |
+| **Producer — review** | "review the PRs" / "what's in In Review" / "merge ready" | `board-superpowers:reviewing-pr-queue` |
+| **Producer — triage** | "what's blocked" / "triage the board" / "release stale claims" | `board-superpowers:triaging-board` |
 | **Consumer** | `[board-card:#N]` / "claim card N" / "work on card N" / "implement #N" | `board-superpowers:consuming-card` |
 | **Bootstrap (first time)** | "set up board-superpowers" / "first time on this repo" / OR state probe finds host or per-repo state files absent | `board-superpowers:bootstrapping-repo` |
 
@@ -70,13 +73,16 @@ Three layers, strictly downward dependency (Entry → Molecular → Atomic). Ato
 **Entry layer (1)** — auto-matched on user prompt, never does real work itself:
 - `using-board-superpowers` (this skill) — manual + router.
 
-**Molecular layer (4)** — business workflows, state-machine-shaped:
-- `managing-board` — Producer surface. Daily briefing, Review Queue, Intake.
+**Molecular layer (7)** — business workflows, state-machine-shaped:
+- `briefing-daily` — Producer daily orientation. Board read, WIP flagging, stale-claim detection, next-action recommendation.
+- `intaking-requirement` — Producer intake. Acknowledge, shape-judge, spec-first check, route to sibling skill or create card.
+- `reviewing-pr-queue` — Producer review queue. Validate PRs via enforcing-pr-contract, comment on violations, transition cards.
+- `triaging-board` — Producer triage. Blocked-card 3-class remediation, stale-claim detection and release.
 - `consuming-card` — Consumer lifecycle. Claim → implement → PR → cleanup.
 - `decomposing-into-milestones` — Turns a design artifact into INVEST-compliant vertically-sliced Cards on the board.
 - `bootstrapping-repo` — Sole executor for setup-stages, including version-transition migrations per ADR-0012. First-time host + per-repo setup, plugin-upgrade reconvergence, and agentic config-item elicitation; injects routing block into AGENTS.md / CLAUDE.md.
 
-**Atomic layer (5)** — single-purpose contracts, reused by molecular skills:
+**Atomic layer (6)** — single-purpose contracts, reused by molecular skills:
 - `board-canon` — read-only contract: state machine + Card body schema + branch naming + WIP rules.
 - `enforcing-pr-contract` — PR three-section enforcement (Automated Verification / Human Verification TODO / Retro Notes) + Card acceptance-criteria sync at submit.
 - `classifying-actions` — autonomy-classification SPOT. Per `board-superpowers:classifying-actions` (the atomic SKILL that owns the autonomy matrix + override merging + 5-step triage rule), invoke that skill with the action_id and act on its A (auto) / R (architect approval required) / N (forbidden) decision.
@@ -147,7 +153,7 @@ flowchart TD
     D -- yes --> E["Route to\nbootstrapping-repo"]
     D -- no --> F{"Message signal?"}
     F -- "[board-card:#N] /\nclaim card N" --> G["Route to\nconsuming-card"]
-    F -- "what should I work on /\nreview the PRs /\nintake / triage" --> H["Route to\nmanaging-board"]
+    F -- "what should I work on /\nreview the PRs /\nintake / triage" --> H["Route to\nappropriate\nroutine SKILL"]
     F -- "what is this plugin /\nhow does this work" --> I["Answer inline\nfrom this skill"]
     F -- "no clear signal" --> J["Ask user to\ndisambiguate"]
 ```
@@ -158,10 +164,10 @@ flowchart TD
 |------------------------|----------|
 | Literal `[board-card:#N]` | `board-superpowers:consuming-card` (with N as `$card_number`) |
 | "claim card N" / "work on card N" / "implement #N" | `board-superpowers:consuming-card` |
-| "what should I work on" / "morning briefing" / "today's plan" | `board-superpowers:managing-board` (daily routine) |
-| "review the PRs" / "what's in In Review" / "merge ready" | `board-superpowers:managing-board` (review-queue) |
-| "new requirement" / "intake this idea" / "I have a feature" | `board-superpowers:managing-board` (intake) |
-| "what's blocked" / "triage the board" / "release stale claims" | `board-superpowers:managing-board` (triage) |
+| "what should I work on" / "morning briefing" / "today's plan" / "board overview" | `board-superpowers:briefing-daily` |
+| "review the PRs" / "what's in In Review" / "merge ready" / "PR queue" | `board-superpowers:reviewing-pr-queue` |
+| "new requirement" / "intake this idea" / "I have a feature" / "add a card" | `board-superpowers:intaking-requirement` |
+| "what's blocked" / "triage the board" / "release stale claims" / "stale claims" | `board-superpowers:triaging-board` |
 | "what is this plugin" / "what skills exist" / "explain the architecture" | Answer inline from this skill — see "Sections" below |
 | "set up board-superpowers" / "first time on this repo" | `board-superpowers:bootstrapping-repo` |
 | Anything board-related but not in this table | Ask the user to disambiguate — do NOT pick a default |

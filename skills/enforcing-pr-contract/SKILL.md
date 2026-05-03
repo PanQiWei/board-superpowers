@@ -66,7 +66,7 @@ The keyword is what tells GitHub's PR-merge → Issue-close → ProjectV2 Auto-c
 - `Contract B` makes the card body honest about **what was delivered** by the Consumer.
 - `Contract C` makes the PR↔Issue **infrastructure linkage** honest. Without C, a fully-Contract-A-and-B-compliant PR can still leave the card stuck in `In Progress` post-merge (observed on PR #42 / `#34` — direct `gh pr create` bypassed `submit-pr.sh`, missed the trailer at OPEN time, broke the auto-close chain; trailer added retroactively did not fire the webhook).
 
-`scripts/submit-pr.sh` rejects PRs missing any Contract A section or containing Contract A filler, idempotently auto-injects the Contract C trailer if absent, and (per Contract B) requires the linked card body to have terminal-state ACs. The `managing-board` review-queue routine re-checks all three contracts at review time and routes violators back to the Consumer.
+`scripts/submit-pr.sh` rejects PRs missing any Contract A section or containing Contract A filler, idempotently auto-injects the Contract C trailer if absent, and (per Contract B) requires the linked card body to have terminal-state ACs. The `reviewing-pr-queue` routine re-checks all three contracts at review time and routes violators back to the Consumer.
 
 ## Why this contract exists
 
@@ -163,7 +163,7 @@ A semantic-grade catalog (catching "I checked it manually" without saying what w
 
 ## How the Producer enforces
 
-When the Producer's `managing-board` skill runs its review-queue routine, for each open PR linked to a card it:
+When the Producer runs the `reviewing-pr-queue` routine, for each open PR linked to a card it:
 
 1. Fetches the PR body via `gh pr view <PR-N> --json body`.
 2. Fetches the card body via `gh issue view <card-N> --json body`.

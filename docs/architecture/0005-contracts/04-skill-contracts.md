@@ -159,14 +159,17 @@ subsection (Mode-2 procedural fallback table).
 
 ## board-superpowers' own SKILL surface
 
-Eleven skills ship at v1 (post-#71): 1 entry + 4 molecular + 6 atomic. All use
+Fourteen skills ship at v1 (post-#72): 1 entry + 7 molecular + 6 atomic. All use
 only the portable (`name`, `description`) frontmatter subset and are Codex-portable.
 
 | Skill | Layer | Description (one-line summary) | Composes (sibling skills it invokes) | Mode-2 safe? |
 |-------|-------|--------------------------------|--------------------------------------|--------------|
-| `using-board-superpowers` | Entry | Entry skill: preflight + role disambiguation + first-time bootstrap | `managing-board`, `consuming-card` (its own siblings) | yes — procedural |
-| `managing-board` | Molecular | Manager session main skill (orchestration, not coding) | `decomposing-into-milestones` (own sibling); `gstack:/office-hours`, `/plan-eng-review`, `/review`, `/qa`, `/cso`; `superpowers:brainstorming`, `writing-plans`, `dispatching-parallel-agents` | yes — procedural; sibling-skill invocations are SKILL-invoked, not spawned |
-| `consuming-card` | Molecular | Consumer session main skill (23-node Shape X: F1-F4 claim/implement/verify/submit + B1-B5 bootstrap + G1-G4 governance + C1-C4 sibling handoffs) | via `composing-siblings`: `superpowers:writing-plans` (C1 plan synthesis), `superpowers:subagent-driven-development` (**TBD B2**) / `test-driven-development` (B2), `verification-before-completion` + `requesting-code-review` (C1 verify); `gstack:/review` (C1), `/codex` (C2), `/qa` (C3), `/cso` (C4) | yes for the SKILL body itself; the B2 delegation depends on per-sibling verification |
+| `using-board-superpowers` | Entry | Entry skill: preflight + role disambiguation + first-time bootstrap | all 4 Producer routine skills + `consuming-card` (its own siblings) | yes — procedural |
+| `briefing-daily` | Molecular | Producer daily orientation — board read, WIP flagging, stale-claim detection, next-action recommendation | `board-canon`, `operating-kanban` (`read_board`), `composing-siblings`; `gstack:/office-hours`, `gstack:/plan-ceo-review`, `gstack:/plan-eng-review` (extended orientation) | yes — procedural |
+| `intaking-requirement` | Molecular | Producer intake — acknowledge, shape-judge, spec-first check, route to sibling skill or create card | `board-canon`, `operating-kanban` (`create_card`), `composing-siblings`; `gstack:/office-hours`, `/plan-ceo-review`, `/plan-eng-review`; `superpowers:brainstorming`, `writing-plans` | yes — procedural |
+| `reviewing-pr-queue` | Molecular | Producer review queue — validate PRs via enforcing-pr-contract, comment on violations, transition cards | `board-canon`, `operating-kanban` (`read_board`, `transition_card`), `enforcing-pr-contract`, `composing-siblings` | yes — procedural |
+| `triaging-board` | Molecular | Producer triage — Blocked-card 3-class remediation, stale-claim detection and release | `board-canon`, `operating-kanban` (`read_board`, `release_claim`, `transition_card`), `composing-siblings` | yes — procedural |
+| `consuming-card` | Molecular | Consumer session main skill (23-node Shape X: F1-F4 claim/implement/verify/submit + B1-B5 bootstrap + G1-G4 governance + C1-C4 sibling handoffs) | via `composing-siblings`: `superpowers:writing-plans` (B1 plan synthesis), `superpowers:subagent-driven-development` (**TBD B2**) / `test-driven-development` (B2), `verification-before-completion` + `requesting-code-review` (C1 verify); `gstack:/review` (C1), `/codex` (C2), `/qa` (C3), `/cso` (C4) | yes for the SKILL body itself; the B2 delegation depends on per-sibling verification |
 | `decomposing-into-milestones` | Molecular | Producer's INVEST + slicing engine (turns design doc into cards) | `superpowers:writing-plans`; `gstack:/plan-eng-review` | yes — procedural |
 | `bootstrapping-repo` | Molecular | Sole executor for setup-stages — first-time setup + plugin-upgrade reconvergence | none | yes — procedural |
 | `board-canon` | Atomic | Shared contract: card schema + state machine + branching + WIP — the in-session SPOT for Kanban Protocol semantics (per [`00-kanban-protocol.md`](./00-kanban-protocol.md) + ADR-0025). | none (read-only) | yes — procedural, read-only |
@@ -204,12 +207,12 @@ C4 = security audit.
 
 | Skill | Classification | Composed by |
 |-------|----------------|-------------|
-| `superpowers:brainstorming` | procedural (assumed) | `managing-board` Intake |
-| `superpowers:writing-plans` | procedural (assumed) | `managing-board`, `decomposing-into-milestones`, `consuming-card` (C1 plan synthesis via `composing-siblings`) |
+| `superpowers:brainstorming` | procedural (assumed) | `intaking-requirement` Intake |
+| `superpowers:writing-plans` | procedural (assumed) | `intaking-requirement`, `decomposing-into-milestones`, `consuming-card` (B1 plan synthesis via `composing-siblings`) |
 | `superpowers:test-driven-development` | procedural | `consuming-card` (B2 TDD-driven implementation via `composing-siblings`) |
 | `superpowers:executing-plans` | procedural (assumed) | `consuming-card` B2 fallback when `subagent-driven-development` is found to spawn |
 | `superpowers:subagent-driven-development` | **TBD** — empirical verification required | `consuming-card` B2 default via `composing-siblings` |
-| `superpowers:dispatching-parallel-agents` | **TBD** — name-suggests-spawn | `managing-board`; potentially `consuming-card` |
+| `superpowers:dispatching-parallel-agents` | **TBD** — name-suggests-spawn | `briefing-daily` (extended dispatch); potentially `consuming-card` |
 | `superpowers:systematic-debugging` | procedural (assumed) | `consuming-card` debug path (B2) |
 | `superpowers:verification-before-completion` | procedural | `consuming-card` C1 (pre-PR verification chain) via `composing-siblings` |
 | `superpowers:requesting-code-review` | procedural | `consuming-card` C1 (pre-PR verification chain) via `composing-siblings` |
@@ -218,9 +221,9 @@ C4 = security audit.
 
 | Skill | Classification | Composed by |
 |-------|----------------|-------------|
-| `gstack:/office-hours` | procedural (assumed) | `managing-board` Intake |
-| `gstack:/plan-ceo-review` | procedural (assumed) | `managing-board` Intake |
-| `gstack:/plan-eng-review` | procedural (assumed) | `managing-board` Intake |
+| `gstack:/office-hours` | procedural (assumed) | `intaking-requirement` Intake |
+| `gstack:/plan-ceo-review` | procedural (assumed) | `intaking-requirement` Intake; `briefing-daily` extended orientation |
+| `gstack:/plan-eng-review` | procedural (assumed) | `intaking-requirement` Intake; `decomposing-into-milestones` arch validation |
 | `gstack:/investigate` | procedural (assumed) | `consuming-card` debug path (B2) |
 | `gstack:/review` | procedural (assumed) | `consuming-card` C1 (pre-PR verification chain) via `composing-siblings` |
 | `gstack:/codex` | procedural (assumed) | `consuming-card` C2 (cross-platform adversarial review) via `composing-siblings` |

@@ -1,6 +1,6 @@
 # enforcing-pr-contract — validation rules
 
-Precise rules `scripts/submit-pr.sh` enforces (and the `managing-board` review-queue routine mirrors).
+Precise rules `scripts/submit-pr.sh` enforces (and the `reviewing-pr-queue` routine mirrors).
 
 ## Required headings (literal-string match)
 

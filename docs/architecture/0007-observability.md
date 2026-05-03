@@ -58,7 +58,7 @@ it or not. It is the cheapest to read and the easiest to act on.
   `scripts/lib/common.sh` § "Conventions" line comment block.
 - **Skill prose output.** Each molecular skill writes structured prose
   during its routine — for example, `consuming-card` Step 1-12
-  narration, `managing-board` Daily routine's 4-section briefing,
+  narration, `briefing-daily` daily orientation briefing,
   `bootstrapping-repo` first-time-user welcome. The prose IS the
   observability surface for "what is the skill currently doing."
 - **Hook intent-injection markers.** When `SessionStart` fires
@@ -149,7 +149,7 @@ for the documented failure mode).
   `0005-contracts/03-config-schemas.md` § "`<repo>/.board-superpowers/config.yml` — RepoConfig".
   Required: `project: <owner>/<number>`. Optional:
   `wip_cap_per_consumer`, `autonomy_overrides`. The probe reads this for
-  project coordinates whenever the consuming-card / managing-board
+  project coordinates whenever the consuming-card / Producer routine
   skills need them.
 
 ### Query patterns
@@ -286,7 +286,7 @@ Each line is a single JSON object. Fields:
 | `repo_root` | string (absolute path) | the primary working tree resolved by `bsp_primary_repo_root` |
 | `action_id` | string (dotted) | e.g., `consumer.card.claim`, `producer.card.promote-to-ready` |
 | `decision_class` | string | `A` / `R` / `N` (matches the BYO RDBMS `approval_stage` semantics with a different label) |
-| `skill` | string | originating skill (`consuming-card`, `managing-board`, etc.) |
+| `skill` | string | originating skill (`consuming-card`, `briefing-daily`, `intaking-requirement`, etc.) |
 | `summary` | string | one-line human-readable description |
 | `mode` | string | always `v1-minimum-degraded` while the BYO RDBMS surface is deferred |
 

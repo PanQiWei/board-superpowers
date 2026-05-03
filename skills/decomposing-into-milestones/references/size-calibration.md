@@ -108,4 +108,4 @@ Signs that the 4-bin calibration is drifting and needs recalibration on this rep
 - Mean card LOC > 350 — most cards are M or L; vertical slicing is producing too few seams. Investigate.
 - Mean card LOC < 80 — most cards are XS or low-S; you may be over-slicing (each PR's review-overhead amortizes worse on tiny cards).
 
-board-superpowers does not track these metrics automatically (no KPI infra by design). The architect surfaces drift via retro routines — typically the weekly retrospective routine inside `managing-board`. Manual + low-cadence is sufficient; no dashboard needed.
+board-superpowers does not track these metrics automatically (no KPI infra by design). The architect surfaces drift via retro routines — typically the weekly retrospective session driven by `briefing-daily` or `triaging-board`. Manual + low-cadence is sufficient; no dashboard needed.

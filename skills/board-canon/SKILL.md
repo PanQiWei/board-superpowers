@@ -174,7 +174,7 @@ A two-segment legacy form exists on repos authored under earlier plugin versions
 ## What this skill does NOT cover
 
 - **WHO transitions a card** — that depends on the role (Producer vs Consumer), which is decided by other skills.
-- **WHEN to transition** — that's per-routine in `managing-board` (Producer) and `consuming-card` (Consumer).
+- **WHEN to transition** — that's per-routine in the four Producer routines (`briefing-daily`, `intaking-requirement`, `reviewing-pr-queue`, `triaging-board`) and `consuming-card` (Consumer).
 - **HOW to communicate decisions** — that's `enforcing-pr-contract` for PR shape and the audit log writer for the trace.
 
 This skill defines **WHAT** the contract is. The other skills decide when and how to act on it.
