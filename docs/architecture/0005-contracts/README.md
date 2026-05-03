@@ -53,7 +53,7 @@ cited ADR or feature spec.**
 - ❌ A speculative "future enterprise extension" surface. YAGNI per
   §1.5 cross-cutting principles. Anything not in v1 spec is either
   marked TBD with a one-line rationale + destination, or omitted.
-- ❌ A duplicate of `card-schema.md`, `pr-template.md`, or
+- ❌ A duplicate of `card-schema.md`, `enforcing-pr-contract/SKILL.md`, or
   `agentsmd-routing.md`. Those are the canonical source of their
   respective bodies; 0005 surfaces the **section list / parsing
   contract / marker-string** and links to the canonical body.

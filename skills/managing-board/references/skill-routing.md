@@ -27,9 +27,9 @@ the sharpened artifact.
 
 **Out of scope** — implementation-time routing inside a Consumer
 session (TDD, debugging, verification chain) is owned by
-[`consuming-card/SKILL.md`](../../consuming-card/SKILL.md) and
-that skill's `references/handoff-to-superpowers.md`. This file
-stops at the moment the card is created.
+[`consuming-card/SKILL.md`](../../consuming-card/SKILL.md)
+(Stage F2/B2 for TDD delegation; Stage F3/C1-C4 for verification
+chain). This file stops at the moment the card is created.
 
 ## Table 1 — Pre-card routing
 

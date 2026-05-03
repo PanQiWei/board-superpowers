@@ -12,7 +12,7 @@
     {
       "id": 2,
       "prompt": "claim card 47 'Fix WIP counter race'",
-      "expected_output": "Same lifecycle as eval 1, with $card_number=47. Branch name resolves to claim/47-fix-wip-counter-race per board-canon's slugify rules. Should NOT proceed with implementation before architect acknowledgement of the claim transaction (mutating action).",
+      "expected_output": "Same lifecycle as eval 1, with $card_number=47. Branch name resolves to claim/default-47-fix-wip-counter-race per board-canon's v0.5.0+ slugify rules (canonical form: claim/<kanban-id>-<key-slug>-<title-slug>; 'default' is the default kanban-id). Should NOT proceed with implementation before architect acknowledgement of the claim transaction (mutating action).",
       "files": []
     },
     {

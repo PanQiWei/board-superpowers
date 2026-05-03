@@ -184,7 +184,9 @@ Entry layer (1) — first-touch router, routes only, never works
 Molecular layer (4) — business workflows, state-machine-shaped
 ─────────────────────────────────────────────────────────────────
   managing-board              Producer (F-01..F-08, F-10..F-15)
-  consuming-card              Consumer (F-C0..F-C14 lifecycle)
+  consuming-card              Consumer (23-node Shape X: F1-F4 stages /
+                              B1-B5 bootstrap / G1-G4 governance /
+                              C1-C4 composing-siblings handoffs)
   decomposing-into-milestones F-09 + INVEST + vertical slicing
   bootstrapping-repo          sole executor for setup-stages —
                               first-time setup + plugin-upgrade

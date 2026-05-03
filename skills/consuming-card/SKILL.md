@@ -1,6 +1,6 @@
 ---
 name: consuming-card
-description: Use when the user wants to claim, work on, or implement a specific card from the board-superpowers GitHub Project. Triggers immediately on any message containing the literal token [board-card:#N] OR phrases like "claim card 12", "work on card 47", "implement #N from the board", "let me take #N", "let's pick up 12", "let me grab card N". Apply the moment the message names a card number AND signals intent to do the work — do NOT pre-discuss; claim first, then work in the worktree the skill creates. Use even when the user phrases it casually ("ok 12") — the claim signal is what matters, not formality. Do NOT use when the user wants to plan / triage / review the board generally — that's the managing-board skill.
+description: Use when the user wants to claim, work on, or implement a specific card from the board-superpowers GitHub Project. Triggers immediately on any message containing the literal token [board-card:#N] OR phrases like "claim card 12", "work on card 47", "implement #N from the board", "let me take #N", "let's pick up 12", "let me grab card N". Apply the moment the message names a card number AND signals intent to do the work — do NOT pre-discuss; claim first, then work in the worktree the skill creates. Use even when the user phrases it casually ("ok 12") — the claim signal is what matters, not formality. Do NOT use when the user wants to plan / triage / review the board generally — that's a Producer routine SKILL (`briefing-daily` for daily briefing, `intaking-requirement` for new ideas, `reviewing-pr-queue` for PR review, `triaging-board` for triage / blocked-card investigation).
 when_to_use: Use when the user types `[board-card:#N]`, "claim card N", "work on card N", "implement card N", "let me take #N", "let's pick up #N", "I'll do card N", "grab card N", or any phrasing that names a specific card number AND signals intent to start the work.
 argument-hint: "[card-number]"
 arguments: [card_number]
@@ -8,305 +8,242 @@ arguments: [card_number]
 
 # consuming-card
 
-This is the Consumer-session main skill. It carries one card from claim through PR submit, including the verification chain that has to run before the PR opens.
+Consumer-session skill: carries one card from claim through PR submit. All 23
+lifecycle nodes are hosted here — stages F1-F4, bootstrap B1-B5, governance
+G1-G5, and cross-plugin handoffs C1-C4. Stage detail lives in the four
+`references/stage-*.md` files loaded on demand.
 
-The skill **composes** sibling-plugin skills for the actual work — it does not reimplement TDD, debugging, code review, QA, or security audit. The composition is permanent and load-bearing; do not skip the cross-plugin handoffs.
+This SKILL hosts the 23 journey nodes (A1-A3, B1-B5, C1-C4, D1-D3, E1-E2,
+F1, G1-G5) per `04-consumer-surface-redesign.md` archetype catalog as 4
+stages × multiple nodes per stage. G1-G5 are cross-cutting governance nodes
+that apply uniformly across all stages; see § "G1-G3 — Governance" and
+§ "G4 — Mode topology" below. G5 (cross-platform parity verification) tracks
+that both Claude Code and Codex CLI consumer paths are exercised for non-trivial
+cards. See `references/migration-fc0-to-23-nodes.md` for the full
+old-feature-code → 23-node mapping.
 
-## Flow at a glance
+## G4 — Mode topology (cross-cutting, applies to every stage)
 
-```mermaid
-flowchart TD
-    S1["Step 1: resolve card number"] --> S2["Step 2: read card body"]
-    S2 --> S3["Step 3: claim\n4-step transaction"]
-    S3 --> S4["Step 4: enter worktree"]
-    S4 --> S5["Step 5: TDD-driven implement"]
-    S5 --> S6{"Blocker?"}
-    S6 -- yes --> Block["Step 6: action_id 6\nStatus to Blocked"]
-    S6 -- no --> S7["Step 7: verify chain"]
-    S7 --> S8{"Non-trivial?"}
-    S8 -- yes --> Cross["Step 8: cross-platform review"]
-    S8 -- no --> S9
-    Cross --> S9["Step 9: conditional QA + security"]
-    S9 --> S95["Step 9.5: PR-submit pre-flight\ncard body sync, action_id 112"]
-    S95 --> S10["Step 10: submit PR"]
-    S10 --> S11{"Reviewer requests\nchanges?"}
-    S11 -- yes --> Rew["Step 11: rework loop\nsame claim branch"]
-    Rew --> S7
-    S11 -- "no, merged" --> S12["Step 12: post-merge cleanup\naction_id 113"]
-    S12 --> Done(["Done"])
-```
+**Mode-1 (architect-spawned)** — architect types `[board-card:#N]` or
+`/board-superpowers:consuming-card N`. Runs as the architect's primary session.
+Full tool budget; sub-skill spawning allowed at depth 1. Supported on both
+Claude Code and Codex CLI.
 
-## Required sub-skills
+**Mode-2 (Producer-spawned)** — a Producer routine SKILL session (any of
+`briefing-daily` / `intaking-requirement` / `reviewing-pr-queue` /
+`triaging-board`) spawns this skill as a CC subagent via `Agent` tool. The subagent runs with isolated context and
+`max_depth=1`, meaning it CANNOT itself spawn further subagents. Every
+cross-plugin sub-skill invocation MUST be procedural (load the sibling SKILL.md
+into this agent's own context; do NOT call `Agent` again). Verify each sibling
+skill is procedural before invoking it from Mode-2 — consult
+`board-superpowers:composing-siblings` `references/procedural-fallback-rules.md`.
+Mode-2 is Claude Code only.
 
-- `board-superpowers:board-canon` — read schema before claiming (state machine, claim protocol, WIP rules).
-- `board-superpowers:operating-kanban` — protocol-action dispatch for `read_card` (Step 2), `claim_card` (Step 3, embedded in `claim-card.sh`), `transition_card` (Step 6 Blocked, etc.), and `link_pr_to_card` (Step 10, embedded in `submit-pr.sh`'s auto-trailer).
-- `board-superpowers:enforcing-pr-contract` — at PR submit time.
-- `superpowers:writing-plans` — turn the card's Acceptance criteria into an executable plan.
-- `superpowers:test-driven-development` — drive the implementation Red → Green → Refactor.
-- `superpowers:verification-before-completion` — before opening the PR.
-- `superpowers:requesting-code-review` — independent second-pair-of-eyes on the diff.
-- `gstack:/review` — production-bug viewpoint (run alongside the superpowers verification).
+**Mode-2 R-class callback protocol**: A Producer-spawned Consumer cannot pause and
+ask the architect directly — the subagent context has no architect in the loop.
+When a mutating action is R-class in Mode-2:
+1. The Consumer subagent prepares a structured proposal JSON.
+2. The Consumer subagent calls `report_agent_job_result` with the proposal payload.
+3. The Producer skill receives the result, evaluates it against
+   `autonomy_overrides` in `<repo>/.board-superpowers/config.yml`, and either
+   acknowledges autonomously (if override allows) or surfaces to the architect.
+4. On architect approval, the Producer re-spawns the Consumer subagent (new
+   isolated context) with an explicit "act on the previously-proposed action"
+   prompt.
+The audit log records two entries: propose (written before step 2) and resolve
+(written after step 4's execution). This 4-step dance is expensive; cards
+selected for Mode-2 overnight-dispatch should have a high ratio of A-class
+actions. The subagent-spawn constraint is the `max_depth=1` rule: a subagent
+already at depth 1 cannot itself spawn further subagents.
 
-## Lifecycle
+**Mode-2 procedural fallback table** (SKILL invocation is always safe; the risk is a sibling skill's body instructing an `Agent` spawn, which would push past the depth-1 budget):
 
-```
-resolve target card → read card body → claim (worktree + branch + Status flip)
-  → implement (TDD-driven) → handle in-flight blockers if they emerge
-  → verify (full chain) → cross-platform review (non-trivial cards)
-  → conditional QA / security gates → submit PR with three-section contract
-  → rework loop if reviewer requests changes → release after merge
-```
+| Sibling | Mode-2 safe? | If not safe |
+|---------|-------------|------------|
+| `superpowers:writing-plans` | Yes | n/a |
+| `superpowers:test-driven-development` | Yes | n/a |
+| `superpowers:systematic-debugging` | Yes | n/a |
+| `superpowers:verification-before-completion` | Yes | n/a |
+| `superpowers:requesting-code-review` | Verify first | If spawning: use `gstack:/review` only; surface gap as Retro Note |
+| `superpowers:subagent-driven-development` | procedural-verified (per composing-siblings/references/procedural-fallback-rules.md, dated 2026-04-26; re-verify on superpowers release) | n/a — safe if still procedural |
+| `gstack:/review` | Yes | n/a |
+| `gstack:/investigate` | Yes | n/a |
+| `gstack:/qa` | Yes | n/a |
+| `gstack:/cso` | Yes | n/a |
+| `gstack:/codex` | No | Mode-1 only; in Mode-2 ask architect to run it |
+| `superpowers:dispatching-parallel-agents` | NOT usable (Mode-2 itself runs as a subagent; spawning parallel subagents from within a subagent exceeds the depth-1 budget) | Raise to architect; do not invoke from Consumer Mode-2 |
 
-## Step 1 — resolve the target card
+## Required sub-skills (atomic layer)
 
-The card number arrives one of three ways:
+- `board-superpowers:board-canon` — canonical state machine + Card schema + branch naming + WIP rules.
+- `board-superpowers:operating-kanban` — protocol-action dispatch: `read_card` (F1/F2 entry), `claim_card` (F1 claim transaction embedded in `claim-card.sh`), `transition_card` (F3 → Blocked / In Review), `link_pr_to_card` (F4 PR submit embedded in `submit-pr.sh`).
+- `board-superpowers:composing-siblings` — cross-plugin handoff rules and Mode-2 compatibility check; invoke at every C1-C4 point.
+- `board-superpowers:enforcing-pr-contract` — Contract A (PR three-section shape) + Contract B (AC terminal-state sync) at F4 submit.
+- `board-superpowers:classifying-actions` — autonomy classification for every mutating action.
+- `board-superpowers:auditing-actions` — audit row write after every A/R decision.
 
-1. **Named argument**: `/board-superpowers:consuming-card 12` → `$card_number` = `12` (Claude Code only; on Codex the named substitution is a literal string, fall through to step 2).
-2. **From `$ARGUMENTS`**: parse the first space-separated token as the card number. Always works (cross-platform).
-3. **From the user's natural-language prompt**: extract the first integer following `card`, `#`, or `[board-card:#`.
+## Stage F1 — Claim
 
-If the card number cannot be resolved unambiguously, ask the user. Wrong card number = wrong worktree = wasted setup.
+Detailed procedure: `references/stage-1-claim.md`.
 
-## Step 2 — read the card
+**F1 summary (nodes A1-A3, B1-first):**
 
-This is the `read_card` protocol action — invoke `board-superpowers:operating-kanban` with action `read_card`. It resolves the active projection from `<repo>/.board-superpowers/settings.yml § modules.m10_kanban` (or `<repo>/.board-superpowers/config.yml § board` if absent; operating-kanban routes both transparently) and dispatches the per-Form invocation.
+1. Resolve card number: from `$card_number` arg, or `$ARGUMENTS` first token,
+   or parse `#N` from the prompt. Ambiguous → ask.
+2. Read card via `board-superpowers:operating-kanban` action `read_card`.
+   Status MUST be `Ready`; unmet `depends-on` → stop, surface to architect.
+3. Invoke `board-superpowers:classifying-actions` (action_id 100 — claim).
+   If R: propose → await architect ack → proceed.
+4. Run `bash scripts/claim-card.sh --owner <owner> --project <num> --repo <repo> --card <N> --title "<title>"`. The script executes the 4-step claim transaction (branch push → Status flip to `In Progress` via `transition_card`). On failure: read stderr and surface.
+5. Enter the worktree at `$HOME/.config/superpowers/worktrees/<repo>/claim/<kanban-id>-<key-slug>-<title-slug>`. Do NOT return to repo root for work. See `board-superpowers:board-canon` § "Branch naming" for the canonical slug format.
+6. Audit row via `board-superpowers:auditing-actions` (action_id 100).
 
-For the `github-project-v2` projection the Form A bash invocation is:
+## Stage F2 — Implement (TDD-driven)
 
-```bash
-gh issue view <N> --json number,title,body,state,labels,comments
-```
+Detailed procedure: `references/stage-2-implement.md`.
 
-Inspect:
+**F2 summary (nodes A3, B1-B5):**
 
-- **Status field** — must be `Ready` to claim. If `In Progress` and another `claim/N-...` branch exists, someone else has it. Other states mean wait or escalate.
-- **Card body** — read all 5 mandatory sections per `board-superpowers:board-canon` § "Card body schema".
-- **Dependencies** — if any hard `depends-on` is not yet `Done`, STOP and surface to the architect.
+B1 — Plan synthesis: invoke `board-superpowers:composing-siblings` then
+delegate to `superpowers:writing-plans`. Turns the card's acceptance criteria
+into an executable TDD plan. (C1 handoff)
 
-## Step 3 — claim
+B2 — TDD mutation cycle: invoke `board-superpowers:composing-siblings` then
+delegate to `superpowers:test-driven-development` for Red → Green → Refactor.
+When stuck: `superpowers:systematic-debugging` or `gstack:/investigate`. (C2 handoff)
 
-Step 3 is the `claim_card` protocol action. For the `github-project-v2` projection, `claim_card`'s invocation entry IS `bash scripts/claim-card.sh` — the script wraps the protocol action's 4-step transaction primitive (git-layer atomic; exit-code semantics + worktree+branch+Status-flip atomicity are script-level concerns). Each projection's reference file declares its own invocation entry; the protocol-action call shape from this SKILL stays the same regardless of projection.
+B3 — TDD-skip refusal: Do not bypass TDD even when implementation feels
+"obvious." The verification chain's integrity depends on every AC having a
+failing test first. This is a non-negotiable governance reflex.
 
-```bash
-bash scripts/claim-card.sh \
-  --owner <owner> --project <number> \
-  --repo <repo> --card <N> --title "<title>"
-```
+B4 — Cross-card refusal: Edits are restricted to files claimed by this card.
+Refuse to modify infrastructure or files claimed by other cards without explicit
+architect authorization. Surface as R-class proposal if boundary crossing is
+genuinely necessary.
 
-The owner + project number resolve from the active kanban registration (`<repo>/.board-superpowers/settings.yml § modules.m10_kanban`, or `<repo>/.board-superpowers/config.yml § board` if absent — operating-kanban routes both). The script performs the four-step transaction described in `board-superpowers:board-canon` § "Claim protocol"; the embedded Status flip from `Ready` to `In Progress` is itself a `transition_card` protocol action realized inside the claim transaction. Any failure leaves a partial state — read the script's stderr and surface to the architect rather than silently retry.
+B5 — Permission-boundary: Every mutating action passes through
+`board-superpowers:classifying-actions` first. Do not bypass for convenience.
+R-class actions require architect acknowledgement before acting.
 
-## Step 4 — enter the worktree
+**In-flight blocker (transition to Blocked)**: invoke
+`board-superpowers:classifying-actions` (action_id 103 — Consumer Blocked/terminate-failure),
+then `board-superpowers:operating-kanban` action `transition_card` with target
+`Blocked`. Comment on the card naming the blocker. Audit via
+`board-superpowers:auditing-actions`.
 
-```bash
-cd "$HOME/.config/superpowers/worktrees/<repo>/claim/<kanban-id>-<key-slug>-<title-slug>"
-# e.g., claim/default-42-refactor-cache
-```
+**How every mutating action is handled:**
 
-The worktree is your isolated work surface. Do NOT `cd` back to the repo root for any work — the repo root may be shared with other sessions and stays on `main` per the project's working-tree discipline. Override the worktree base path via `BOARD_SP_WORKTREE_DIR` if needed.
+1. Resolve `action_id` (catalog in `board-superpowers:classifying-actions` `references/action-id-catalog.md`).
+2. Invoke `board-superpowers:classifying-actions` → receive A / R / N.
+3. A: act → invoke `board-superpowers:auditing-actions` (1 entry).
+4. R: audit propose → surface → await ack → on approve: act + audit resolve; on decline: audit decline + abort.
+5. N: refuse, surface block reason.
 
-## Step 5 — implement (TDD-driven)
+Consumer action_id range: 100-113 (100-111 review cycle + 112 PR-submit pre-flight + 113 post-merge cleanup). Full catalog: `board-superpowers:classifying-actions` `references/action-id-catalog.md`.
 
-This is the procedural core. Apply the cross-plugin composition:
+## Stage F3 — Verify
 
-1. Invoke `superpowers:writing-plans` to turn the card's Acceptance criteria into an executable plan.
-2. Invoke `superpowers:test-driven-development` to drive the implementation Red → Green → Refactor.
-3. When stuck: invoke `superpowers:systematic-debugging` OR `gstack:/investigate` for a different angle.
+Detailed procedure: `references/stage-3-verify.md`.
 
-This skill does NOT re-implement TDD or planning — those are the canonical disciplines. The composition is permanent.
+**F3 summary (nodes C1-C4, D3 rework):**
 
-## Step 6 — handle in-flight transitions
+**Iron law: never open a PR without completing the full verification chain.**
 
-If the card hits a blocker mid-flight:
+C1 — Verification chain: invoke `board-superpowers:composing-siblings`, then:
+- `superpowers:verification-before-completion` (evidence-first; run actual checks named in ACs)
+- `gstack:/review` (production-bug viewpoint)
+- `superpowers:requesting-code-review` (independent second-pair-of-eyes)
+All three required. None optional.
 
-1. Comment on the card naming the blocker.
-2. The Status transition to `Blocked` is a mutating action with action_id 6 — apply the 5-step sequence from "How mutating actions are handled" below. The Status flip itself is the `transition_card` protocol action — invoke `board-superpowers:operating-kanban` with action `transition_card` and target status `Blocked` (it dispatches per the active projection); this happens in step 3 (A) or step 4d (R approve).
+C2 — Cross-platform review (non-trivial cards): invoke
+`board-superpowers:composing-siblings`, then `gstack:/codex` (from CC). Mode-2:
+not possible from subagent; ask architect to run it. Skip for 1-line fixes.
 
-Otherwise leave the card in `In Progress` for the duration of the implementation. Do NOT churn the Status field on every commit — Status reflects the gross state of the work, not its internal progress.
+C3 — Conditional QA: invoke `board-superpowers:composing-siblings`, then
+`gstack:/qa <url>` for any UI-touching card (label or path heuristic). Mandatory
+when the card changes any user-visible surface.
 
-## Step 7 — verify before completion
+C4 — Conditional security audit: invoke `board-superpowers:composing-siblings`,
+then `gstack:/cso` for cards with `security` label or body mentioning auth / crypto / PII.
 
-**Iron law**: NEVER open a PR without running all three steps below. The whole point of the board contract is that the Consumer's "I'm done" claim is backed by a verification chain the architect doesn't have to redo. Skipping verification turns the architect back into the QA bottleneck this skill exists to remove.
-
-Required chain (each step is a required sub-skill — none is optional):
-
-1. `superpowers:verification-before-completion` — evidence first; do not claim "done" without running the actual checks named in the card's Acceptance criteria.
-2. `gstack:/review` — production-bug viewpoint.
-3. `superpowers:requesting-code-review` — independent second-pair-of-eyes on the diff.
-
-The card is NOT ready for PR submit until all three pass.
+Status transition to `In Review`: invoke `board-superpowers:operating-kanban`
+action `transition_card` with target `In Review` after verification chain
+completes and PR is ready to submit.
 
 ### Common rationalizations to reject
 
 | Rationalization | Reality |
 |-----------------|---------|
-| "It's a small change, the verification chain is overkill" | Small changes are exactly where verification gaps hide — large changes get more eyes by default. The chain is calibrated for the smallest meaningful card; if it's overkill for yours, the card was probably mis-sized. |
-| "I'll skip step 3 (code-review) and let the human reviewer be the second-pair-of-eyes" | Then the Consumer hasn't reduced the architect's load — has just passed it through. Step 3 is what makes spawn-Consumer mode (overnight batches) worthwhile. |
-| "The acceptance criteria are 'tests pass' — `bun test` passing IS verification" | Acceptance criteria written that vaguely are themselves a smell — but if you're stuck with them, verify what the criteria *would have said* if written tightly: which behaviors got tested, which edge cases, which integration points. |
+| "Small change — verification is overkill" | Small changes hide gaps. Chain calibrated for smallest meaningful card. |
+| "Skip code-review, let the human reviewer do it" | Consumer hasn't reduced architect load — just passed it through. |
+| "Tests pass = done" | Name which tests, which edge cases, which integration points. |
 
-## Step 8 — cross-platform review (non-trivial cards)
+## Stage F4 — Submit PR
 
-If the change is more than a 1-line fix:
+Detailed procedure: `references/stage-4-submit.md`.
 
-```
-gstack:/codex   # if running on Claude Code, dispatch a Codex session against the same diff
-```
+**F4 summary (nodes D1-D3, E1-E2):**
 
-The cross-platform review catches platform-specific assumptions. Skip for trivial changes.
+D1+D2 — PR-submit pre-flight (action_id 112, A-class):
+1. Toggle all AC checkboxes to `[x]` or `[!]<reason>`. Bare `[ ]` is forbidden.
+2. If Notes invites a summary, append 3-5 line implementation summary.
+3. Compute before/after SHA256 and `gh issue edit <N> --body-file <path>`.
+4. Audit via `board-superpowers:auditing-actions` (action_id 112).
 
-## Step 9 — conditional QA / security gates
-
-- **UI-touching cards**: `gstack:/qa <url>` — real-browser QA. Mandatory for any card that changes a user-visible surface.
-- **Security-flagged cards** (label `security` OR card body mentions auth / crypto / PII): `gstack:/cso` — OWASP / STRIDE audit.
-
-## Step 9.5 — PR-submit pre-flight: card body sync
-
-Before drafting the PR body, sync the card body to reflect what just got verified. This is action_id 112 (A-class auto):
-
-1. Fetch the current card body: `gh issue view <N> --json body --jq '.body' > /tmp/card-<N>-current.md`.
-2. Toggle every acceptance criterion checkbox from `[ ]` to `[x]` (or `[!]` for items cleanly deferred — one-line reason inline).
-3. If the card's Notes section invites an implementation summary (e.g., "post-implementation summary goes here"), append a 3-5 line summary covering: what shipped, what's behind a flag, what's split into follow-up cards.
-4. Compute before/after SHA256: `sha256sum /tmp/card-<N>-current.md /tmp/card-<N>-new-body.md`.
-5. `gh issue edit <N> --body-file /tmp/card-<N>-new-body.md`.
-6. Audit row via `board-superpowers:auditing-actions` with action_id 112; payload includes `{card_number, before_sha256, after_sha256, ac_toggle_count, sections_changed: ["Acceptance criteria", ...]}`.
-
-If `gh issue edit` returns 504 Gateway Timeout: verify post-edit sha256 matches the draft (modulo GitHub's trailing-newline normalization) before retrying — GitHub's backend often commits the edit despite the timeout response.
-
-## Step 10 — submit PR with three-section contract
-
-Draft the PR body using the templates in `board-superpowers:enforcing-pr-contract` § "Section templates". Save to a temp file, then:
-
+D1 — PR submit with three-section contract. Invoke
+`board-superpowers:enforcing-pr-contract` for templates. Then:
 ```bash
 bash scripts/submit-pr.sh --title "<title>" --body-file <path> --card <N>
 ```
+The script validates Contract A (three-section shape) + Contract B (AC terminal
+state) before opening the PR. Retry with corrected body if validation fails.
+The script auto-appends the `Closes #<N>` trailer — do NOT hand-add it or use
+`gh pr create` / `gh pr edit --body-file` directly (both strip the trailer,
+breaking the GitHub auto-close webhook chain). For post-OPEN body updates:
+`bash scripts/submit-pr.sh --update-body --pr <PR-N> --body-file <path> --card <N>`.
 
-The script validates the three-section contract before opening the PR. If validation fails: re-edit the body to address the specific failure (printed to stderr) and retry. The script auto-appends a trailer linking back to the card; do NOT hand-add the trailer. Step 10's PR-OPEN side-effect is the `link_pr_to_card` protocol action. For the `github-project-v2` projection, the invocation entry IS `bash scripts/submit-pr.sh` (whose canonical-trailer logic registers the PR↔Issue link via GitHub's `Closes #<N>` keyword chain). Each projection's reference file declares its own invocation entry.
+The `link_pr_to_card` protocol action IS `bash scripts/submit-pr.sh` for the
+`github-project-v2` projection — the auto-trailer registers the PR↔Issue link.
 
-**Why the auto-trailer is load-bearing**: GitHub's PR-merge → Issue-close → ProjectV2 Auto-close webhook chain fires only when the PR body contains a `Closes #<N>` (or `Fixes #<N>` / `Resolves #<N>`) keyword. The PR↔Issue link is registered in `closingIssuesReferences` at PR-OPEN AND re-derived on every body update — so a body update that strips the canonical trailer silently de-registers the link, and the next merge fires without the auto-close webhook. Once that merge has fired, retroactively re-appending the trailer does NOT replay the chain. Two production failures so far: PR #42 / card #34 (direct `gh pr create` opened without the trailer) and PR #47 / card #45 (commits `4c0110a` + `4ac446f` ran `gh pr edit --body-file` to expand retro notes, silently overwriting the trailer; `closingIssuesReferences` returned `[]` after merge). Contract C in `board-superpowers:enforcing-pr-contract` catches both failure modes at submit-time via idempotent injection.
+D3 — Review-feedback rework loop: pull changes into the SAME worktree (do NOT
+create a new branch). Re-run F2 implement + F3 verify + F4 submit. Card stays
+`In Review`; re-pushing triggers re-review.
 
-**The sanctioned paths**: `bash scripts/submit-pr.sh --title <title> --body-file <path> --card <N>` to OPEN the PR; `bash scripts/submit-pr.sh --update-body --pr <PR-N> --body-file <path> --card <N>` for any post-OPEN body update (retro-note expansion, reviewer-finding writeups, anything). Direct `gh pr create` and direct `gh pr edit --body-file` on a Consumer PR are contract violations. Operational details — strip-and-reinject regex, refusal logic, recovery options — live in `board-superpowers:enforcing-pr-contract` `references/validation-rules.md` § "Trailer preservation under body updates".
+E1 — Post-merge cleanup (action_id 113, A-class):
+1. Verify `gh pr view <PR-N> --json state` returns `MERGED`.
+2. Verify card Status flipped to `Done` (webhook; 30 s typical; surface lag after 5 min).
+3. Local cleanup: `git worktree remove <path>` + `git branch -d claim/<...>`.
+4. Audit via `board-superpowers:auditing-actions` (action_id 113).
+See `references/stage-4-submit.md` for the full Stage (a) / Stage (b)
+PR↔Issue link verification procedure and manual-recovery path.
 
-### Common rationalizations to reject
+E2 — Crash / failure path: surface partial state to architect via card comment;
+record a heartbeat audit row; leave the worktree intact for next-session pickup.
 
-| Rationalization | Reality |
-|-----------------|---------|
-| "I'll just use `gh pr edit --body-file` for a quick retro-note tweak" | The tweak strips the canonical trailer at the body's tail, GitHub re-derives `closingIssuesReferences` from the new body and removes the PR↔Issue link, and the next merge fires without the auto-close webhook. Manual Issue close + manual ProjectV2 Status flip then become mandatory (Step 12 stage a). Observed on PR #47 / card #45. **Route body updates through `submit-pr.sh --update-body` — its strip-and-reinject is idempotent across arbitrarily many updates.** |
+## G1-G3 — Governance (cross-cutting reflexes)
 
-## Step 11 — rework loop (if reviewer requests changes)
+G1 — Every mutating action produces an audit row via `board-superpowers:auditing-actions`.
 
-If the reviewer comments "request changes":
+G2 — R-class actions surface a propose-await before acting. Proposal records an
+audit entry; architect ack records a second entry.
 
-1. Pull the changes back into the same worktree (do NOT create a new branch).
-2. Re-run steps 5 + 7 + 10. Reuse the SAME claim branch — see `board-superpowers:board-canon` § "Branch naming" on single-claim-branch-per-card.
-3. The card stays in `In Review`; re-pushing the PR commits triggers re-review.
+G3 — A-class actions execute without interruption (no architect-visible gate).
+Both G2 + G3 use `board-superpowers:classifying-actions` as the single classifier.
 
-## Step 12 — post-merge cleanup
+## v1.x roadmap stubs
 
-Once the PR is merged the Consumer's responsibility is a four-part close-out (action_id 113, A-class):
-
-1. **Verify PR state** — `gh pr view <N> --json state --jq '.state'` returns `MERGED`. If `OPEN`, the cleanup is premature; abort and wait. If `CLOSED` (without merge), this is action_id 103 (failure path), not 113 — different audit row.
-2. **Verify card transitioned** (2-stage flow — distinguishes PR↔Issue link bug from webhook lag):
-
-   First, check Status: `gh project item-list ... --jq '.[] | select(.content.number==<N>) | .Status'`. The webhook usually flips Status to `Done` within 30 seconds. If after 5 minutes Status is still NOT `Done`, branch on the cause:
-
-   **Stage (a) — verify the PR↔Issue link itself exists**:
-
-   ```bash
-   OWNER=$(gh repo view --json owner --jq .owner.login)
-   REPO=$(gh repo view --json name --jq .name)
-   gh api graphql -F owner="$OWNER" -F repo="$REPO" -F pr="<PR-N>" -f query='
-     query($owner:String!, $repo:String!, $pr:Int!) {
-       repository(owner:$owner, name:$repo) {
-         pullRequest(number:$pr) {
-           closingIssuesReferences(first: 10) { nodes { number } }
-         }
-       }
-     }' --jq '.data.repository.pullRequest.closingIssuesReferences.nodes'
-   ```
-
-   The owner/name are auto-derived from the current `gh repo view` context (no manual placeholder substitution); only `<PR-N>` needs replacement with the actual PR number.
-
-   If the result is `[]` (empty), the PR↔Issue link itself was never registered — the `Closes #<N>` trailer was missing at PR-OPEN time. **The webhook chain cannot be retroactively replayed**. Manual recovery path:
-
-   - Edit the PR body to add `Closes #<N>` for the audit-trail record (does NOT retrigger the webhook): `gh pr edit <PR-N> --body-file <amended>`.
-   - Manually close the Issue: `gh issue close <N> --comment "Closing manually — PR body missing Closes keyword at OPEN time; trailer added retroactively does not retrigger webhook. See #34 retro."`.
-   - Manually flip ProjectV2 Status to `Done` via `gh project item-edit` (the auto-close workflow won't fire).
-   - Audit row records `recovery_path: "manual close + manual status flip"` so the deviation is traceable.
-
-   **Stage (b) — link exists but Status didn't flip after lag window**:
-
-   If `closingIssuesReferences` returns the linked card number AND Status is still not `Done` after 5 minutes, this is webhook-delivery lag (network / ProjectV2 propagation). Do NOT flip Status manually — overlapping flips cause audit-log churn and risk a flip-flop when the lagged webhook eventually arrives. Surface the lag to the architect; wait or use `gh api repos/<owner>/<repo>/dispatches` to nudge the webhook (architect's call).
-3. **Local cleanup** —
-   ```bash
-   cd ~/Dev/repos/<repo>           # back to repo root (on main)
-   git worktree remove "$HOME/.config/superpowers/worktrees/<repo>/claim/<kanban-id>-<key-slug>-<title-slug>"
-   git branch -d claim/<kanban-id>-<key-slug>-<title-slug>  # local cleanup; remote was already deleted by the merge
-   # e.g., claim/default-42-refactor-cache
-   ```
-4. **Audit row** — invoke `board-superpowers:auditing-actions` with action_id 113; payload includes `{card_number, pr_number, merged_at, worktree_removed: true, branch_deleted: true}`.
-
-The worktree cleanup is mandatory — leaving stale worktrees pollutes the worktrees directory and confuses subsequent claim transactions.
-
-### Optional automation — auto cron post-merge cleanup
-
-For Consumers in batch mode (Mode-2 overnight or any unattended scenario), the architect can opt-in to automated post-merge cleanup by setting `post_merge_cleanup.auto_cron: true` in `<repo>/.board-superpowers/config.yml`. The cron polls `gh pr view --json state` every `poll_interval_minutes` (default 15) for up to `timeout_hours` (default 48); on `MERGED` it runs the steps above; on `OPEN` past timeout it surfaces "PR pending merge >48h" to the architect and stops auto-polling.
-
-Install the cron entry via `bash scripts/install-post-merge-cron.sh --card <N>` (or via `bootstrapping-repo` when `auto_cron` is set at bootstrap time). Uninstalls automatically on terminal-state PR (merged / closed / timeout). See `references/post-merge-cleanup.md` for the cron contract.
-
-## How mutating actions are handled
-
-This skill performs several mutating actions across the card lifecycle
-— claiming the card (action_id 100), editing the card body when
-acceptance criteria evolve (action_id 2), opening the PR (action_id
-102), responding to review cycles (action_id 105-111), the PR-submit
-pre-flight card body sync (action_id 112), and the post-merge cleanup
-(action_id 113).
-
-For every mutating action this skill performs:
-
-1. Resolve the action's action_id (from the `action-id-catalog.md`
-   file inside the `board-superpowers:classifying-actions` skill's
-   `references/`).
-2. Invoke `board-superpowers:classifying-actions` with that action_id;
-   receive a decision: A (auto), R (requires approval), or N (forbidden).
-3. If A: act → invoke `board-superpowers:auditing-actions` to record
-   one entry.
-4. If R:
-   a. invoke `board-superpowers:auditing-actions` to record the
-      proposal.
-   b. surface the proposal to the architect.
-   c. wait for the architect's reply (approve / decline).
-   d. on approve: act → invoke `board-superpowers:auditing-actions`
-      to record the approval-and-result.
-   e. on decline: invoke `board-superpowers:auditing-actions` to
-      record the decline; abort.
-5. If N: refuse and surface the block reason; no audit entry at N.
-
-Read-only events (e.g., post-merge close handled by GitHub's webhook,
-where this skill only observes the transition) may invoke
-`board-superpowers:auditing-actions` directly without a classification
-step — the audit row records that the event ran, not a decision.
-Use this shortcut ONLY for non-mutating observations; never for
-mutating actions.
-
-The two atomic skills handle the matrix lookup, override merging,
-schema enforcement, and audit row writing. This skill describes the
-card lifecycle; those skills describe the governance contract.
-
-## Spawned-subagent constraint (Producer-spawned Consumer mode)
-
-If this skill is running as a subagent that the Producer's `board-superpowers:managing-board` skill spawned (rather than as the architect's direct session), it cannot itself spawn further subagents — Claude Code subagents have a depth-1 budget. In that mode:
-
-- Every cross-plugin sub-skill invocation MUST be procedural (read the sibling SKILL.md content into this Consumer's own context, follow the procedure inline) — do NOT spawn a `superpowers:*` or `gstack:*` subagent.
-- For required sub-skills that themselves spawn subagents (verify each one's body for `Agent` tool / `subagent_type` references), surface a procedural fallback to the architect — see `references/handoff-to-superpowers.md`.
-
-This Producer-spawned-Consumer mode is currently Claude Code only. On Codex CLI, only architect-spawned Consumer (your direct session) is supported.
+Three SPOT-watchlist items deliberately kept inline (not extracted to atomics):
+- `scope-judgment` (F1 stakeholder routing node) — extract when ≥2 callers emerge.
+- `mode-projection` (G4) — extract when Producer overnight-dispatch ships (2nd caller).
+- `refusing-out-of-scope` (B3 + B4 + B5) — extract when a 4th refusal node lands AND ≥3 share same-rhythm pattern.
 
 ## References
 
-| File | When to read | Purpose |
-|------|--------------|---------|
-| `references/handoff-to-superpowers.md` | At Step 4 (implement) and Step 5 (verify) when running as a Producer-spawned subagent (depth-1 budget exhausted). | Procedural-fallback table — for each sibling skill that itself spawns subagents, the read-and-inline procedure that replaces a subagent dispatch. |
-| `references/permission-boundary.md` | At session start when establishing the invocation contract — architect-spawned vs Producer-spawned. | Authoritative comparison of the two Consumer-invocation modes — which surfacing channels apply, which sub-skills are allowed, what the architect-visibility tier is. |
-| `references/post-merge-cleanup.md` | After PR is merged (interactive cleanup) or once at claim time when deciding whether to install the auto-cron handoff. | Contract for the close-out sequence — interactive vs auto-cron paths, the cron install / uninstall lifecycle, the terminal-state triggers (merged / closed / timeout). |
-| `references/pr-template.md` | At Step 6 (open the PR) when drafting the PR body before invoking `submit-pr.sh`. | Practical paste-ready PR body templates — default template, Automated Verification skeleton, Human Verification TODO patterns, Retro Notes shape. |
-| `references/surface-protocol.md` | Whenever surfacing information back to the architect — design-A/B leaning, blocked-card escalation, mid-flight scope question, post-implementation summary. | The three surface channels (card thread comment / PR description / direct-message-to-architect surfacing) plus when each channel is the right one. |
+| File | When to read |
+|------|-------------|
+| `references/stage-1-claim.md` | Full Stage 1 claim protocol detail (card read → claim transaction → worktree entry) |
+| `references/stage-2-implement.md` | Full Stage 2 implementation protocol (plan → TDD cycle → in-flight governance) |
+| `references/stage-3-verify.md` | Full Stage 3 verification chain detail (pre-PR checks + conditional passes + surface channels) |
+| `references/stage-4-submit.md` | Full Stage 4 PR submit + rework + post-merge cleanup detail |
+| `references/post-merge-cleanup.md` | Extended post-merge cleanup: four-part close-out contract + auto-cron path + failure modes |
+| `references/migration-fc0-to-23-nodes.md` | Archived mapping: old feature-grouped codes → 23-node journey encoding (historical reference for maintainers reading old PRs) |

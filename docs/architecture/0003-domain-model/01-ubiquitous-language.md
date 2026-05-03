@@ -401,7 +401,7 @@ v1 projection). Source: `0005-contracts/00-kanban-protocol.md`
 `<!-- /board-superpowers:routing -->` (CLAUDE.md / AGENTS.md
 routing block). Each is a machine-readable identifier that
 distinguishes board-superpowers artifacts from generic
-content. Source: `card-schema.md`, `pr-template.md`,
+content. Source: `card-schema.md`, `enforcing-pr-contract/SKILL.md`,
 `agentsmd-routing.md`, I-10. Expanded across multiple
 aggregates in `03-aggregates-and-entities.md`.
 

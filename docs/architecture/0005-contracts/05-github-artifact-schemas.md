@@ -5,7 +5,7 @@
 > fields, PR mandatory-section header strings, routing-block marker
 > pair + `block_hash` format, Project v2 Status enum, and the
 > standard label set. Where canonical bodies live elsewhere
-> (`card-schema.md`, `pr-template.md`, `agentsmd-routing.md`), 0005
+> (`card-schema.md`, `enforcing-pr-contract/SKILL.md`, `agentsmd-routing.md`), 0005
 > surfaces only the parsing contract and links.
 >
 > **Kanban Protocol scope (per ADR-0025).** This file is the v1
@@ -176,8 +176,12 @@ ephemeral channel does not persist to the remote.
 
 ## PR body — mandatory sections + marker
 
-Canonical body template lives in
-[`skills/consuming-card/references/pr-template.md`](../../../skills/consuming-card/references/pr-template.md).
+Canonical PR body contract lives in
+[`skills/enforcing-pr-contract/SKILL.md`](../../../skills/enforcing-pr-contract/SKILL.md)
+(Contract A: three-section shape + filler detection rules;
+Contract B: AC terminal-state sync). Section templates and
+per-card-type examples live in
+[`skills/enforcing-pr-contract/references/section-templates.md`](../../../skills/enforcing-pr-contract/references/section-templates.md).
 0005 pins the **section list**, the **OPTIONAL/required matrix**,
 the **closing-line format**, and the **marker string**.
 
@@ -198,7 +202,7 @@ Closes #<card-number>.
 ```
 
 Capital `C` in `Closes` (lowercase is not guaranteed across all
-GitHub setups). Per `pr-template.md` "The closing line".
+GitHub setups). Per `enforcing-pr-contract/SKILL.md` § "Closing line".
 
 ### Trailing marker
 
@@ -208,7 +212,7 @@ Every PR body MUST end with the exact bytes:
 <!-- board-superpowers:pr -->
 ```
 
-Per `pr-template.md` + `board-canon/SKILL.md` "PR body — schema"
+Per `enforcing-pr-contract/SKILL.md` + `board-canon/SKILL.md` "PR body — schema"
 + 0003 § 3.3.2 PR aggregate "§1.8 marker required" invariant.
 
 `managing-board`'s Review Queue routine (F-02) keys off this marker
@@ -218,7 +222,7 @@ to find board-superpowers PRs among ordinary ones.
 
 The pinned content rules (per
 [`02-product-features-and-flows/08-pr-contract.md`](../0002-product-features-and-flows/08-pr-contract.md)
-and `pr-template.md`):
+and `enforcing-pr-contract/SKILL.md`):
 
 - `## Automated Verification` — mandatory; lists what tests ran +
   outcomes + cross-platform attribution (per F-C10).
@@ -239,7 +243,7 @@ and `pr-template.md`):
 ### Cited rationale
 
 - §1.8 PR contract (canonical content + per-section rules).
-- `pr-template.md` (canonical template).
+- `enforcing-pr-contract/SKILL.md` (canonical PR three-section contract).
 - `board-canon/SKILL.md` "PR body — schema".
 - 0003 § 3.3.2 PR aggregate.
 - F-C12 PR submission feature (`04-consumer-surface.md` §1.4.1).

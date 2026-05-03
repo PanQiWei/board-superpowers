@@ -48,7 +48,7 @@ When a Mode-2 Consumer is about to invoke a sibling skill, apply in order:
 | `superpowers:brainstorming` | yes | n/a |
 | `superpowers:writing-plans` | yes | n/a |
 | `superpowers:test-driven-development` | yes | n/a |
-| `superpowers:subagent-driven-development` | TBD (verified procedural 2026-04-26; re-verify on each superpowers release) | Use `superpowers:executing-plans` as procedural substitute; note substitution in PR description |
+| `superpowers:subagent-driven-development` | procedural-verified (2026-04-26; re-verify on each superpowers release) | Use `superpowers:executing-plans` as procedural substitute; note substitution in PR description |
 | `superpowers:systematic-debugging` | yes | n/a |
 | `superpowers:verification-before-completion` | yes | n/a |
 | `superpowers:requesting-code-review` | yes | n/a |
@@ -72,9 +72,9 @@ release introduces subagent spawning in `subagent-driven-development`):
 4. Open a follow-up card (or comment on the consuming-card thread) to track
    the upstream skill returning to procedural — when it does, revert the fallback.
 
-The fallback table for `consuming-card`'s handoff-to-superpowers also lives in
-`skills/consuming-card/references/handoff-to-superpowers.md`. Keep both files in
-sync when a status changes (same-PR change-impact obligation).
+The Mode-2 fallback table for `consuming-card` also lives in
+`skills/consuming-card/SKILL.md` § G4 (Mode-2 procedural fallback table).
+Keep both files in sync when a status changes (same-PR change-impact obligation).
 
 ## Re-verification procedure
 
