@@ -32,21 +32,21 @@ feature, all are listed.
 
 | Feature | Implementing surface |
 |---------|---------------------|
-| F-C0 Self-selection from Ready (manual-pull entry) | `skills/consuming-card/SKILL.md` Step 0 |
-| F-C1 Atomic claim primitive | `scripts/claim-card.sh`; `skills/consuming-card/SKILL.md` Step 2 |
-| F-C2 Spec / plan / acceptance-criteria fetch | `skills/consuming-card/SKILL.md` Step 1 + Step 3 (plan brief synthesis) |
-| F-C3 Worktree entry + In Progress transition | `skills/consuming-card/SKILL.md` Step 2; `scripts/transition-card.sh` |
-| F-C4 TDD-driven implementation delegation | `skills/consuming-card/SKILL.md` Step 3 + `references/handoff-to-superpowers.md`; delegates to `superpowers:subagent-driven-development` etc. |
-| F-C5 TDD-skip mechanism | `skills/consuming-card/SKILL.md` (PR template area); `references/pr-template.md` |
-| F-C6 Cross-card touch hard refuse | `skills/consuming-card/SKILL.md` (planned hook addition; partial spec only) |
-| F-C7 Permission boundary (three-layer) | `hooks/hooks.json` (planned `PreToolUse` registration); `skills/consuming-card/SKILL.md` (allowed-tools frontmatter — planned) |
-| F-C8 Surface protocol (suspend on uncertainty) | `skills/consuming-card/SKILL.md` "Mid-flight only on BLOCKED / NEEDS_CONTEXT" + Escalation section |
-| F-C9 Pre-submit verification chain | `skills/consuming-card/SKILL.md` Step 4 (composes `superpowers:verification-before-completion` + `superpowers:requesting-code-review` + `gstack:/review`) |
-| F-C10 Cross-platform adversarial review | `skills/consuming-card/SKILL.md` Step 4 (composes `gstack:/codex`) |
-| F-C11 Conditional QA / security passes | `skills/consuming-card/SKILL.md` Step 4 (composes `gstack:/qa` + `gstack:/cso` conditionally) |
-| F-C12 PR submission with mandatory sections | `skills/consuming-card/SKILL.md` Step 4; `references/pr-template.md` |
-| F-C13 Review-cycle response | `skills/consuming-card/SKILL.md` Step 4 + Escalation section (partial) |
-| F-C14 Termination + heartbeat | `skills/consuming-card/SKILL.md` Step 5 + Escalation + Abandonment sections; session-log mtime via `~/.claude/projects/.../<sid>.jsonl` |
+| F-C0 Self-selection from Ready (manual-pull entry) | `skills/consuming-card/SKILL.md` Stage F1 node A1 (`references/stage-1-claim.md` entry) |
+| F-C1 Atomic claim primitive | `scripts/claim-card.sh`; `skills/consuming-card/SKILL.md` Stage F1 node A2 (`references/stage-1-claim.md`) |
+| F-C2 Spec / plan / acceptance-criteria fetch | `skills/consuming-card/SKILL.md` Stage F1 node A3 (`references/stage-1-claim.md`) |
+| F-C3 Worktree entry + In Progress transition | `skills/consuming-card/SKILL.md` Stage F1 node A2 (`references/stage-1-claim.md`); `scripts/transition-card.sh` |
+| F-C4 TDD-driven implementation delegation | `skills/consuming-card/SKILL.md` Stage F2 node B2 + `references/stage-2-implement.md`; delegates to `superpowers:subagent-driven-development` etc. via `composing-siblings` |
+| F-C5 TDD-skip mechanism | `skills/consuming-card/SKILL.md` Stage F2 node B3 (TDD-skip refusal); `skills/enforcing-pr-contract/SKILL.md` (PR three-section shape) |
+| F-C6 Cross-card touch hard refuse | `skills/consuming-card/SKILL.md` Stage F2 node B4 (Cross-card refusal) — planned hook addition still deferred |
+| F-C7 Permission boundary (three-layer) | `hooks/hooks.json` (planned `PreToolUse` registration); `skills/consuming-card/SKILL.md` Stage F2 node B5 (Permission-boundary) |
+| F-C8 Surface protocol (suspend on uncertainty) | `skills/consuming-card/SKILL.md` Stage F4 node E2 (Crash / failure path) + node G2 (R-class propose-await) |
+| F-C9 Pre-submit verification chain | `skills/consuming-card/SKILL.md` Stage F3 node C1 (`references/stage-3-verify.md`; composes `superpowers:verification-before-completion` + `superpowers:requesting-code-review` + `gstack:/review` via `composing-siblings`) |
+| F-C10 Cross-platform adversarial review | `skills/consuming-card/SKILL.md` Stage F3 node C2 (`references/stage-3-verify.md`; composes `gstack:/codex` via `composing-siblings`) |
+| F-C11 Conditional QA / security passes | `skills/consuming-card/SKILL.md` Stage F3 nodes C3-C4 (`references/stage-3-verify.md`; composes `gstack:/qa` + `gstack:/cso` conditionally via `composing-siblings`) |
+| F-C12 PR submission with mandatory sections | `skills/consuming-card/SKILL.md` Stage F4 node D1 + `references/stage-4-submit.md`; uses `enforcing-pr-contract` templates |
+| F-C13 Review-cycle response | `skills/consuming-card/SKILL.md` Stage F4 node D3 (`references/stage-4-submit.md` § "D3 — Review-feedback rework loop") |
+| F-C14 Termination + heartbeat | `skills/consuming-card/SKILL.md` Stage F4 nodes E1-E2 (`references/stage-4-submit.md`); session-log mtime via `~/.claude/projects/.../<sid>.jsonl` |
 
 **Bootstrap, Decomposition, Cross-cutting, PR contract:**
 
@@ -62,9 +62,9 @@ feature, all are listed.
 | 1.6.3 Card body schema | `skills/decomposing-into-milestones/references/card-schema.md`; `skills/board-protocol/SKILL.md` |
 | 1.6.4 Size labels | `skills/decomposing-into-milestones/SKILL.md` ("Size calibration"); `scripts/bootstrap-project.sh` (creates `size:*` labels) |
 | 1.7 Cross-cutting invariants I-1..I-13 | Distributed across skills + scripts; `docs/architecture/AGENTS.md` change-impact matrix; `docs/architecture/adr/*.md`; for I-11..I-13 also `${CLAUDE_PLUGIN_ROOT}/scripts/migrations/` (planned) |
-| 1.8.1 `## Automated Verification` | `skills/consuming-card/references/pr-template.md` |
-| 1.8.2 `## Human Verification TODO` | `skills/consuming-card/references/pr-template.md` |
-| 1.8.3 `## Retro Notes` | `skills/consuming-card/references/pr-template.md`; aggregated by F-12 |
+| 1.8.1 `## Automated Verification` | `skills/enforcing-pr-contract/references/section-templates.md` |
+| 1.8.2 `## Human Verification TODO` | `skills/enforcing-pr-contract/references/section-templates.md` |
+| 1.8.3 `## Retro Notes` | `skills/enforcing-pr-contract/references/section-templates.md`; aggregated by F-12 |
 
 ### 3.2 Features → ADRs mapping
 
@@ -161,21 +161,21 @@ delta as of this writing.
 | F-13 | Planned | Weekly report not yet implemented |
 | F-14 | Planned | Harness setup conversation not yet implemented |
 | F-15 | Stub | Kanban hygiene basics inside triage routine; full implementation spec-only |
-| F-C0 | Implemented | `consuming-card/SKILL.md` Step 0 |
-| F-C1 | Implemented | `claim-card.sh` |
-| F-C2 | Partial | `consuming-card/SKILL.md` Steps 1+3 cover; thin-pointer convention via third-party storage adapter is planned |
-| F-C3 | Implemented | `consuming-card/SKILL.md` Step 2; `transition-card.sh` |
-| F-C4 | Implemented | `consuming-card/SKILL.md` Step 3 + `handoff-to-superpowers.md` |
-| F-C5 | Partial | PR-template mechanism partial; default-by-`type:*` enforcement not yet wired |
-| F-C6 | Stub | Cross-card touch refusal mechanism not yet implemented; spec only |
-| F-C7 | Stub | Three-layer permission boundary not yet implemented; hooks.json `PreToolUse` registration planned |
-| F-C8 | Partial | Escalation section in `consuming-card/SKILL.md` covers Mode-1; Mode-2 channel divergence + `SendMessage` integration spec-only |
-| F-C9 | Implemented | `consuming-card/SKILL.md` Step 4 chains the three skills |
-| F-C10 | Partial | `consuming-card/SKILL.md` Step 4 references the cross-platform call; explicit attribution-line enforcement in PR body spec-only |
-| F-C11 | Implemented | Conditional `gstack:/qa` + `gstack:/cso` |
-| F-C12 | Implemented | `consuming-card/SKILL.md` Step 4 + `pr-template.md` |
-| F-C13 | Partial | Same-Consumer-instance review-cycle response is the contract; Mode-2 wake-up integration spec-only |
-| F-C14 | Partial | Success / failure paths covered in `consuming-card/SKILL.md`; crash-detection mtime heuristic in Producer spec-only |
+| F-C0 | Implemented | `consuming-card/SKILL.md` Stage F1 node A1 (`references/stage-1-claim.md`) |
+| F-C1 | Implemented | `claim-card.sh`; `consuming-card/SKILL.md` Stage F1 node A2 |
+| F-C2 | Partial | `consuming-card/SKILL.md` Stage F1 nodes A2-A3 (`references/stage-1-claim.md`); thin-pointer convention via third-party storage adapter is planned |
+| F-C3 | Implemented | `consuming-card/SKILL.md` Stage F1 node A2; `transition-card.sh` |
+| F-C4 | Implemented | `consuming-card/SKILL.md` Stage F2 node B2 + `references/stage-2-implement.md` |
+| F-C5 | Partial | `consuming-card/SKILL.md` Stage F2 node B3 (TDD-skip refusal); default-by-`type:*` enforcement not yet wired |
+| F-C6 | Stub | `consuming-card/SKILL.md` Stage F2 node B4 (Cross-card refusal) — hook addition still spec-only |
+| F-C7 | Stub | `consuming-card/SKILL.md` Stage F2 node B5 (Permission-boundary); `hooks/hooks.json` `PreToolUse` registration planned |
+| F-C8 | Partial | `consuming-card/SKILL.md` Stage F4 node E2 (Crash / failure path) + node G2 (R-class propose-await); Mode-2 `SendMessage` integration spec-only |
+| F-C9 | Implemented | `consuming-card/SKILL.md` Stage F3 node C1 (`references/stage-3-verify.md`) chains the three skills |
+| F-C10 | Partial | `consuming-card/SKILL.md` Stage F3 node C2 (`references/stage-3-verify.md`); explicit attribution-line enforcement in PR body spec-only |
+| F-C11 | Implemented | `consuming-card/SKILL.md` Stage F3 nodes C3-C4 (conditional `gstack:/qa` + `gstack:/cso` via `composing-siblings`) |
+| F-C12 | Implemented | `consuming-card/SKILL.md` Stage F4 nodes D1-D2 + `references/stage-4-submit.md` |
+| F-C13 | Partial | `consuming-card/SKILL.md` Stage F4 node D3 (`references/stage-4-submit.md` § "D3 — Review-feedback rework loop"); Mode-2 wake-up integration spec-only |
+| F-C14 | Partial | `consuming-card/SKILL.md` Stage F4 nodes E1-E2 covered; crash-detection mtime heuristic in Producer spec-only |
 | 1.7 I-1 | Implemented | One-card-per-session enforced by `consuming-card/SKILL.md` |
 | 1.7 I-2 | Implemented | No code path lets Consumer merge or Producer commit |
 | 1.7 I-3 | Implemented (negatively) | Plugin does not model role / team — multi-architect symmetry holds by absence of single-architect filtering |
@@ -189,9 +189,9 @@ delta as of this writing.
 | 1.7 I-11 | Planned | Plugin-owned vs user-owned region split is contract; `block_hash` enforcement (F-B2 + F-B4) not yet implemented |
 | 1.7 I-12 | Planned | `schema_version` field convention defined; migration runner at `${CLAUDE_PLUGIN_ROOT}/scripts/migrations/` not yet implemented; lazy-on-read invariant is spec |
 | 1.7 I-13 | Partial | `claims/` gitignore entry implemented; `state.yml` does not exist yet (planned with F-B2); `config.yml` tracked correctly today |
-| 1.8.1 | Partial | `pr-template.md` defines the section; Review Queue routine's contract-violation flagging is partial |
-| 1.8.2 | Partial | `pr-template.md` defines the section; "OPTIONAL — not every PR" rule is in spec, not yet enforced by Review Queue |
-| 1.8.3 | Implemented | `pr-template.md` defines the section; F-12 aggregation of these notes is partial (see F-12) |
+| 1.8.1 | Partial | `enforcing-pr-contract/references/section-templates.md` defines the section; Review Queue routine's contract-violation flagging is partial |
+| 1.8.2 | Partial | `enforcing-pr-contract/references/section-templates.md` defines the section; "OPTIONAL — not every PR" rule is in spec, not yet enforced by Review Queue |
+| 1.8.3 | Implemented | `enforcing-pr-contract/references/section-templates.md` defines the section; F-12 aggregation of these notes is partial (see F-12) |
 
 **Pre-release reality check (per `CLAUDE.md`)**: most features
 are at "Stub" or "Partial" because the project is pre-release

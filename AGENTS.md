@@ -196,7 +196,9 @@ Molecular layer (7) — business workflows, state-machine-shaped
                               non-compliant cards, summarize)
   triaging-board              Producer triage (Blocked scan + 3-class
                               blocker remediation, stale-claim release)
-  consuming-card              Consumer (F-C0..F-C14 lifecycle)
+  consuming-card              Consumer (23-node Shape X: F1-F4 stages /
+                              B1-B5 bootstrap / G1-G4 governance /
+                              C1-C4 composing-siblings handoffs)
   decomposing-into-milestones INVEST + vertical slicing + card schema
   bootstrapping-repo          sole executor for setup-stages —
                               first-time setup + plugin-upgrade

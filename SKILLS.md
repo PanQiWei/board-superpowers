@@ -132,11 +132,11 @@ transition migrations). No separate migration SKILL ships.
 | `intaking-requirement` | Molecular | **v1-complete** (shipped v0.7.0) | Producer intake routine — acknowledge, shape-judge, spec-first check, route / create card. Replaces the intake workflow of the retired `managing-board` skill. |
 | `reviewing-pr-queue` | Molecular | **v1-complete** (shipped v0.7.0) | Producer review-queue routine — list open PRs, validate via enforcing-pr-contract, comment, transition cards, summarize. |
 | `triaging-board` | Molecular | **v1-complete** (shipped v0.7.0) | Producer triage routine — Blocked scan with 3-class blocker remediation, stale-claim detection and release. |
-| `consuming-card` | Molecular | **v1-minimum** | Consumer surface — required for the F-C0..F-C14 lifecycle that delivers each card's PR. |
+| `consuming-card` | Molecular | **v1-minimum** | Consumer surface — Shape X mega-routine hosting all 23 journey nodes (F1-F4 stages + B1-B5 bootstrap + G1-G4 governance + C1-C4 composing-siblings handoffs); delivers each card's full lifecycle from claim through PR merge cleanup. Refactored in v0.7.0 to the 23-node encoding (Card #73). |
 | `decomposing-into-milestones` | Molecular | **v1-complete** (shipped v0.4.0) | F-09 + §1.6 INVEST + vertical-slicing + card schema + size calibration engine. Lands alongside the schema-drift double-collapse (board-canon ↔ spec § 1.6.3) so the converged terminal Card body schema becomes architecturally authoritative. |
 | `bootstrapping-repo` | Molecular | **v1-minimum** (shipped in v0.2.0; rebased v0.6.0) | Sole executor for setup-stages (per [ADR-0012](./docs/architecture/adr/0012-unified-check-script-trigger-model.md), [ADR-0023](./docs/architecture/adr/0023-architect-ux-and-config-item-protocol.md), [ADR-0024](./docs/architecture/adr/0024-settings-rename-and-config-item-stages.md), [ADR-0027](./docs/architecture/adr/0027-board-projection-routes-through-operating-kanban.md)) — first-time setup, plugin-upgrade reconvergence (absorbs the formerly deferred `migrating-repo-version` scope), and agentic config-item elicitation. The entry-skill state probe routes here on first session and on every subsequent session that surfaces a never-run / stale stage. |
 | `board-canon` | Atomic | **v1-minimum** | True SPOT — every other v1-minimum skill consumes its state machine + schema + WIP rules. |
-| `enforcing-pr-contract` | Atomic | **v1-minimum** | True SPOT — Consumer's F-C12 PR submit + Manager's F-02 Review Queue both depend on it. |
+| `enforcing-pr-contract` | Atomic | **v1-minimum** | True SPOT — Consumer's Stage 4 PR submit (D1) + Manager's F-02 Review Queue both depend on it. |
 | `operating-kanban` | Atomic | shipped (v0.5.0) | True SPOT shipped in v0.5.0 — every molecular SKILL routes the eight Kanban Protocol actions (per ADR-0025) and the bootstrap-side setup capabilities (per ADR-0027) through this skill's per-projection reference files. |
 | `classifying-actions` | Atomic | shipped (v0.3.0) | True SPOT shipped in v0.3.0 — every mutating SKILL consumes its D-AUTONOMY-1 matrix (14 Producer + 14 Consumer + 9 Bootstrap rows) + 5-step triage rule + autonomy_overrides parsing. |
 | `auditing-actions` | Atomic | shipped (v0.3.0) | True SPOT shipped in v0.3.0 — every mutating SKILL invokes audit-log-write.sh through this skill's payload templates and propose/resolve sequencing rules. |
@@ -311,31 +311,40 @@ means for board-superpowers" #3 for the full rationale.
 
 #### `consuming-card` (v1-minimum)
 
-- **Role**: Consumer session main skill. Full F-C0..F-C14
-  lifecycle from
-  [`docs/architecture/0002-product-features-and-flows/04-consumer-surface.md`](./docs/architecture/0002-product-features-and-flows/04-consumer-surface.md).
-  Consumer subactions span action_id 100-113 (100-111 review
-  cycle + 112 PR-submit pre-flight card body sync + 113
-  post-merge cleanup).
-- **Body target**: ≤ 300 lines (current 229).
+- **Role**: Consumer session main skill. Shape X mega-routine
+  hosting all 23 lifecycle journey nodes: F1-F4 stage frame
+  (claim / implement / verify / submit-PR), B1-B5 bootstrap
+  inline (plan / TDD / refusal reflexes), G1-G4 governance
+  cross-cutting (audit / R-class propose-await / A-class gate /
+  mode topology), C1-C4 composing-siblings invocations (planning
+  / TDD implementation / verification chain / conditional
+  QA+security). Consumer action_ids 100-113 fully covered
+  (100-111 review cycle + 112 PR-submit pre-flight + 113
+  post-merge cleanup). Stage detail lives in `references/stage-*.md`.
+  Cross-references to old feature-grouped encoding preserved in
+  `references/migration-fc0-to-23-nodes.md` (historical archive).
+- **Body target**: ≤ 300 lines (current 220).
 - **References folder**:
-  `references/{handoff-to-superpowers,pr-template,surface-protocol,permission-boundary}.md`.
+  `references/{stage-1-claim,stage-2-implement,stage-3-verify,stage-4-submit,post-merge-cleanup,migration-fc0-to-23-nodes}.md`.
 - **Composes (atomic)**: `board-canon`,
-  `board-superpowers:operating-kanban` (`read_card` Step 2,
-  `claim_card` Step 3, `transition_card` Step 6,
-  `link_pr_to_card` Step 10 — protocol-action dispatch over
-  the active projection),
-  `board-superpowers:enforcing-pr-contract` (Step 9.5
-  card body sync + Step 10 PR submit; action_ids 112 and 113
-  also audit via this path),
+  `board-superpowers:operating-kanban` (`read_card` F1/F2 entry,
+  `claim_card` F1 claim transaction embedded in `claim-card.sh`,
+  `transition_card` F2 Blocked + F3 In Review, `link_pr_to_card`
+  F4 embedded in `submit-pr.sh` auto-trailer),
+  `board-superpowers:composing-siblings` (all C1-C4 cross-plugin
+  handoff points — invoked before each sibling-plugin delegation),
+  `board-superpowers:enforcing-pr-contract` (D1+D2 AC terminal-
+  state sync + PR three-section contract; action_ids 112 and D1),
   `board-superpowers:classifying-actions` +
-  `board-superpowers:auditing-actions` (every
-  mutating action, action_ids 100-113).
+  `board-superpowers:auditing-actions` (every mutating action,
+  action_ids 100-113).
 - **Composes (cross-plugin)**: see § "Cross-plugin edges" below.
 - **Constraint**: under Mode-2 it runs as a CC subagent —
   `max_depth=1` means it CANNOT spawn further subagents; every
   cross-plugin invocation MUST be procedural (per ADR-0008).
   Mode-2 is CC-only at v1; Mode-1 (architect-spawned) is both.
+  G4 mode-topology subsection in SKILL.md body provides the
+  full fallback table.
 - **Tier 2 frontmatter**: `when_to_use` (claim card / work on
   card N / `[board-card:#N]`) +
   `argument-hint: "[card-number]"` +
@@ -558,14 +567,15 @@ means for board-superpowers" #3 for the full rationale.
   `references/{handoff-points,sibling-plugin-table,procedural-fallback-rules,boundary}.md`.
 - **Called by**: every molecular skill that delegates to sibling
   plugins — `intaking-requirement` (B1 design-conversation routing
-  to `gstack:/*` / `superpowers:*`), `consuming-card` (F-C4
-  implement, F-C9 verify, F-C11 conditional QA/security),
-  `decomposing-into-milestones` (plan synthesis + arch
-  validation handoff). All four Producer routine SKILLs carry
-  the `composing-siblings` invocation declaration; only
-  `intaking-requirement` and `reviewing-pr-queue` typically
-  invoke sibling plugins, but all four declare the dependency
-  for consistency and future-proofing.
+  to `gstack:/*` / `superpowers:*`), `consuming-card` (B1 plan
+  synthesis + C1-C4 verify/QA/security handoffs — all 5 Consumer
+  handoff points per the 23-node Shape X lifecycle),
+  `decomposing-into-milestones` (plan synthesis + arch validation
+  handoff). All four Producer routine SKILLs carry the
+  `composing-siblings` invocation declaration; only
+  `intaking-requirement` and `reviewing-pr-queue` typically invoke
+  sibling plugins, but all four declare the dependency for
+  consistency and future-proofing.
 - **Calls**: nothing in-plugin. Atomic = reflexive.
 - **SPOT consolidates**: sibling-plugin invocation rules and
   Mode-2 compatibility decision would otherwise be inlined into
@@ -647,7 +657,7 @@ molecular inlines) stay inline:
   `reviewing-pr-queue` (`references/review-queue-detail.md`).
 - Triage blocker classification + release procedure → only
   `triaging-board` (`references/triage-detail.md`).
-- F-C0 manual-pull selection → only `consuming-card`.
+- Card-assignment entry (A1 node — manual-pull / Mode-1 startup) → only `consuming-card`.
 - §1.5.0 dep-check details → `bootstrapping-repo` and
   `using-board-superpowers` (a single reference file inside
   `bootstrapping-repo/references/` is hybrid-edge-referenced
@@ -664,7 +674,7 @@ Per
 | **Session** | ProducerSession + ConsumerLogical aggregates; OS processes + worktrees | `briefing-daily` (R board state for daily orientation), `intaking-requirement` (Producer intake lifecycle), `reviewing-pr-queue` (Producer review-queue lifecycle), `triaging-board` (Producer triage lifecycle), `consuming-card` (own session), `composing-siblings` (read-only invocation rules for sibling-plugin handoffs in both roles) |
 | **Bootstrap** | HostBootstrap + RepoBootstrap + RepoConfig | `bootstrapping-repo` (R + W — sole executor for first-time setup AND plugin-upgrade reconvergence per ADR-0012), `using-board-superpowers` (R for state checks) |
 | **Audit** | AuditTrail aggregate; BYO RDBMS | `auditing-actions` (W via DB script) |
-| **Spec** | SpecPointer (thin) | `consuming-card` (R via thin pointer in F-C2) |
+| **Spec** | SpecPointer (thin) | `consuming-card` (R via thin pointer in A3 spec fetch) |
 
 ## Cross-plugin edges
 
@@ -681,16 +691,19 @@ spawn).
 | `intaking-requirement` (B1 design conversation routing) | `gstack:/office-hours`, `/plan-ceo-review`, `/plan-eng-review`, `superpowers:brainstorming` | Pre-card design conversation routing |
 | `intaking-requirement` (decomposition handoff) | `superpowers:writing-plans` | Spec → executable plan |
 | `decomposing-into-milestones` | `superpowers:writing-plans`, `gstack:/plan-eng-review` | Plan synthesis + arch validation |
-| `consuming-card` (F-C4 implement) | `superpowers:subagent-driven-development` (TBD) → `superpowers:executing-plans` (Mode-2 fallback), `test-driven-development`, `systematic-debugging`; `gstack:/investigate` | TDD-driven implementation |
-| `consuming-card` (F-C9 verify) | `superpowers:verification-before-completion`, `requesting-code-review`; `gstack:/review` | Pre-PR verification chain |
-| `consuming-card` (F-C10 cross-platform) | `gstack:/codex` (CC → Codex direction) | Adversarial review on a different platform |
-| `consuming-card` (F-C11 conditional) | `gstack:/qa` (UI cards), `/cso` (security-flagged cards) | Conditional QA / security passes |
+| `consuming-card` B1 (plan synthesis) | `superpowers:writing-plans` via `composing-siblings` | B1 plan synthesis handoff |
+| `consuming-card` B2 (implement) | `superpowers:subagent-driven-development` (procedural-verified per composing-siblings/references/procedural-fallback-rules.md, dated 2026-04-26; re-verify on superpowers release) / `test-driven-development`, `systematic-debugging`; `gstack:/investigate` via `composing-siblings` | B2 TDD-driven implementation |
+| `consuming-card` C1 (verify) | `superpowers:verification-before-completion`, `requesting-code-review`; `gstack:/review` via `composing-siblings` | C1 pre-PR verification chain |
+| `consuming-card` C2 (cross-platform) | `gstack:/codex` (CC → Codex direction) via `composing-siblings` | C2 adversarial review on a different platform |
+| `consuming-card` C3 (conditional QA) | `gstack:/qa` (UI cards) via `composing-siblings` | C3 conditional real-browser QA |
+| `consuming-card` C4 (conditional security) | `gstack:/cso` (security-flagged cards) via `composing-siblings` | C4 conditional OWASP/STRIDE audit |
 
 **TBD entries** require empirical verification per ADR-0008 — if
 a sibling skill spawns its own subagents, it cannot be invoked
 from a Mode-2 `consuming-card` (`max_depth=1` budget). The
-fallback table lives in
-`consuming-card/references/handoff-to-superpowers.md`.
+fallback table lives in `consuming-card/SKILL.md` § G4
+(Mode-2 procedural fallback table) and in
+`composing-siblings/references/procedural-fallback-rules.md`.
 
 ## Maintenance contract
 
@@ -773,5 +786,6 @@ atomics instead of introducing the upward call.
 2. Add the row to § "Cross-plugin edges".
 3. If the new edge is from `consuming-card` and the sibling is
    non-procedural, also add a procedural fallback entry to
-   `consuming-card/references/handoff-to-superpowers.md`
+   `consuming-card/SKILL.md` § G4 mode-topology table AND
+   `composing-siblings/references/procedural-fallback-rules.md`
    (Mode-2 compatibility per ADR-0008).

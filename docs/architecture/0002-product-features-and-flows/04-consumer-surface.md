@@ -301,8 +301,10 @@ implements TDD / debugging / parallel-task orchestration.
 ###### F-C4. TDD-driven implementation delegation
 
 - **Capability**: invoke the appropriate execution skill (per
-  the handoff matrix in
-  `consuming-card/references/handoff-to-superpowers.md`) with
+  the handoff matrix in `consuming-card/SKILL.md` § "G4 — Mode
+  topology" and `composing-siblings/references/handoff-points.md`
+  — content folded into `consuming-card/SKILL.md` per Card #73
+  Shape X refactor) with
   the F-C2 plan brief as input. Default path is
   `superpowers:subagent-driven-development` (~80% of cards);
   alternates are `superpowers:executing-plans` (subagent-
@@ -641,8 +643,9 @@ reading retro notes); its structure is rigid by design.
   caller-side glue).
 - **Composes**: `superpowers:finishing-a-development-branch`
   / `gstack:/ship` (for the base body) +
-  `consuming-card/references/pr-template.md` (for the
-  appended sections) + `gh issue edit` (card body sync).
+  `enforcing-pr-contract/references/section-templates.md` (for the
+  appended sections — moved-to location per Card #73 Shape X
+  refactor) + `gh issue edit` (card body sync).
 - **Maps to (canonical)**: Scrum Guide 2020 — Definition of
   Done per-increment; *The Phoenix Project* (Kim 2013) —
   hand-off contracts between work stations.
@@ -673,7 +676,9 @@ reading retro notes); its structure is rigid by design.
   needed) updated PR description.
 - **Composes**: `gh pr view --comments` (poll on prompt) +
   F-C4 (re-delegation for non-trivial fixes — small one-line
-  fixes can be made directly per `handoff-to-superpowers.md`)
+  fixes can be made directly per `consuming-card/SKILL.md`
+  § "G4 — Mode topology" — content folded in per Card #73
+  Shape X refactor)
   + F-C9 / F-C10 / F-C11 for re-verification.
 - **Maps to (canonical)**: the iterative review loop in
   *Continuous Delivery* (Humble & Farley 2010); *Accelerate*
