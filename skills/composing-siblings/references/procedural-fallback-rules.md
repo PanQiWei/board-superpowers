@@ -48,7 +48,7 @@ When a Mode-2 Consumer is about to invoke a sibling skill, apply in order:
 | `superpowers:brainstorming` | yes | n/a |
 | `superpowers:writing-plans` | yes | n/a |
 | `superpowers:test-driven-development` | yes | n/a |
-| `superpowers:subagent-driven-development` | TBD (verified procedural 2026-04-26; re-verify on each superpowers release) | Use `superpowers:executing-plans` as procedural substitute; note substitution in PR description |
+| `superpowers:subagent-driven-development` | procedural-verified (2026-04-26; re-verify on each superpowers release) | Use `superpowers:executing-plans` as procedural substitute; note substitution in PR description |
 | `superpowers:systematic-debugging` | yes | n/a |
 | `superpowers:verification-before-completion` | yes | n/a |
 | `superpowers:requesting-code-review` | yes | n/a |

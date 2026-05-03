@@ -17,22 +17,22 @@ Every session in a board-superpowers repo plays one of two roles. The first thin
 
 | Role | When | Skill that drives it |
 |------|------|----------------------|
-| **Producer / Manager** | You are orchestrating the board — daily briefing, intaking new ideas, reviewing open PRs, triaging blocked cards. You are NOT writing implementation code. | `managing-board` |
+| **Producer / Manager** | You are orchestrating the board — daily briefing, intaking new ideas, reviewing open PRs, triaging blocked cards. You are NOT writing implementation code. | `briefing-daily`, `intaking-requirement`, `reviewing-pr-queue`, `triaging-board` (the four Producer routines) |
 | **Consumer / Implementer** | You are claiming and implementing ONE specific card from start to PR. You are NOT shaping the board. | `consuming-card` |
 
 The roles are intentionally separate. A Producer session that drifts into implementation makes the board the Producer's responsibility forever; a Consumer session that drifts into board orchestration burns context that should have been spent on the card.
 
-The router `using-board-superpowers` makes the role decision for you on session start — it reads the user's first message and either fires the bootstrap chain (you just did this), routes to `managing-board`, or routes to `consuming-card`. If the intent is ambiguous it asks rather than guessing.
+The router `using-board-superpowers` makes the role decision for you on session start — it reads the user's first message and either fires the bootstrap chain (you just did this), routes to the appropriate Producer routine (or the main Consumer skill), or asks if the intent is ambiguous.
 
 ## Day-1 happy path
 
 Once F-B1 + F-B2 are both done, your first day with the plugin looks like this:
 
 1. **Bootstrap** (you just did this — F-B1 + F-B2 are complete).
-2. **First Manager session** — open a fresh CC / Codex session and say "let's intake this feature: <one-line idea>". The router fires `managing-board` (intake routine), which walks you through deciding whether the idea needs `gstack:/office-hours` (direction-setting), `gstack:/plan-eng-review` (architecture lock), `superpowers:brainstorming` (decomposition), or direct card creation.
+2. **First Manager session** — open a fresh CC / Codex session and say "let's intake this feature: <one-line idea>". The router fires `intaking-requirement`, which walks you through deciding whether the idea needs `gstack:/office-hours` (direction-setting), `gstack:/plan-eng-review` (architecture lock), `superpowers:brainstorming` (decomposition), or direct card creation.
 3. **Decompose into Ready cards** — the architect hand-decomposes the brainstorming output into small cards on the board, each with the canonical 5-section body schema (per `board-canon`).
 4. **First Consumer session** — open a fresh session, type `[board-card:#N]`, the router fires `consuming-card`. That skill creates a worktree, drives Red→Green→Refactor TDD via `superpowers:test-driven-development`, runs the verification chain (`superpowers:verification-before-completion`, `gstack:/review`, `superpowers:requesting-code-review`), and submits the PR with the three-section contract.
-5. **Review and merge** — the Producer (probably you) reviews the PR via `managing-board` (review-queue routine) and merges. The card auto-transitions to Done.
+5. **Review and merge** — the Producer (probably you) reviews the PR via `reviewing-pr-queue` and merges. The card auto-transitions to Done.
 
 The Producer / Consumer split lets you context-switch cleanly: Producer sessions track the bigger picture; Consumer sessions go deep on one card without the board's gravity tugging at your attention.
 
@@ -50,7 +50,7 @@ You need to create the Status field's options manually in the GitHub Project UI 
 
 Three things, in three different places:
 
-- **In your CC / Codex session**, two skills (`managing-board` for Producer, `consuming-card` for Consumer) drive the workflow with cross-plugin handoffs to `superpowers` and `gstack`.
+- **In your CC / Codex session**, five Producer routine skills (`briefing-daily`, `intaking-requirement`, `reviewing-pr-queue`, `triaging-board`) for Producer and `consuming-card` for Consumer drive the workflow with cross-plugin handoffs to `superpowers` and `gstack`.
 - **On GitHub**, the source of truth — your Project, your Issues (= cards), your branches (`claim/<N>-<slug>`), your PRs (with the three-section contract).
 - **On your machine**, two state files — `~/.board-superpowers/manifest.yml` (host-level, version tracking) and `~/.board-superpowers/repos/<normalized>/state.yml` (per-repo, host-local), plus the optional BYO-RDBMS audit log.
 
@@ -80,4 +80,4 @@ The `<normalized>` directory name is the repo's absolute path with leading `/` s
 
 - It does not seed your board with cards. After all stages are applied, your board is empty — the first card is your responsibility (use the Manager session intake routine).
 - It does not configure the BYO-RDBMS schema for you. The credential-setup step records your DSN in `credentials.yml`; the schema is applied via `scripts/audit-init.sh` during the M4 audit-DDL stage and `board-superpowers:auditing-actions` writes use that schema thereafter.
-- It does not run *after* all stages are applied during a normal working session. Once lifecycle shows all stages as `applied`, the entry skill routes directly to `managing-board` or `consuming-card` without invoking this skill. Plugin upgrades that add new stages re-trigger this skill automatically through the hook's lifecycle diff.
+- It does not run *after* all stages are applied during a normal working session. Once lifecycle shows all stages as `applied`, the entry skill routes directly to the appropriate Producer routine or to `consuming-card` without invoking this skill. Plugin upgrades that add new stages re-trigger this skill automatically through the hook's lifecycle diff.

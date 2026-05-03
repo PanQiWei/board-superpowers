@@ -125,7 +125,7 @@ Exactly:
 <!-- /board-superpowers:audit-trail -->
 ```
 
-The marker is **protocol, not decoration**. Tooling (`managing-board`'s Review Queue routine, the daily briefing's filter logic) keys off the marker. The legacy `<!-- bsp-bottom-marker:do-not-edit -->` and `<!-- board-superpowers:card -->` forms are forbidden in new cards — every card body landed by this skill uses the idiomatic `audit-trail` marker.
+The marker is **protocol, not decoration**. Tooling (`reviewing-pr-queue`'s contract-validation flow, `briefing-daily`'s filter logic) keys off the marker. The legacy `<!-- bsp-bottom-marker:do-not-edit -->` and `<!-- board-superpowers:card -->` forms are forbidden in new cards — every card body landed by this skill uses the idiomatic `audit-trail` marker.
 
 ## Filler detection
 
@@ -141,7 +141,7 @@ The Producer-side validation in `enforcing-pr-contract` Contract B catches these
 
 ## Cross-reference
 
-For the **canonical schema definition** (the contract that `submit-pr.sh` and `managing-board` Review Queue both validate against), see:
+For the **canonical schema definition** (the contract that `submit-pr.sh` and `reviewing-pr-queue` both validate against), see:
 
 - `skills/board-canon/SKILL.md` § "Card body schema"
 - `skills/board-canon/references/card-body-schema.md`

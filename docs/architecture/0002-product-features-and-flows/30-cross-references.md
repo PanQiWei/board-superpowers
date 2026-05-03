@@ -12,21 +12,21 @@ feature, all are listed.
 
 | Feature | Implementing surface |
 |---------|---------------------|
-| F-01 Atomic kanban query primitive | `skills/managing-board/SKILL.md` (composes `gh project item-list` / `gh issue list`); Kanban Protocol `read_board` action ([`0005-contracts/00-kanban-protocol.md`](../0005-contracts/00-kanban-protocol.md)); v1 GitHubProjectAdapter projection per ADR-0005 (rescoped by ADR-0025) |
-| F-02 Pending PR queue with ordering | `skills/managing-board/references/review-queue.md`; `skills/managing-board/SKILL.md` |
-| F-03 Blocked sessions inspection | `skills/managing-board/references/daily-routine.md` (Step 2); session-id reachback via `~/.claude/projects/.../<sid>.jsonl` |
-| F-04 Today's dispatch recommendation | `skills/managing-board/references/daily-routine.md` (Steps 4–5) |
-| F-05 Board health snapshot | `skills/managing-board/references/daily-routine.md` (Step 1) |
-| F-06 Context briefing on switch-back | `skills/managing-board/SKILL.md` (Triage routine partial; new reference TBD) |
-| F-07 End-of-day overnight batch dispatch | `skills/managing-board/SKILL.md` (composes `scripts/claim-card.sh` per Consumer); preflight piggyback per ADR-0007 |
-| F-08 Interactive intake & design routing | `skills/managing-board/references/intake-routine.md`; routes to `superpowers:brainstorming` / `gstack:/office-hours` / `gstack:/plan-eng-review` |
+| F-01 Atomic kanban query primitive | `skills/briefing-daily/SKILL.md` + `skills/triaging-board/SKILL.md` (compose Kanban Protocol `read_board` action via `operating-kanban`); v1 GitHubProjectAdapter projection per ADR-0005 (rescoped by ADR-0025) |
+| F-02 Pending PR queue with ordering | `skills/reviewing-pr-queue/SKILL.md` + `references/review-queue-detail.md` |
+| F-03 Blocked sessions inspection | `skills/triaging-board/SKILL.md` (Blocked scan via `read_board` filter); session-id reachback via `~/.claude/projects/.../<sid>.jsonl` |
+| F-04 Today's dispatch recommendation | `skills/briefing-daily/SKILL.md` Step 4 (priority list) + § "Today's dispatch recommendation (extended variant)" |
+| F-05 Board health snapshot | `skills/briefing-daily/SKILL.md` Steps 1–3 (board summary by Status) |
+| F-06 Context briefing on switch-back | `skills/briefing-daily/SKILL.md` § "Re-entry context-switch reload" |
+| F-07 End-of-day overnight batch dispatch | (deferred to v1.x per ADR-0011; partial coverage in `briefing-daily` extended dispatch variant) |
+| F-08 Interactive intake & design routing | `skills/intaking-requirement/SKILL.md` + `references/intake-decision-tree.md`; routes to `superpowers:brainstorming` / `gstack:/office-hours` / `gstack:/plan-eng-review` via `composing-siblings` |
 | F-09 Decomposition into cards | `skills/decomposing-into-milestones/SKILL.md` + `references/card-schema.md` + `references/decomposition-patterns.md`; `scripts/create-card.sh` |
-| F-10 Triage with remediation ladder | `skills/managing-board/SKILL.md` (Triage routine inline) |
-| F-11 Stale session detection (lazy) | `skills/managing-board/references/daily-routine.md` (Step 2); preflight piggyback per ADR-0007 |
-| F-12 Retro routine | `skills/managing-board/references/retro-routine.md` |
-| F-13 Weekly aggregated report | `skills/managing-board/references/retro-routine.md` (companion section) |
+| F-10 Triage with remediation ladder | `skills/triaging-board/SKILL.md` (Blocked dispatch + stale-claim release) |
+| F-11 Stale session detection (lazy) | `skills/briefing-daily/SKILL.md` Step 3 (stale-claim heuristic via `read_board`); preflight piggyback per ADR-0007 |
+| F-12 Retro routine | (deferred to v1.x per ADR-0011) |
+| F-13 Weekly aggregated report | (deferred to v1.x per ADR-0011) |
 | F-14 Harness setup & evolution conversation | (no implementing surface yet — planned) |
-| F-15 Kanban hygiene & maintenance ops | `skills/managing-board/SKILL.md` (Triage routine partial) |
+| F-15 Kanban hygiene & maintenance ops | `skills/triaging-board/SKILL.md` (kanban hygiene partial) |
 
 **Consumer features (§1.4.1):**
 
@@ -52,7 +52,7 @@ feature, all are listed.
 
 | Feature | Implementing surface |
 |---------|---------------------|
-| 1.5.0 Dependency check (shared primitive) | `scripts/check-deps.sh`; `hooks/session-start.sh` (Layer 1); `skills/using-board-superpowers/SKILL.md` Step 1 (Layer 2); just-in-time calls in `skills/managing-board/SKILL.md` + `skills/consuming-card/SKILL.md` (Layer 3) |
+| 1.5.0 Dependency check (shared primitive) | `scripts/check-deps.sh`; `hooks/session-start.sh` (Layer 1); `skills/using-board-superpowers/SKILL.md` Step 1 (Layer 2); just-in-time calls in the 4 Producer routine SKILLs (`briefing-daily` / `intaking-requirement` / `reviewing-pr-queue` / `triaging-board`) + `skills/consuming-card/SKILL.md` (Layer 3) |
 | F-B1 Host bootstrap | `skills/using-board-superpowers/SKILL.md` (manifest write + intro routing); `skills/using-board-superpowers/references/intro.md` (intro narrative — planned) |
 | F-B2 Per-repo bootstrap | `scripts/bootstrap-project.sh`; `skills/using-board-superpowers/SKILL.md` Step 3 + `references/agentsmd-routing.md` (routing source-of-truth) + `references/first-time-user-guide.md` (post-bootstrap pointer) |
 | F-B3 Host version transition | `skills/using-board-superpowers/SKILL.md` (manifest version compare + changelog routing); `skills/using-board-superpowers/references/changelog/v<X>.md` (per-version highlights file — planned) |
@@ -155,7 +155,7 @@ delta as of this writing.
 | F-07 | Planned | Overnight batch dispatch not yet implemented |
 | F-08 | Implemented | `intake-routine.md` covers; routes to design skills correctly |
 | F-09 | Implemented | `decomposing-into-milestones` skill is the most complete in the plugin |
-| F-10 | Partial | Inline triage routine in `managing-board/SKILL.md` covers basics; ladder formalization (per-row autonomy mapping) is shape-only |
+| F-10 | Partial | Triage routine in `triaging-board/SKILL.md` covers basics; ladder formalization (per-row autonomy mapping) is shape-only |
 | F-11 | Partial | `daily-routine.md` Step 2 implements the basic stale-detection heuristic; preflight piggyback formalization spec-only |
 | F-12 | Partial | `retro-routine.md` reference exists; cadence-driven trigger via preflight piggyback not yet wired |
 | F-13 | Planned | Weekly report not yet implemented |

@@ -1,24 +1,21 @@
 ---
 name: composing-siblings
 description: |
-  Use whenever a board-superpowers in-plugin SKILL (any of the molecular layer —
-  `managing-board` / `consuming-card` / `decomposing-into-milestones` /
-  `bootstrapping-repo` and their successors) is about to invoke a sibling plugin
-  SKILL from `gstack:*` or `superpowers:*` namespaces. Apply at every such handoff
-  point — examples: `superpowers:brainstorming` for intake design,
-  `superpowers:test-driven-development` for implementation, `gstack:/review` for
-  verification, `gstack:/qa` for UI testing. Use even when the invocation looks
-  routine — this skill is the single source of truth for namespace prefix rules and
-  Mode-2 max_depth=1 compatibility decisions. Do NOT use for: (a) board-superpowers
-  internal SKILL calls (those carry `board-superpowers:` prefix and are governed by
-  `SKILLS.md` topology); (b) user-facing direct invocations of sibling skills (when
-  the user explicitly says "brainstorm" or "review my diff", route directly to the
-  sibling per `using-board-superpowers/references/routing.md`).
+  Use whenever a board-superpowers molecular SKILL is about to invoke a sibling
+  plugin SKILL from `gstack:*` or `superpowers:*` namespaces. Callers: all four
+  Producer routines (`briefing-daily`, `intaking-requirement`, `reviewing-pr-queue`,
+  `triaging-board`), `consuming-card`, and `decomposing-into-milestones`. Apply at
+  every cross-plugin handoff point — this skill is the single source of truth for
+  namespace prefix rules and Mode-2 max_depth=1 compatibility decisions. Do NOT use
+  for: (a) board-superpowers internal SKILL calls (governed by `SKILLS.md`
+  topology); (b) user-facing direct invocations of sibling skills (route directly
+  per `using-board-superpowers/references/routing.md`).
 when_to_use: |
-  Use at every sibling-plugin handoff inside managing-board, consuming-card, and
-  decomposing-into-milestones. Specific trigger points: Producer intake B1 routing
-  (direction / architecture / plan sibling selection); Consumer lifecycle C1
-  (brainstorming/planning handoff), C2 (implementation delegation), C3 (pre-PR
+  Use at every sibling-plugin handoff inside the four Producer routine SKILLs
+  (briefing-daily, intaking-requirement, reviewing-pr-queue, triaging-board),
+  consuming-card, and decomposing-into-milestones. Trigger points: Producer intake
+  B1 routing (direction / architecture / plan sibling selection); Consumer lifecycle
+  C1 (brainstorming/planning handoff), C2 (implementation delegation), C3 (pre-PR
   verification chain), C4 (conditional QA/security passes). Use when deciding
   whether a sibling skill is safe to invoke from a Mode-2 Consumer context.
 user-invocable: false
@@ -74,14 +71,14 @@ Route by phase, not by preference:
 
 ## Handoff points quick reference
 
-Nine callers use this skill. See `references/handoff-points.md` for the full
-table. High-frequency summary:
+All current callers in the v0.7.0 Producer/Consumer surfaces use this skill. See
+`references/handoff-points.md` for the full table. High-frequency summary:
 
 | Caller | Phase label | Primary sibling(s) |
 |--------|-------------|-------------------|
-| `managing-board` (intake) | B1 — direction question | `gstack:/office-hours`, `gstack:/plan-ceo-review` |
-| `managing-board` (intake) | C1 — architecture question | `gstack:/plan-eng-review` |
-| `managing-board` (intake) | C1 — plan synthesis | `superpowers:brainstorming`, `superpowers:writing-plans` |
+| `intaking-requirement` (intake) | B1 — direction question | `gstack:/office-hours`, `gstack:/plan-ceo-review` |
+| `intaking-requirement` (intake) | B1 — architecture question | `gstack:/plan-eng-review` |
+| `intaking-requirement` (intake) | B1 — plan synthesis | `superpowers:brainstorming`, `superpowers:writing-plans` |
 | `consuming-card` | C1 — planning | `superpowers:writing-plans` |
 | `consuming-card` | C2 — implementation | `superpowers:subagent-driven-development`, `superpowers:test-driven-development` |
 | `consuming-card` | C3 — pre-PR verification | `superpowers:verification-before-completion`, `superpowers:requesting-code-review`, `gstack:/review` |

@@ -130,7 +130,8 @@ shape value backing v1's `Card.key`.
   decomposition time — no layer-only Cards.
 - **Trailing marker required.** CardBody MUST end with the
   exact bytes `<!-- board-superpowers:card -->` so
-  `managing-board` and other tooling can distinguish
+  Producer routine SKILLs (`briefing-daily` / `intaking-requirement`
+  / `reviewing-pr-queue` / `triaging-board`) and other tooling can distinguish
   board-superpowers Cards from plain Issues on the same
   project (§1.6.3, `card-schema.md`).
 

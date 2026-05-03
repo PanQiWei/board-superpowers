@@ -112,7 +112,7 @@ into §2.2.
 
 **6. Verification.** After F-B2 completes (next section), the
 architect can prompt their next session ("what should I work
-on?" / "morning briefing") and the `managing-board` skill
+on?" / "morning briefing") and the `briefing-daily` skill
 takes over, routing per the injected `CLAUDE.md` / `AGENTS.md`
 block. If the architect instead opens a NEW Claude Code session
 (closing the first one), F-B1 does NOT re-fire (manifest exists),
@@ -652,7 +652,7 @@ Consumer sessions are spawned as needed.
 
 1. **Morning trigger.** Architect opens Manager session: "what
    should I work on?" or "morning briefing". The
-   `managing-board` skill fires.
+   `briefing-daily` skill fires.
 2. **Preflight piggyback runs (per ADR-0007).** Manager runs
    `check-deps.sh` (just-in-time re-check, Layer 3 of the
    alert strategy), then the lightweight situation-awareness
@@ -661,7 +661,7 @@ Consumer sessions are spawned as needed.
    Consumers since last prompt. Results land at the top of
    Manager's response (e.g. "Preflight: 2 PRs ready for
    verification, 1 stale claim from overnight").
-3. **Daily routine fires (`managing-board/references/daily-routine.md`).**
+3. **Daily routine fires (`briefing-daily/references/daily-detail.md`).**
    Manager renders the fixed-template board snapshot: NEEDS
    YOU FIRST (open PRs awaiting verification — F-02), IN
    FLIGHT (cards a Consumer is working on — F-03), BLOCKED
@@ -675,7 +675,7 @@ Consumer sessions are spawned as needed.
    project automation moves the card to Done.
 5. **Architect dispatches new Consumers.** Manager generates
    kick-off prompts (F-04 → F-07 area; the "one artifact
-   Manager uniquely produces" per `managing-board/SKILL.md`).
+   Manager uniquely produces" per `briefing-daily/SKILL.md`).
    Architect opens N fresh terminals (one per dispatch),
    pastes the kick-off, walks away. Each terminal is a
    Mode-1 Consumer session (per §1.4 mode topology); the
@@ -709,7 +709,7 @@ the architect to promote individually to Ready.
 
 1. **Architect tells Manager.** "I have a new requirement:
    <one-paragraph description>" or "I want to refactor X".
-   The `managing-board` skill routes to the Intake routine
+   The `intaking-requirement` skill fires
    (`references/intake-routine.md`).
 2. **F-08 — Interactive intake & design routing.** Manager
    does **not** jump to decomposition. It evaluates the
@@ -726,13 +726,13 @@ the architect to promote individually to Ready.
      into an executable plan once the design conversation
      settles.
    Per AGENTS.md / CLAUDE.md routing rules, the choice
-   depends on the requirement's shape; `managing-board/SKILL.md`
+   depends on the requirement's shape; `intaking-requirement/SKILL.md`
    tells the architect "this sounds like a design
    conversation, not a board-management one — pick one".
 3. **Architect runs the chosen design skill.** This usually
    takes a separate session (the Manager is for board
    orchestration, not for the design conversation itself —
-   per `managing-board/SKILL.md`'s "Design-level thinking —
+   per `intaking-requirement/SKILL.md`'s "Design-level thinking —
    delegate, don't do it"). Output: a design doc / plan at a
    well-known path (e.g.
    `docs/superpowers/specs/<date>-<topic>-design.md`).
@@ -934,7 +934,7 @@ Architect has been running the board for ~7 days; wants the
 "what should I carry forward" report.
 
 1. **Architect prompts Manager: "weekly retro".** The
-   `managing-board` skill routes to the Retro routine
+   (Retro routine is deferred to v1.x per ADR-0011 — placeholder; the underlying review-queue + triage signals are read by `reviewing-pr-queue` / `triaging-board` SKILLs
    (`references/retro-routine.md`).
 2. **F-12 — Retro routine fires.** Per ADR-0006 matrix row
    14, the cadence-driven trigger is A-class (auto-trigger
@@ -1002,7 +1002,7 @@ and the disposition has executed.
      in-flight cards whose actual diff is creeping toward
      the L ceiling).
 3. **Per-card diagnosis loop** (per
-   `managing-board/SKILL.md`'s inline triage routine).
+   `triaging-board/SKILL.md`'s triage steps).
    Manager loads the card, classifies the symptom in
    conversation with the architect, applies the remediation
    ladder:
@@ -1015,18 +1015,18 @@ and the disposition has executed.
    - **Reassign** (Stale claim — Consumer session died; new
      Consumer should pick it up after worktree cleanup) — R
      via matrix row 8 (cancel claim = R; cleanup recipe in
-     `managing-board/SKILL.md`).
+     `triaging-board/SKILL.md`).
    - **Kill** (Card no longer warranted) — R via matrix
      row 7 (close stale card = R; irreversible).
    - **Refine** (Acceptance Criteria no longer match intent)
      — A via matrix row 2 (edit card body = A).
 4. **Apply only after architect confirms the diagnosis.**
-   Per `managing-board/SKILL.md`: don't edit the card before
+   Per `triaging-board/SKILL.md`: don't edit the card before
    the diagnosis is confirmed. R-class actions surface as
    proposals awaiting approval; A-class actions execute with
    audit log.
 5. **Stale-claim reassign sub-recipe** (most common): per
-   `managing-board/SKILL.md` triage table, offer three
+   `triaging-board/SKILL.md` triage table, offer three
    choices — **resume** (new kick-off prompt for the same
    Consumer to pick up partial work), **reassign**
    (`git worktree remove --force` paired worktree, delete

@@ -43,7 +43,7 @@ The Consumer-side path (`submit-pr.sh`):
 2. Exit non-zero
 3. Print suggested fix: "Replace the `<phrase>` with at least one concrete entry — see the section-templates reference for examples"
 
-The Producer-side path (`managing-board` review-queue routine):
+The Producer-side path (`reviewing-pr-queue` routine):
 
 1. Comment on the PR with the failing section + suggested fix
 2. Propose to the architect: transition the card from `In Review` back to `In Progress` (rework loop). Wait for acknowledgement, then transition.

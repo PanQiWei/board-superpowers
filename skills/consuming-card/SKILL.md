@@ -1,6 +1,6 @@
 ---
 name: consuming-card
-description: Use when the user wants to claim, work on, or implement a specific card from the board-superpowers GitHub Project. Triggers immediately on any message containing the literal token [board-card:#N] OR phrases like "claim card 12", "work on card 47", "implement #N from the board", "let me take #N", "let's pick up 12", "let me grab card N". Apply the moment the message names a card number AND signals intent to do the work — do NOT pre-discuss; claim first, then work in the worktree the skill creates. Use even when the user phrases it casually ("ok 12") — the claim signal is what matters, not formality. Do NOT use when the user wants to plan / triage / review the board generally — that's the managing-board skill.
+description: Use when the user wants to claim, work on, or implement a specific card from the board-superpowers GitHub Project. Triggers immediately on any message containing the literal token [board-card:#N] OR phrases like "claim card 12", "work on card 47", "implement #N from the board", "let me take #N", "let's pick up 12", "let me grab card N". Apply the moment the message names a card number AND signals intent to do the work — do NOT pre-discuss; claim first, then work in the worktree the skill creates. Use even when the user phrases it casually ("ok 12") — the claim signal is what matters, not formality. Do NOT use when the user wants to plan / triage / review the board generally — that's a Producer routine SKILL (`briefing-daily` for daily briefing, `intaking-requirement` for new ideas, `reviewing-pr-queue` for PR review, `triaging-board` for triage).
 when_to_use: Use when the user types `[board-card:#N]`, "claim card N", "work on card N", "implement card N", "let me take #N", "let's pick up #N", "I'll do card N", "grab card N", or any phrasing that names a specific card number AND signals intent to start the work.
 argument-hint: "[card-number]"
 arguments: [card_number]
@@ -294,7 +294,7 @@ card lifecycle; those skills describe the governance contract.
 
 ## Spawned-subagent constraint (Producer-spawned Consumer mode)
 
-If this skill is running as a subagent that the Producer's `board-superpowers:managing-board` skill spawned (rather than as the architect's direct session), it cannot itself spawn further subagents — Claude Code subagents have a depth-1 budget. In that mode:
+If this skill is running as a subagent that a Producer routine SKILL (any of `briefing-daily` / `intaking-requirement` / `reviewing-pr-queue` / `triaging-board`) spawned (rather than as the architect's direct session), it cannot itself spawn further subagents — Claude Code subagents have a depth-1 budget. In that mode:
 
 - Every cross-plugin sub-skill invocation MUST be procedural (read the sibling SKILL.md content into this Consumer's own context, follow the procedure inline) — do NOT spawn a `superpowers:*` or `gstack:*` subagent.
 - For required sub-skills that themselves spawn subagents (verify each one's body for `Agent` tool / `subagent_type` references), surface a procedural fallback to the architect — see `references/handoff-to-superpowers.md`.

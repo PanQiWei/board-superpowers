@@ -19,7 +19,7 @@ Closes #<card>.
 ```
 
 The marker `<!-- board-superpowers:pr -->` is what lets
-managing-board's Review Queue routine find board-superpowers
+`reviewing-pr-queue`'s Review Queue routine find board-superpowers
 PRs among ordinary ones. Per ADR-0006 / I-2, the PR is the
 contract between Consumer and the rest of the system; its
 structure is rigid by design.

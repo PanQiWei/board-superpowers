@@ -62,7 +62,7 @@ Every Card body MUST end with the exact bytes:
 ```
 
 The marker distinguishes board-superpowers Cards from plain Issues
-on the same project. `managing-board` and other tooling key off
+on the same project. Producer routine skills and other tooling key off
 this marker. Per `card-schema.md` "The marker comment" + 0003 § 3.3.1
 Card aggregate "Trailing marker required" invariant.
 
@@ -211,7 +211,7 @@ Every PR body MUST end with the exact bytes:
 Per `pr-template.md` + `board-canon/SKILL.md` "PR body — schema"
 + 0003 § 3.3.2 PR aggregate "§1.8 marker required" invariant.
 
-`managing-board`'s Review Queue routine (F-02) keys off this marker
+`reviewing-pr-queue`'s Review Queue routine (F-02) keys off this marker
 to find board-superpowers PRs among ordinary ones.
 
 ### Section content rules

@@ -79,7 +79,7 @@ Any Claude Code session in this project plays one of two roles:
   lifecycle: claim → implement → PR → update board.
 - **Board Manager** — if the user asks about planning today's work,
   reviewing the board, decomposing a requirement, triaging blocked
-  cards, or running a retro, invoke the `managing-board` skill.
+  cards, or running a retro, invoke the appropriate Producer routine skill (`briefing-daily`, `intaking-requirement`, `reviewing-pr-queue`, or `triaging-board`).
 - When unsure, invoke `using-board-superpowers` first.
 
 board-superpowers depends on the `superpowers` and `gstack` plugins

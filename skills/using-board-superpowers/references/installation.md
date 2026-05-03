@@ -91,7 +91,7 @@ Open a fresh agent session in the repo. Type:
 what should I work on
 ```
 
-The session should auto-trigger the entry skill, which routes to `managing-board`'s daily routine and produces a morning briefing. If nothing triggers:
+The session should auto-trigger the entry skill, which routes to `briefing-daily` and produces a morning briefing. If nothing triggers:
 
 - On Claude Code: run `/plugin list` to verify the plugin is enabled.
 - On Codex CLI: check `~/.codex/hooks.json` for the `SessionStart` entry; if missing, run `bash ${CODEX_PLUGIN_ROOT}/scripts/register-codex-hooks.sh --install-user`.

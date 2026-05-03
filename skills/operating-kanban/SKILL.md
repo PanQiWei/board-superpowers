@@ -13,7 +13,7 @@ This skill is also the bootstrap-side dispatcher that answers "does the active p
 
 ## Reflexive constraint
 
-This skill is atomic: it MUST NOT call any other same-plugin skill. Externally it invokes the active projection (a bash command, an MCP tool, or an HTTP endpoint), but it never reaches back into `managing-board` / `consuming-card` / `decomposing-into-milestones` / `bootstrapping-repo` / `board-canon` / `classifying-actions` / `auditing-actions`. The molecular caller orchestrates; this skill dispatches.
+This skill is atomic: it MUST NOT call any other same-plugin skill. Externally it invokes the active projection (a bash command, an MCP tool, or an HTTP endpoint), but it never reaches back into `briefing-daily` / `intaking-requirement` / `reviewing-pr-queue` / `triaging-board` / `consuming-card` / `decomposing-into-milestones` / `bootstrapping-repo` / `board-canon` / `classifying-actions` / `auditing-actions`. The molecular caller orchestrates; this skill dispatches.
 
 ## How to apply this skill
 
