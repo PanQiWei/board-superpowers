@@ -1,7 +1,7 @@
 # board-superpowers skill metadata (machine-readable, single source of truth).
 # Schema: maintainer-side metadata convention (board-superpowers internal; not read at runtime).
 # CI gate: scripts/verify-skill-metadata.sh.
-version: v0.5.1
+version: v0.5.2
 layer: entry
 type: pattern
 mode: both
